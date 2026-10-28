@@ -1,0 +1,11 @@
+node_modules
+dist
+build
+coverage
+.next
+.nuxt
+.git
+.github
+*.min.js
+*.min.css
+*.md

@@ -1,0 +1,122 @@
+name: Build and Deploy
+
+on:
+  push:
+    tags:
+      - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Log in to DigitalOcean Container Registry
+        run: doctl registry login --expiry-seconds 1200
+
+      - name: Extract metadata (tags, labels) for Server
+        id: meta-server
+        uses: docker/metadata-action@v5
+        with:
+          images: registry.digitalocean.com/bookdianight-registry/bookdianight-server
+
+      - name: Build and push Server Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./server/Dockerfile
+          push: true
+          tags: ${{ steps.meta-server.outputs.tags }},registry.digitalocean.com/bookdianight-registry/bookdianight-server:latest
+          labels: ${{ steps.meta-server.outputs.labels }}
+
+      - name: Extract metadata (tags, labels) for Scheduler
+        id: meta-scheduler
+        uses: docker/metadata-action@v5
+        with:
+          images: registry.digitalocean.com/bookdianight-registry/bookdianight-scheduler
+
+      - name: Build and push Scheduler Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./scheduler/Dockerfile
+          push: true
+          tags: ${{ steps.meta-scheduler.outputs.tags }},registry.digitalocean.com/bookdianight-registry/bookdianight-scheduler:latest
+          labels: ${{ steps.meta-scheduler.outputs.labels }}
+
+      - name: Extract metadata (tags, labels) for Worker
+        id: meta-worker
+        uses: docker/metadata-action@v5
+        with:
+          images: registry.digitalocean.com/bookdianight-registry/bookdianight-worker
+
+      - name: Build and push Worker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./worker/Dockerfile
+          push: true
+          tags: ${{ steps.meta-worker.outputs.tags }},registry.digitalocean.com/bookdianight-registry/bookdianight-worker:latest
+          labels: ${{ steps.meta-worker.outputs.labels }}
+
+  deploy-to-droplet:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Get GitHub Actions Runner IP
+        id: runner-ip
+        run: echo "ip=$(curl -s https://api.ipify.org)" >> $GITHUB_OUTPUT
+
+      - name: Authorize Runner IP in DO Firewall
+        run: |
+          doctl compute firewall add-rules 2232b7d2-0b27-4bf7-afde-89d4fd0fd60f --inbound-rules protocol:tcp,ports:22,address:${{ steps.runner-ip.outputs.ip }}/32
+
+      - name: Copy docker-compose.yaml to Droplet
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ vars.DO_DROPLET_HOST }}
+          username: ${{ vars.DO_DROPLET_USER }}
+          key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
+          source: "docker/docker-compose.yaml"
+          target: "/opt/bookdianight-server"
+          strip_components: 1
+
+      - name: Execute deployment on DigitalOcean Droplet
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ vars.DO_DROPLET_HOST }}
+          username: ${{ vars.DO_DROPLET_USER }}
+          key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
+          script: |
+            export DOCKER_USERNAME=registry.digitalocean.com/bookdianight-registry
+            export IMAGE_TAG=${{ github.ref_name }}
+            # Authenticate the droplet to DigitalOcean Container Registry securely
+            echo "${{ secrets.DO_REGISTRY_TOKEN }}" | docker login registry.digitalocean.com -u "${{ vars.DO_ACCOUNT_EMAIL }}" --password-stdin
+            
+            cd /opt/bookdianight-server
+            # Make sure we pull the latest images
+            docker compose pull
+            # Start the stack
+            docker compose up -d
+
+      - name: Revoke Runner IP from DO Firewall
+        if: always()
+        run: |
+          doctl compute firewall remove-rules 2232b7d2-0b27-4bf7-afde-89d4fd0fd60f --inbound-rules protocol:tcp,ports:22,address:${{ steps.runner-ip.outputs.ip }}/32

@@ -1,0 +1,62 @@
+services:
+  db-migrator:
+    image: ${DOCKER_USERNAME}/allround-server-server:${IMAGE_TAG:-latest}
+    container_name: allround-server-db-migrator
+    env_file: .env
+    command: ["npx", "prisma", "migrate", "deploy"]
+    networks:
+      - allround-server-network
+    restart: "no"
+  scheduler:
+    image: ${DOCKER_USERNAME}/allround-server-scheduler:${IMAGE_TAG:-latest}
+    container_name: allround-server-scheduler
+    env_file: .env
+    networks:
+      - allround-server-network
+    depends_on:
+      db-migrator:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "pidof node > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+  worker:
+    image: ${DOCKER_USERNAME}/allround-server-worker:${IMAGE_TAG:-latest}
+    container_name: allround-server-worker
+    env_file: .env
+    networks:
+      - allround-server-network
+    depends_on:
+      db-migrator:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "pidof node > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+  server:
+    image: ${DOCKER_USERNAME}/allround-server-server:${IMAGE_TAG:-latest}
+    container_name: allround-server-server
+    env_file: .env
+    ports:
+      - 5000:5000
+    networks:
+      - allround-server-network
+    depends_on:
+      db-migrator:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+networks:
+  allround-server-network:
+    driver: bridge

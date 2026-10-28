@@ -1,0 +1,270 @@
+openapi: 3.0.3
+info:
+  title: Allround Server API
+  version: 1.0.0
+  description: API documentation for the Allround Server backend.
+servers:
+  - url: https://allround.localbox.online
+    description: Local development server
+tags:
+  - name: Health
+    description: System health and status endpoints
+
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check endpoint
+      description: Reports the health status of the application and its dependencies (Database, Redis).
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Service is degraded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+components:
+  securitySchemes:
+    adminAuth:
+      type: apiKey
+      in: cookie
+      name: access_token
+      description: 'Cookie based access token for Admin API.'
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 'JWT Bearer token for authentication.'
+
+  schemas:
+    # ==========================================
+    # 200 - 299 Success Response Schemas
+    # ==========================================
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+        traceId:
+          type: string
+          format: uuid
+      required:
+        - success
+        - message
+        - traceId
+
+    PaginationMeta:
+      type: object
+      required:
+        - total
+        - totalPages
+        - links
+      properties:
+        total:
+          type: integer
+          example: 150
+        totalPages:
+          type: integer
+          example: 8
+        links:
+          type: object
+          required:
+            - currentPage
+            - firstPage
+            - lastPage
+          properties:
+            currentPage:
+              type: string
+              example: 'http://localhost:5000/api/v1/items?page=1&limit=20'
+            nextPage:
+              type: string
+              nullable: true
+              example: 'http://localhost:5000/api/v1/items?page=2&limit=20'
+            previousPage:
+              type: string
+              nullable: true
+              example: null
+            firstPage:
+              type: string
+              example: 'http://localhost:5000/api/v1/items?page=1&limit=20'
+            lastPage:
+              type: string
+              example: 'http://localhost:5000/api/v1/items?page=8&limit=20'
+
+    TokenResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                token:
+                  type: string
+              required:
+                - token
+
+    MediaResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required:
+            - data
+          properties:
+            message:
+              type: string
+              example: 'Media uploads successful'
+            data:
+              type: array
+              items:
+                type: string
+                format: uri
+                example: 'https://allround-bucket.s3.amazonaws.com/attachments/123e4567-e89b-12d3-a456-426614174000-1697280000000.jpg'
+              description: Array of S3 URLs for uploaded files
+
+    DeleteMediaResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            message:
+              type: string
+              example: 'Media items deletion successful!'
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Server Is Running
+        dependencies:
+          type: object
+          properties:
+            database:
+              type: string
+              example: up
+            redis:
+              type: string
+              example: up
+        traceId:
+          type: string
+          format: uuid
+
+    # ==========================================
+    # 400 - 499 Error Response Schemas
+    # ==========================================
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+        errorType:
+          type: string
+        traceId:
+          type: string
+          format: uuid
+      required:
+        - success
+        - message
+        - traceId
+
+    ValidationErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            errors:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                  message:
+                    type: string
+
+    AuthErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            errorType:
+              type: string
+              enum:
+                - TOKEN_EXPIRED
+                - TOKEN_INVALID
+                - TOKEN_BLACKLISTED
+                - USER_SUSPENDED
+                - ACCOUNT_INACTIVE
+                - USER_ALREADY_EXISTS
+                - INVALID_CREDENTIALS
+                - DUPLICATE_DATA
+                - OTP_EXPIRED
+                - INVALID_OTP
+                - ACCESS_DENIED
+                - USER_NOT_FOUND
+                - INVALID_DEVICE_CONTEXT
+                - DEVICE_NOT_FOUND
+                - DEVICE_NOT_OWNED
+                - SESSION_LOGGED_OUT
+                - SESSION_REVOKED
+                - SESSION_EXPIRED
+                - FORBIDDEN
+                - BAD_REQUEST
+
+    MulterErrorResponse:
+      type: object
+      required:
+        - success
+        - status
+        - message
+        - traceId
+      properties:
+        success:
+          type: boolean
+          example: false
+        status:
+          type: integer
+          example: 400
+        message:
+          type: string
+          example: "'files' attachments are required."
+        traceId:
+          type: string
+          format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+
+    # ==========================================
+    # 500+ Error Response Schemas
+    # ==========================================
+    SystemErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            errorType:
+              type: string
+              enum:
+                - INVALID_JSON
+                - SERVER_ERROR

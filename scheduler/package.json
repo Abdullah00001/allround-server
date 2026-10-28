@@ -1,0 +1,40 @@
+{
+  "name": "scheduler",
+  "version": "1.0.0",
+  "description": "The Scheduler Service of the application",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "sh scripts/build.sh",
+    "test": "echo \"No tests written yet\" && exit 0",
+    "start": "node ./dist/index.js",
+    "dev": "npx prisma generate && nodemon",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "lint": "eslint \"src/**/*.{ts,js}\" --quiet"
+  },
+  "author": "SparkTech Agency",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@types/morgan": "^1.9.10",
+    "@types/node": "^25.0.10",
+    "@types/node-cron": "^3.0.11",
+    "nodemon": "^3.1.11",
+    "ts-node": "^10.9.2",
+    "tsc-alias": "^1.8.16",
+    "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.23.10",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@aws-sdk/s3-request-presigner": "^3.1141.0",
+    "@prisma/client": "^6.19.2",
+    "bullmq": "^5.67.2",
+    "dotenv": "^17.4.2",
+    "geo-tz": "^8.1.9",
+    "ioredis": "^5.6.0",
+    "morgan": "^1.10.1",
+    "node-cron": "^4.5.0",
+    "prisma": "^6.19.2",
+    "winston": "^3.19.0"
+  }
+}

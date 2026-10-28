@@ -1,0 +1,908 @@
+{
+  "totals": {
+    "errors": 17,
+    "warnings": 38,
+    "ignored": 0
+  },
+  "version": "2.52.1",
+  "problems": [
+    {
+      "ruleId": "security-defined",
+      "severity": "error",
+      "message": "Every operation should have security defined on it or on the root level.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1health/get",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/security-defined",
+      "suggest": []
+    },
+    {
+      "ruleId": "security-defined",
+      "severity": "error",
+      "message": "Every operation should have security defined on it or on the root level.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1auth~1signup/post",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/security-defined",
+      "suggest": []
+    },
+    {
+      "ruleId": "security-defined",
+      "severity": "error",
+      "message": "Every operation should have security defined on it or on the root level.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1auth~1login/post",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/security-defined",
+      "suggest": []
+    },
+    {
+      "ruleId": "security-defined",
+      "severity": "error",
+      "message": "Every operation should have security defined on it or on the root level.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1media/post",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/security-defined",
+      "suggest": []
+    },
+    {
+      "ruleId": "security-defined",
+      "severity": "error",
+      "message": "Every operation should have security defined on it or on the root level.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1media/delete",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/security-defined",
+      "suggest": []
+    },
+    {
+      "ruleId": "security-defined",
+      "severity": "error",
+      "message": "Every operation should have security defined on it or on the root level.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1recover~1find/post",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/security-defined",
+      "suggest": []
+    },
+    {
+      "ruleId": "security-defined",
+      "severity": "error",
+      "message": "Every operation should have security defined on it or on the root level.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1admin~1auth~1login/post",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/security-defined",
+      "suggest": []
+    },
+    {
+      "ruleId": "security-defined",
+      "severity": "error",
+      "message": "Every operation should have security defined on it or on the root level.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1admin~1auth~1check/post",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/security-defined",
+      "suggest": []
+    },
+    {
+      "ruleId": "security-defined",
+      "severity": "error",
+      "message": "Every operation should have security defined on it or on the root level.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1admin~1auth~1refresh/post",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/security-defined",
+      "suggest": []
+    },
+    {
+      "ruleId": "security-defined",
+      "severity": "error",
+      "message": "Every operation should have security defined on it or on the root level.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1admin~1auth~1logout/post",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/security-defined",
+      "suggest": []
+    },
+    {
+      "ruleId": "security-defined",
+      "severity": "error",
+      "message": "Every operation should have security defined on it or on the root level.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1admin~1profile/get",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/security-defined",
+      "suggest": []
+    },
+    {
+      "ruleId": "security-defined",
+      "severity": "error",
+      "message": "Every operation should have security defined on it or on the root level.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1admin~1profile/patch",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/security-defined",
+      "suggest": []
+    },
+    {
+      "ruleId": "security-defined",
+      "severity": "error",
+      "message": "Every operation should have security defined on it or on the root level.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1terms/get",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/security-defined",
+      "suggest": []
+    },
+    {
+      "ruleId": "security-defined",
+      "severity": "error",
+      "message": "Every operation should have security defined on it or on the root level.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1privacy/get",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/security-defined",
+      "suggest": []
+    },
+    {
+      "ruleId": "security-defined",
+      "severity": "error",
+      "message": "Every operation should have security defined on it or on the root level.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1about-us/get",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/security-defined",
+      "suggest": []
+    },
+    {
+      "ruleId": "security-defined",
+      "severity": "error",
+      "message": "Every operation should have security defined on it or on the root level.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1explore/get",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/security-defined",
+      "suggest": []
+    },
+    {
+      "ruleId": "security-defined",
+      "severity": "error",
+      "message": "Every operation should have security defined on it or on the root level.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1explore~1{id}/get",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/security-defined",
+      "suggest": []
+    },
+    {
+      "ruleId": "info-license",
+      "severity": "warn",
+      "message": "Info object should contain `license` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/info",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/info-license",
+      "suggest": []
+    },
+    {
+      "ruleId": "no-server-example.com",
+      "severity": "warn",
+      "message": "Server `url` should not point to example.com or localhost.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/servers/0/url",
+          "reportOnKey": false
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-server-example-com",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1health/get/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-4xx-response",
+      "severity": "warn",
+      "message": "Operation must have at least one `4XX` response.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1health/get/responses",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-4xx-response",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1auth~1signup/post/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "warn",
+      "message": "Example value must conform to the schema: `errorType` property must be equal to one of the allowed values \"TOKEN_EXPIRED\", \"TOKEN_INVALID\", \"TOKEN_BLACKLISTED\", \"USER_BLOCKED\", \"INVALID_CREDENTIALS\", \"DUPLICATE_DATA\", \"OTP_EXPIRED\", \"INVALID_OTP\", \"ACCESS_DENIED\", \"USER_NOT_FOUND\", \"INVALID_DEVICE_CONTEXT\".",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1auth~1signup/post/responses/409/content/application~1json/example/errorType",
+          "reportOnKey": false
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "openapi.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1auth~1signup/post/responses/409/content/application~1json"
+      },
+      "suggest": [
+        "TOKEN_EXPIRED",
+        "TOKEN_INVALID",
+        "TOKEN_BLACKLISTED",
+        "USER_BLOCKED",
+        "INVALID_CREDENTIALS",
+        "DUPLICATE_DATA",
+        "OTP_EXPIRED",
+        "INVALID_OTP",
+        "ACCESS_DENIED",
+        "USER_NOT_FOUND",
+        "INVALID_DEVICE_CONTEXT"
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1auth~1login/post/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1auth~1verify/post/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1auth~1resend/post/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1auth~1check/post/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1media/post/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1media/delete/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1recover~1find/post/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1recover~1verify/post/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1recover~1reset/post/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1recover~1resend/post/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1auth~1logout/post/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1admin~1auth~1login/post/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1admin~1auth~1check/post/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1admin~1auth~1refresh/post/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1admin~1auth~1logout/post/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1profile/get/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1profile/patch/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1admin~1profile/get/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1admin~1profile/patch/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1admin~1terms/get/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1admin~1terms/patch/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1admin~1privacy/get/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1admin~1privacy/patch/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1admin~1about-us/get/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1admin~1about-us/patch/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1terms/get/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1privacy/get/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1about-us/get/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1club/post/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1club~1{id}/put/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1explore/get/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    },
+    {
+      "ruleId": "operation-operationId",
+      "severity": "warn",
+      "message": "Operation object should contain `operationId` field.",
+      "location": [
+        {
+          "source": {
+            "ref": "openapi.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1explore~1{id}/get/operationId",
+          "reportOnKey": true
+        }
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/operation-operationId",
+      "suggest": []
+    }
+  ]
+}

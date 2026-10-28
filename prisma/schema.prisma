@@ -1,0 +1,129 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  extensions = [postgis, fuzzystrmatch, postgis_tiger_geocoder, postgis_topology]
+}
+
+// ============ ENUMS ============
+
+enum Role {
+  PARENT
+  TEACHER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum Language {
+  EN
+  ES
+}
+
+enum Platform {
+  ANDROID
+  IOS
+}
+
+enum DeviceStatus {
+  ACTIVE
+  INACTIVE
+  LOGGED_OUT
+  REVOKED
+}
+
+enum RevokeReason {
+  NEW_LOGIN_SUPERSEDED
+  FCM_SUPERSEDED
+  SESSION_EXPIRED
+  FCM_INVALID_TOKEN
+  ADMIN_KICK
+  PASSWORD_CHANGED
+}
+
+
+
+enum LegalContentType {
+  ABOUT_US
+  TERMS_AND_CONDITION
+  PRIVACY_AND_POLICY
+  DATA_PROTECTION
+}
+
+// ============ MODELS ============
+
+model User {
+  id                 String     @id @default(uuid())
+  role               Role
+  email              String    @unique
+  phone              String    
+  password           String
+  fullName           String
+  avatarUrl          String?
+  status             UserStatus @default(INACTIVE)
+  emailVerifiedAt    DateTime?
+  phoneVerifiedAt    DateTime?
+  profileCompletedAt DateTime?
+  lastLoginAt        DateTime?
+  isProfileSetup     Boolean   @default(false)
+  isLegalTermAccepted Boolean   @default(false)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  preferences         UserPreference?
+  @@index([role, status])
+}
+
+model Device {
+  id               String        @id @default(uuid())
+  userId           String
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceIdentifier String
+  fcmToken         String?
+  platform         Platform
+  status           DeviceStatus  @default(ACTIVE)
+  revokeReason     RevokeReason?
+  sessionExpiresAt DateTime
+  lastSeenAt       DateTime      @default(now())
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([deviceIdentifier, status])
+  @@index([fcmToken, status])
+  @@index([status, lastSeenAt])
+  @@index([status, sessionExpiresAt])
+}
+
+model LegalContent {
+  id               String           @id @default(uuid())
+  legalContentType LegalContentType @unique
+  content          String           @db.Text
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+}
+
+model UserPreference {
+  id                 String   @id @default(uuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  language           Language @default(EN)
+  notificationsPush  Boolean  @default(true)
+  notificationsEmail Boolean  @default(true)
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}

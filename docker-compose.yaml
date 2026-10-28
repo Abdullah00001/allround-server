@@ -1,0 +1,178 @@
+services:
+  # External Dependency
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: allround-server-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: myStrongPassword
+      POSTGRES_DB: allround-server
+    ports:
+      - 5441:5432
+    networks:
+      - allround-server-network
+    volumes:
+      - allround-server-postgres-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: allround-server-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: root
+    ports:
+      - "5050:80"
+    networks:
+      - allround-server-network
+    depends_on:
+      - postgres
+
+  redis:
+    image: redis:latest
+    container_name: allround-server-redis
+    command: redis-server --requirepass myStrongPassword
+    ports:
+      - 6383:6379
+    networks:
+      - allround-server-network
+    volumes:
+      - allround-server-redis-volume:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "myStrongPassword", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    depends_on:
+      - postgres
+
+  redis-ui:
+    image: rediscommander/redis-commander:latest
+    container_name: allround-server-redis-ui
+    environment:
+      # Format: connectionName:host:port:dbIndex:password
+      - REDIS_HOSTS=local:redis:6379:0:myStrongPassword
+      # This helps the UI start even if it takes a second to find the redis container
+      - HTTP_USER=admin
+      - HTTP_PASSWORD=admin
+    ports:
+      - 8084:8081
+    networks:
+      - allround-server-network
+    depends_on:
+      - redis
+
+  # Core Services
+  scheduler:
+    container_name: allround-server-scheduler
+    build:
+      context: .
+      dockerfile: "./scheduler/Dockerfile.dev"
+    env_file: ".env"
+    environment:
+      - DATABASE_URL=postgresql://postgres:myStrongPassword@postgres:5432/allround-server?schema=public
+    volumes:
+      - ./scheduler:/app
+      - /app/node_modules
+      - ./prisma:/app/prisma
+    networks:
+      - allround-server-network
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "ps -ef | grep -q '[n]odemon' || ps -ef | grep -q '[n]ode .*dist/index.js'",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  worker:
+    container_name: allround-server-worker
+    build:
+      context: .
+      dockerfile: "./worker/Dockerfile.dev"
+    env_file: ".env"
+    environment:
+      - DATABASE_URL=postgresql://postgres:myStrongPassword@postgres:5432/allround-server?schema=public
+    volumes:
+      - ./worker:/app
+      - /app/node_modules
+      - ./prisma:/app/prisma
+    networks:
+      - allround-server-network
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      scheduler:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "ps -ef | grep -q '[n]odemon' || ps -ef | grep -q '[n]ode .*dist/index.js'",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  server:
+    container_name: allround-server-server
+    build:
+      context: .
+      dockerfile: "./server/Dockerfile.dev"
+    env_file: ".env"
+    environment:
+      - DATABASE_URL=postgresql://postgres:myStrongPassword@postgres:5432/allround-server?schema=public
+    ports:
+      - 5006:5000
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+      - ./prisma:/app/prisma
+      - ./openapi.yaml:/app/openapi.yaml:ro
+    networks:
+      - allround-server-network
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      scheduler:
+        condition: service_healthy
+      worker:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "ps -ef | grep -q '[n]odemon' || ps -ef | grep -q '[n]ode .*dist/server.js'",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+networks:
+  allround-server-network:
+    driver: bridge
+
+volumes:
+  allround-server-postgres-volume:
+  allround-server-redis-volume:

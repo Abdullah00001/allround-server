@@ -1,0 +1,12 @@
+node_modules
+dist
+build
+coverage
+.next
+.nuxt
+.git
+.github
+*.config.mjs
+*.config.js
+*.min.js
+*.md

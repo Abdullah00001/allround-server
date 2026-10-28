@@ -1,0 +1,65 @@
+{
+  "name": "allround-server",
+  "version": "1.0.0",
+  "description": "Allround Server Application",
+  "directories": {
+    "doc": "docs",
+    "scripts": "scripts"
+  },
+  "scripts": {
+    "prisma:migrate": "bash scripts/prisma-migrate.sh",
+    "prisma:generate": "bash scripts/prisma-generate.sh",
+    "prisma:sync": "bash scripts/prisma-sync.sh",
+    "clean": "bash scripts/clean.sh",
+    "prepare": "husky",
+    "create:job": "bash scheduler/scripts/create-job.sh",
+    "create:queue": "bash worker/scripts/create-queue.sh",
+    "create:queue-job": "bash worker/scripts/create-queue-job.sh",
+    "create:emailTemp": "bash worker/scripts/create-email-temp.sh",
+    "feed:legal": "node server/scripts/feed-legal.js",
+    "feed:commission": "node server/scripts/feed-commission.js",
+    "create:admin": "node server/scripts/create-admin.js",
+    "create:module": "node server/scripts/create-module.js",
+    "create:version": "node server/scripts/create-version.js",
+    "add:route": "node server/scripts/add-route.js",
+    "remove:route": "node server/scripts/remove-route.js",
+    "create:endpoint": "node server/scripts/create-endpoint.js"
+  },
+  "dependencies": {
+    "@aws-sdk/s3-request-presigner": "^3.1141.0",
+    "@prisma/client": "^6.19.2",
+    "geo-tz": "^8.1.9",
+    "prisma": "^6.19.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Abdullah00001/allround-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Abdullah00001/allround-server/issues"
+  },
+  "homepage": "https://github.com/Abdullah00001/allround-server#readme",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@typescript-eslint/eslint-plugin": "^8.66.0",
+    "@typescript-eslint/parser": "^8.66.0",
+    "eslint": "^10.8.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-prettier": "^5.5.6",
+    "eslint-plugin-unused-imports": "^4.4.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.3.0",
+    "prettier": "^3.9.6",
+    "typescript": "^7.0.2",
+    "typescript-eslint": "^8.66.0"
+  },
+  "lint-staged": {
+    "scheduler/**/*.ts": [
+      "prettier --write"
+    ],
+    "worker/**/*.ts": [
+      "prettier --write"
+    ]
+  }
+}
