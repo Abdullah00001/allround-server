@@ -12,23 +12,68 @@ datasource db {
   extensions = [postgis, fuzzystrmatch, postgis_tiger_geocoder, postgis_topology]
 }
 
-// ============ ENUMS ============
+// ==========================================
+// ENUMS (Strict UI State Definitions)
+// ==========================================
 
 enum Role {
-  PARENT
-  TEACHER
   ADMIN
+  SITE_MANAGER
+  EMPLOYEE
 }
 
-enum UserStatus {
-  ACTIVE
-  INACTIVE
-  SUSPENDED
+enum CustomerCategory {
+  COMMERCIAL
+  MUNICIPALITY
+  ARCHITECT
+  PRIVATE
 }
 
-enum Language {
-  EN
-  ES
+enum InspectionStatus {
+  PENDING
+  SURVEY_DONE
+  CONVERTED
+}
+
+enum PhaseType {
+  ERECTION
+  DISMANTLING
+  STANDING
+  MAINTENANCE
+}
+
+enum PhaseStatus {
+  ENQUIRY
+  QUOTATION
+  ORDER_CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  POSTPONED
+}
+
+enum Priority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum ActivityType {
+  ERECTION
+  DISMANTLING
+  TRANSPORT
+  MAINTENANCE
+  OTHER
+}
+
+enum TimeLogStatus {
+  PENDING_APPROVAL 
+  APPROVED         
+  REJECTED
+}
+
+enum AbsenceType {
+  VACATION
+  SICK_LEAVE
 }
 
 enum Platform {
@@ -52,8 +97,6 @@ enum RevokeReason {
   PASSWORD_CHANGED
 }
 
-
-
 enum LegalContentType {
   ABOUT_US
   TERMS_AND_CONDITION
@@ -61,41 +104,393 @@ enum LegalContentType {
   DATA_PROTECTION
 }
 
-// ============ MODELS ============
+enum Language {
+  EN
+  DE
+  TR
+}
+
+// NEW: For the Notification Bell
+enum NotificationType {
+  PROJECT_ASSIGNED
+  TIME_LOG_APPROVED
+  TIME_LOG_REJECTED
+  INSPECTION_SCHEDULED
+  SYSTEM_ALERT
+}
+
+// ==========================================
+// 1. CORE ENTITIES & AUTH
+// ==========================================
 
 model User {
-  id                 String     @id @default(uuid())
-  role               Role
-  email              String    @unique
-  phone              String    
-  password           String
-  fullName           String
-  avatarUrl          String?
-  status             UserStatus @default(INACTIVE)
-  emailVerifiedAt    DateTime?
-  phoneVerifiedAt    DateTime?
-  profileCompletedAt DateTime?
-  lastLoginAt        DateTime?
-  isProfileSetup     Boolean   @default(false)
-  isLegalTermAccepted Boolean   @default(false)
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
+  id                String    @id @default(uuid())
+  email             String    @unique
+  passwordHash      String
+  firstName         String
+  lastName          String
+  role              Role      @default(EMPLOYEE)
+  phone             String?
+  avatarUrl         String?   
+  weeklyHoursTarget Decimal   @default(40.00) @db.Decimal(5, 2)
+  
+  isActive          Boolean   @default(true) 
+  deletedAt         DateTime? 
 
-  preferences         UserPreference?
-  @@index([role, status])
+  // Relations
+  projectManagements ProjectManagerAssignment[]
+  timeLogs           TimeLog[]
+  crewAssignments    CrewAssignment[]
+  absences           Absence[]
+  vehicleHistory     VehicleAssignment[]
+  devices            Device[]          
+  preferences        UserPreference?   
+  notifications      Notification[]    
+  auditLogs          AuditLog[]        
+  projectNotes       ProjectNote[]     
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([deletedAt]) 
+  @@index([role, isActive])
+}
+
+// ==========================================
+// 2. CRM & PRE-SALES
+// ==========================================
+
+model Customer {
+  id          String           @id @default(uuid())
+  name        String
+  category    CustomerCategory
+  address     String
+  latitude    Decimal?         @db.Decimal(10, 8)
+  longitude   Decimal?         @db.Decimal(11, 8)
+  
+  deletedAt   DateTime?
+
+  contacts    CustomerContact[]
+  inspections Inspection[]
+  projects    Project[]
+
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([name]) 
+  @@index([deletedAt])
+}
+
+model CustomerContact {
+  id         String   @id @default(uuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  
+  name       String
+  role       String   
+  phone      String?
+  email      String?
+  isPrimary  Boolean  @default(false) 
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([customerId])
+}
+
+model Inspection {
+  id              String           @id @default(uuid())
+  customerId      String
+  customer        Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  
+  siteManagerId   String?          
+  siteTitle       String
+  address         String
+  postalCode      String?
+  city            String?
+  appointmentDate DateTime
+  
+  scaffoldArea    Decimal?         @db.Decimal(10, 2)
+  scaffoldHeight  Decimal?         @db.Decimal(10, 2)
+  scaffoldType    String?
+
+  status          InspectionStatus @default(PENDING)
+  deletedAt       DateTime?
+
+  attachments     Attachment[]     
+
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([status, appointmentDate]) 
+  @@index([customerId])
+}
+
+// ==========================================
+// 3. PROJECTS & KANBAN
+// ==========================================
+
+model Project {
+  id              String        @id @default(uuid())
+  customerId      String
+  customer        Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  
+  name            String        
+  address         String
+  latitude        Decimal?      @db.Decimal(10, 8)
+  longitude       Decimal?      @db.Decimal(11, 8)
+  
+  budgetedHours   Decimal       @default(0.00) @db.Decimal(10, 2)
+  
+  siteAccessCode  String?       
+  siteAccessNotes String?       
+  deletedAt       DateTime?
+
+  phases            ProjectPhase[]
+  projectManagers   ProjectManagerAssignment[]
+  attachments       Attachment[]     
+  notes             ProjectNote[]      
+  measurements      ProjectMeasurement[] 
+  projectTasks      ProjectTask[]      
+  auditLogs         AuditLog[]         
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([customerId])
+  @@index([deletedAt])
+}
+
+model ProjectManagerAssignment {
+  id        String   @id @default(uuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  assignedAt DateTime @default(now())
+
+  @@unique([projectId, userId]) 
+}
+
+model ProjectPhase {
+  id           String      @id @default(uuid())
+  projectId    String
+  project      Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  type         PhaseType   
+  status       PhaseStatus @default(ENQUIRY) 
+  priority     Priority    @default(MEDIUM)
+  
+  startDate    DateTime?   
+  endDate      DateTime?
+  durationDays Decimal?    @db.Decimal(5, 2)
+
+  timeLogs         TimeLog[]
+  crewAssignments  CrewAssignment[]
+
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([projectId, status]) 
+  @@index([status])
+}
+
+// For the "Tasks" tab in Project Details
+model ProjectTask {
+  id          String    @id @default(uuid())
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  title       String
+  isCompleted Boolean   @default(false)
+  dueDate     DateTime?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([projectId])
+}
+
+// For the "Notes" tab in Project Details
+model ProjectNote {
+  id          String    @id @default(uuid())
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  authorId    String
+  author      User      @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  
+  content     String    @db.Text
+  createdAt   DateTime  @default(now())
+
+  @@index([projectId])
+}
+
+// For the "Measurement" tab
+model ProjectMeasurement {
+  id          String    @id @default(uuid())
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  area        Decimal   @db.Decimal(10, 2) 
+  height      Decimal   @db.Decimal(10, 2) 
+  scaffoldType String?                     
+  
+  createdAt   DateTime  @default(now())
+
+  @@index([projectId])
+}
+
+// ==========================================
+// 4. OPERATIONS & SCHEDULING
+// ==========================================
+
+model CrewAssignment {
+  id         String       @id @default(uuid())
+  phaseId    String
+  phase      ProjectPhase @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+  
+  userId     String
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  date       DateTime     
+  hours      Decimal      @db.Decimal(4, 2)
+
+  createdAt  DateTime     @default(now())
+
+  @@unique([phaseId, userId, date])
+  @@index([date, phaseId]) 
+}
+
+model Vehicle {
+  id             String   @id @default(uuid())
+  name           String   
+  plateNumber    String   @unique
+  imageUrl       String?  
+  deletedAt      DateTime?
+
+  assignments    VehicleAssignment[]
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model VehicleAssignment {
+  id        String   @id @default(uuid())
+  vehicleId String
+  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  assignedAt DateTime @default(now())
+  returnedAt DateTime? 
+
+  @@index([vehicleId, returnedAt])
+  @@index([userId, returnedAt])
+}
+
+// ==========================================
+// 5. TIME TRACKING (Mobile & Admin)
+// ==========================================
+
+model TimeLog {
+  id           String         @id @default(uuid())
+  userId       String
+  user         User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  
+  phaseId      String
+  phase        ProjectPhase   @relation(fields: [phaseId], references: [id], onDelete: Restrict)
+  
+  activityType ActivityType   
+  startTime    DateTime
+  endTime      DateTime?      
+  isManual     Boolean        @default(false) 
+  status       TimeLogStatus  @default(APPROVED) 
+  
+  gpsStartLat  Decimal?       @db.Decimal(10, 8)
+  gpsStartLng  Decimal?       @db.Decimal(11, 8)
+  gpsEndLat    Decimal?       @db.Decimal(10, 8)
+  gpsEndLng    Decimal?       @db.Decimal(11, 8)
+
+  clientSyncId String?        @unique 
+  
+  breaks       TimeLogBreak[] 
+
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([userId, startTime]) 
+  @@index([phaseId, status])
+  @@index([status]) 
+}
+
+model TimeLogBreak {
+  id        String   @id @default(uuid())
+  timeLogId String
+  timeLog   TimeLog  @relation(fields: [timeLogId], references: [id], onDelete: Cascade)
+  
+  startTime DateTime
+  endTime   DateTime?
+  durationMinutes Int? 
+
+  @@index([timeLogId])
+}
+
+// ==========================================
+// 6. HR, SYSTEM & MEDIA
+// ==========================================
+
+model Absence {
+  id        String      @id @default(uuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  type      AbsenceType
+  startDate DateTime
+  endDate   DateTime
+  note      String?     
+
+  createdAt DateTime    @default(now())
+
+  @@index([userId, startDate, endDate])
+}
+
+// For the Settings Screen (Image 18)
+model CompanyProfile {
+  id              String   @id @default("global")
+  displayName     String
+  officialName    String
+  taxId           String?
+  headOffice      String?
+  logoUrl         String?
+  siteManagerAccessRule String // "RESTRICT_TO_ASSIGNED" or "GLOBAL_ACCESS"
+  
+  updatedAt       DateTime @updatedAt
+}
+
+model SystemSetting {
+  key       String   @id 
+  value     String
+  updatedAt DateTime @updatedAt
 }
 
 model Device {
   id               String        @id @default(uuid())
   userId           String
   user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
   deviceIdentifier String
   fcmToken         String?
   platform         Platform
   status           DeviceStatus  @default(ACTIVE)
   revokeReason     RevokeReason?
+  
   sessionExpiresAt DateTime
   lastSeenAt       DateTime      @default(now())
+  
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
@@ -105,6 +500,41 @@ model Device {
   @@index([fcmToken, status])
   @@index([status, lastSeenAt])
   @@index([status, sessionExpiresAt])
+}
+
+// For the Notification Bell
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  title     String
+  message   String
+  type      NotificationType
+  isRead    Boolean          @default(false)
+  link      String?          
+  createdAt DateTime         @default(now())
+
+  @@index([userId, isRead])
+}
+
+// For the "History" tab in Project Details
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  action    String   
+  details   String   @db.Text 
+  
+  createdAt DateTime @default(now())
+
+  @@index([projectId])
+  @@index([userId])
+  @@index([createdAt])
 }
 
 model LegalContent {
@@ -126,4 +556,21 @@ model UserPreference {
 
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+}
+
+model Attachment {
+  id             String       @id @default(uuid())
+  url            String       
+  fileType       String       
+  
+  projectId      String?
+  project        Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  inspectionId   String?
+  inspection     Inspection?  @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime     @default(now())
+
+  @@index([projectId])
+  @@index([inspectionId])
 }
