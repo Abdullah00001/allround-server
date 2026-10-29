@@ -129,7 +129,7 @@ model User {
   passwordHash      String
   firstName         String
   lastName          String
-  role              Role      @default(EMPLOYEE)
+  role              Role
   phone             String?
   avatarUrl         String?   
   weeklyHoursTarget Decimal   @default(40.00) @db.Decimal(5, 2)
