@@ -27,7 +27,7 @@ jobs:
         id: meta-server
         uses: docker/metadata-action@v5
         with:
-          images: registry.digitalocean.com/bookdianight-registry/bookdianight-server
+          images: registry.digitalocean.com/allround-registry/allround-server
 
       - name: Build and push Server Image
         uses: docker/build-push-action@v5
@@ -35,14 +35,14 @@ jobs:
           context: .
           file: ./server/Dockerfile
           push: true
-          tags: ${{ steps.meta-server.outputs.tags }},registry.digitalocean.com/bookdianight-registry/bookdianight-server:latest
+          tags: ${{ steps.meta-server.outputs.tags }},registry.digitalocean.com/allround-registry/allround-server:latest
           labels: ${{ steps.meta-server.outputs.labels }}
 
       - name: Extract metadata (tags, labels) for Scheduler
         id: meta-scheduler
         uses: docker/metadata-action@v5
         with:
-          images: registry.digitalocean.com/bookdianight-registry/bookdianight-scheduler
+          images: registry.digitalocean.com/allround-registry/allround-scheduler
 
       - name: Build and push Scheduler Image
         uses: docker/build-push-action@v5
@@ -50,14 +50,14 @@ jobs:
           context: .
           file: ./scheduler/Dockerfile
           push: true
-          tags: ${{ steps.meta-scheduler.outputs.tags }},registry.digitalocean.com/bookdianight-registry/bookdianight-scheduler:latest
+          tags: ${{ steps.meta-scheduler.outputs.tags }},registry.digitalocean.com/allround-registry/allround-scheduler:latest
           labels: ${{ steps.meta-scheduler.outputs.labels }}
 
       - name: Extract metadata (tags, labels) for Worker
         id: meta-worker
         uses: docker/metadata-action@v5
         with:
-          images: registry.digitalocean.com/bookdianight-registry/bookdianight-worker
+          images: registry.digitalocean.com/allround-registry/allround-worker
 
       - name: Build and push Worker Image
         uses: docker/build-push-action@v5
@@ -65,7 +65,7 @@ jobs:
           context: .
           file: ./worker/Dockerfile
           push: true
-          tags: ${{ steps.meta-worker.outputs.tags }},registry.digitalocean.com/bookdianight-registry/bookdianight-worker:latest
+          tags: ${{ steps.meta-worker.outputs.tags }},registry.digitalocean.com/allround-registry/allround-worker:latest
           labels: ${{ steps.meta-worker.outputs.labels }}
 
   deploy-to-droplet:
@@ -95,7 +95,7 @@ jobs:
           username: ${{ vars.DO_DROPLET_USER }}
           key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
           source: "docker/docker-compose.yaml"
-          target: "/opt/bookdianight-server"
+          target: "/opt/allround-server"
           strip_components: 1
 
       - name: Execute deployment on DigitalOcean Droplet
@@ -105,12 +105,12 @@ jobs:
           username: ${{ vars.DO_DROPLET_USER }}
           key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
           script: |
-            export DOCKER_USERNAME=registry.digitalocean.com/bookdianight-registry
+            export DOCKER_USERNAME=registry.digitalocean.com/allround-registry
             export IMAGE_TAG=${{ github.ref_name }}
             # Authenticate the droplet to DigitalOcean Container Registry securely
             echo "${{ secrets.DO_REGISTRY_TOKEN }}" | docker login registry.digitalocean.com -u "${{ vars.DO_ACCOUNT_EMAIL }}" --password-stdin
             
-            cd /opt/bookdianight-server
+            cd /opt/allround-server
             # Make sure we pull the latest images
             docker compose pull
             # Start the stack

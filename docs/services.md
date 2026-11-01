@@ -2,7 +2,7 @@
 
 ## 1. BullMQ / Workers / Scheduler
 
-ALUA Academy Management utilizes a distributed job queue architecture to offload heavy synchronous tasks and schedule recurring crons, maintaining high API responsiveness.
+Allround Server utilizes a distributed job queue architecture to offload heavy synchronous tasks and schedule recurring crons, maintaining high API responsiveness.
 
 ### Architecture Breakdown
 - **server (Producer):** Enqueues asynchronous tasks (e.g., sending an email, processing an image) into the BullMQ queues and returns an immediate response to the client.
@@ -19,7 +19,7 @@ ALUA Academy Management utilizes a distributed job queue architecture to offload
 
 ## 2. Redis / Valkey
 
-ALUA Academy Management leverages **Valkey** (an open-source Redis fork, fully Redis-compatible) as the primary in-memory data store.
+Allround Server leverages **Valkey** (an open-source Redis fork, fully Redis-compatible) as the primary in-memory data store.
 
 ### Roles
 1. **BullMQ Backend:** All queues, jobs, and retry mechanisms are persisted within Valkey.
@@ -44,14 +44,14 @@ The system integrates **Socket.IO** for real-time, bi-directional communication.
 
 ## 4. External Services
 
-The ALUA Academy Management backend is deeply integrated with several critical third-party external services.
+The Allround Server backend is deeply integrated with several critical third-party external services.
 
 ### DigitalOcean Container Registry (DOCR)
-- **Purpose:** Secure, private hosting of our Docker images (`alua-academy-management-server`, `worker`, `scheduler`).
+- **Purpose:** Secure, private hosting of our Docker images (`allround-server-server`, `worker`, `scheduler`).
 - **Integration:** Authenticated via the `DO_REGISTRY_TOKEN` within GitHub Actions.
 
 ### DigitalOcean Spaces (S3 Compatible)
-- **Purpose:** Persistent blob storage for Club images, Event thumbnails, and User avatars.
+- **Purpose:** Persistent blob storage for project media, inspection survey photos, site access documents, and user avatars.
 - **Integration:** Handled using the `@aws-sdk/client-s3` library initialized in `server/src/app/configs/s3Client.configs.ts`.
 
 ### Firebase Cloud Messaging (FCM)

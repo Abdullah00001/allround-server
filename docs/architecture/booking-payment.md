@@ -1,11 +1,12 @@
-# Booking & Payment Architecture
+# Booking & Payment Architecture (LEGACY - DEPRECATED)
+
+> [!WARNING]
+> **ARCHIVED ARCHITECTURE DECISION RECORD**
+> This document is retained solely as an archived decision record from a prior system template. It does not apply to the Allround real estate project management software architecture.
 
 ## 1. Purpose
 
-This document records the locked Booking and Payment product architecture for
-ALUA Academy Management. It is a decision record, not an implementation specification.
-Implementation must not add fields, APIs, provider mechanics, or business rules
-that are not recorded here or separately approved.
+This document records the locked Booking and Payment product architecture for the legacy template.
 
 ## 2. Domain Boundaries
 

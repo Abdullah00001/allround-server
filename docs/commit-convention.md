@@ -1,6 +1,6 @@
 # Git Commit Convention & Template
 
-ALUA Academy Management strictly adheres to the [Conventional Commits](https://www.conventionalcommits.org/) specification. This ensures a clean, readable, and machine-parseable Git history.
+Allround Server strictly adheres to the [Conventional Commits](https://www.conventionalcommits.org/) specification. This ensures a clean, readable, and machine-parseable Git history.
 
 ## 1. Canonical Structure
 
@@ -132,7 +132,7 @@ When making documentation changes, keep the description focused on what was docu
 
 ## 10. Release Commits
 
-ALUA Academy Management currently uses a **manual** `package.json` versioning process. The Git tag represents the true production release identity used by the CI/CD pipeline.
+Allround Server currently uses a **manual** `package.json` versioning process. The Git tag represents the true production release identity used by the CI/CD pipeline.
 
 **Example**:
 ```text
@@ -189,7 +189,7 @@ Breaking Change:
 - Pull Request (PR) titles should summarize the **overall change**.
 - Multiple logical commits may (and often should) belong to a single PR.
 - Avoid meaningless commit history (e.g., "WIP", "fixing typo again"), but do not rewrite shared history casually if others are working on the branch.
-- *(Note: ALUA Academy Management does not currently enforce a strict squash-merge policy on PRs, so keeping commits clean is highly encouraged.)*
+- *(Note: Allround Server does not currently enforce a strict squash-merge policy on PRs, so keeping commits clean is highly encouraged.)*
 
 ## 15. Security Warning
 

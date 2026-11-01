@@ -1,7 +1,7 @@
 {
   "name": "allround-server",
   "version": "1.0.0",
-  "description": "Allround Server Application",
+  "description": "Allround real estate project management software backend (mobile app and web admin panel)",
   "directories": {
     "doc": "docs",
     "scripts": "scripts"

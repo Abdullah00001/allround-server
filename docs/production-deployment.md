@@ -2,11 +2,11 @@
 
 ## 1. DigitalOcean Infrastructure Overview
 
-The ALUA Academy Management production environment operates entirely within DigitalOcean.
+The Allround Server production environment operates entirely within DigitalOcean.
 
 - **Droplet (Ubuntu)**: The foundational compute node running the Docker Engine, Nginx, and the BullMQ/Express Node.js containers.
 - **Cloud Firewall**: An external, stateful firewall completely shielding the Droplet.
-- **Container Registry (DOCR)**: A private, secure repository hosting the immutable `alua-academy-management-server`, `worker`, and `scheduler` Docker images.
+- **Container Registry (DOCR)**: A private, secure repository hosting the immutable `allround-server-server`, `worker`, and `scheduler` Docker images.
 - **Managed PostgreSQL**: The highly-available database cluster. Backups and PITR (Point-in-Time Recovery) are natively handled by DO.
 - **Managed Valkey (Redis)**: The in-memory cache and queue backend.
 - **Spaces**: S3-compatible Object Storage for media uploads.
@@ -78,12 +78,12 @@ To cut a new production release:
 
 ## 5. Rollback Procedure
 
-Because ALUA Academy Management relies on **immutable release tags**, reverting a faulty deployment is completely deterministic and requires zero rebuilding.
+Because Allround Server relies on **immutable release tags**, reverting a faulty deployment is completely deterministic and requires zero rebuilding.
 
 1. Identify the previous stable release tag (e.g., `v1.0.13`).
 2. Verify the tag still exists in DigitalOcean Container Registry.
 3. SSH into the production Droplet as the `admin` or `deploy` user.
-4. Navigate to `/opt/alua-academy-management-server`.
+4. Navigate to `/opt/allround-server`.
 5. Run the rollback sequence explicitly:
    ```bash
    export IMAGE_TAG=v1.0.13
@@ -99,7 +99,7 @@ Because ALUA Academy Management relies on **immutable release tags**, reverting 
 
 ## 6. Disaster Recovery
 
-ALUA Academy Management maintains robust disaster recovery capabilities.
+Allround Server maintains robust disaster recovery capabilities.
 
 ### Fully Reproducible State
 - **Droplet Loss**: If the Droplet is completely destroyed, run `terraform apply` to recreate the VPS, then run the Ansible playbook to reprovision Docker and Nginx. Finally, trigger the GitHub Actions CD pipeline to redeploy the application. Total estimated recovery time: 10 minutes.

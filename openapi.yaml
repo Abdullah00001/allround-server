@@ -3,7 +3,7 @@ openapi: 3.0.3
 info:
   title: Allround Server API
   version: 1.0.0
-  description: API documentation for the Allround Server backend.
+  description: API documentation for the Allround Server backend, powering the Allround real estate project management mobile app and web admin panel.
 servers:
   - url: https://allround.localbox.online
     description: Local development server

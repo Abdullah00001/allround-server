@@ -31,14 +31,14 @@ This guide provides practical remediation steps for common production and deploy
 - **Symptoms:** `docker compose ps` shows `Restarting` for `server` or `worker`.
 - **Likely Causes:** Application crash on boot (e.g., missing environment variable, syntax error).
 - **Checks:** Run `docker compose logs -f server` to capture the stack trace.
-- **Safe Remediation:** If the failure is due to a missing `.env` variable (e.g., `SMTP_HOST`), SSH into the Droplet, update `/opt/alua-academy-management-server/.env`, and run `docker compose up -d`. If it's a code issue, push a hotfix and release a new `v*` tag.
+- **Safe Remediation:** If the failure is due to a missing `.env` variable (e.g., `SMTP_HOST`), SSH into the Droplet, update `/opt/allround-server/.env`, and run `docker compose up -d`. If it's a code issue, push a hotfix and release a new `v*` tag.
 
 ### Container Marked Unhealthy
 - **Symptoms:** `docker compose ps` shows `Up X minutes (unhealthy)`.
 - **Likely Causes:** For `server`, this strictly means the `/health` endpoint is returning `HTTP 503` due to a PostgreSQL or Valkey timeout. For `worker`, this means the Node process is technically deadlocked despite the PID existing.
 - **Checks:** 
-  1. `docker inspect --format='{{json .State.Health}}' alua-academy-management-server`
-  2. `curl https://api.alua-academy-management.com/health` (To identify which dependency failed).
+  1. `docker inspect --format='{{json .State.Health}}' allround-server-server`
+  2. `curl https://api.allround.com/health` (To identify which dependency failed).
 - **Safe Remediation:** Resolve the underlying dependency issue (e.g., check DO console for database maintenance). The container will automatically heal and return to `healthy` once the dependency responds.
 
 ---

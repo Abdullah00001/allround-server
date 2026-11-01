@@ -2,7 +2,7 @@
 
 ## 1. System Architecture
 
-The ALUA Academy Management system represents a modern, containerized, multi-service backend hosted on DigitalOcean. 
+The Allround system represents a modern, containerized, multi-service backend powering the Allround real estate project management platform (mobile application and web admin panel) hosted on DigitalOcean.
 
 ### High-Level Topology
 
@@ -10,18 +10,18 @@ The ALUA Academy Management system represents a modern, containerized, multi-ser
 graph TD
     Client[Mobile/Web Clients] -->|HTTPS 443| DO_LB[DO Cloud Firewall]
     DO_LB -->|Port 80/443| Nginx[Nginx Reverse Proxy]
-    Nginx -->|Port 5000| Server[ALUA Academy Management Server]
+    Nginx -->|Port 5000| Server[Allround Server]
     
     Server -->|Read/Write| Postgres[(Managed PostgreSQL)]
     Server -->|PubSub/Cache| Valkey[(Managed Valkey)]
     Server -->|Offload Jobs| BullMQ[BullMQ Queues]
     
-    Worker[ALUA Academy Management Worker] -->|Consume Jobs| BullMQ
+    Worker[Allround Worker] -->|Consume Jobs| BullMQ
     Worker -->|Read/Write| Postgres
     Worker -->|Send Emails| SMTP[External SMTP]
     Worker -->|Push Notifications| Firebase[Firebase Cloud Messaging]
     
-    Scheduler[ALUA Academy Management Scheduler] -->|Cron| BullMQ
+    Scheduler[Allround Scheduler] -->|Cron| BullMQ
     
     Server -->|Uploads| Spaces[(DO Spaces / S3)]
 ```
@@ -34,7 +34,7 @@ graph TD
 - **Scheduler Container:** A cron-like daemon that strictly pushes time-based jobs into the Valkey queues to be executed by the worker.
 - **Managed PostgreSQL:** The persistent, relational data store.
 - **Managed Valkey (Redis):** Serves as the high-speed cache, the BullMQ job store, and the Pub/Sub backend for horizontal scaling of Socket.IO.
-- **DO Spaces:** S3-compatible object storage for user avatars, club images, and event media.
+- **DO Spaces:** S3-compatible object storage for user avatars, site inspections, and project attachments.
 
 ---
 

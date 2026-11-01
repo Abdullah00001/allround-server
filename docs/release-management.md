@@ -1,10 +1,10 @@
 # Release Management & Versioning
 
-This document outlines the authoritative release management and versioning workflow for the ALUA Academy Management backend.
+This document outlines the authoritative release management and versioning workflow for the Allround Server backend.
 
 ## 1. Versioning Strategy
 
-ALUA Academy Management adheres to **Semantic Versioning (SemVer)**: `MAJOR.MINOR.PATCH` (e.g., `v1.0.14`).
+Allround Server adheres to **Semantic Versioning (SemVer)**: `MAJOR.MINOR.PATCH` (e.g., `v1.0.14`).
 
 - **MAJOR**: Breaking changes to the API schema or significant infrastructural redesigns.
 - **MINOR**: New, backward-compatible features and functionality.
@@ -42,7 +42,7 @@ Creating a release requires manually synchronizing the `package.json` version an
    git push origin v1.0.15
    ```
 8. **GitHub Actions Takes Over**: The push of `v*` will trigger the CD pipeline.
-9. **Docker Build & Push**: The pipeline builds immutable Docker images (`alua-academy-management-server`, `worker`, `scheduler`) using the exact code at that Git tag. The images are pushed to DigitalOcean Container Registry (DOCR) tagged with the exact version (e.g., `v1.0.15`).
+9. **Docker Build & Push**: The pipeline builds immutable Docker images (`allround-server-server`, `worker`, `scheduler`) using the exact code at that Git tag. The images are pushed to DigitalOcean Container Registry (DOCR) tagged with the exact version (e.g., `v1.0.15`).
 10. **Deployment**: The pipeline SSHs into the production Droplet, updates the `IMAGE_TAG=v1.0.15` environment variable, and restarts the containers.
 11. **Verify Production**: Verify that the production `/health` endpoint is healthy and returning correctly.
 
@@ -54,7 +54,7 @@ If `v1.0.15` causes a critical production bug, you can instantly rollback to `v1
 
 ### Rollback Process
 1. SSH into the production Droplet.
-2. Navigate to `/opt/alua-academy-management-server`.
+2. Navigate to `/opt/allround-server`.
 3. Manually override the environment variable:
    ```bash
    export IMAGE_TAG=v1.0.14

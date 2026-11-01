@@ -23,8 +23,8 @@ export function mailOption({
   attachments?: SendMailOptions['attachments'];
 }): SendMailOptions {
   return {
-    // aula360academia.com
-    from: '"AULA360 ACADEMY" <no-reply@aula360academia.com>',
+    // allround.com
+    from: '"Allround" <no-reply@allround.com>',
     to,
     subject,
     html,

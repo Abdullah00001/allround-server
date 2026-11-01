@@ -1,4 +1,4 @@
-# ALUA Academy Management Code Quality & Coding Conventions
+# Allround Server Code Quality & Coding Conventions
 
 > This document is a mandatory coding contract for AI agents and developers working in this repository.
 >

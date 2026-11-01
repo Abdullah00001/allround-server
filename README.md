@@ -1,6 +1,6 @@
 # Allround Server
 
-Welcome to the **Allround Server** project! This repository contains the complete backend infrastructure and application code for the Allround platform.
+Welcome to the **Allround Server** project! Allround is an enterprise-grade real estate project management software suite comprising a mobile application and a web admin panel. This repository houses the powerhouse backend infrastructure and application code serving both the mobile app and the admin panel.
 
 This is a **Docker-centric** backend. The application relies on a multi-service architecture where separate containers handle specific responsibilities, backed by robust managed cloud infrastructure.
 

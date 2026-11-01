@@ -1,6 +1,6 @@
 # Mandatory AI/Agent Workflow
 
-All AI and agentic coding assistants modifying the ALUA Academy Management repository must strictly follow this phased workflow. Deviating from this workflow introduces high risks of architectural drift or production outages.
+All AI and agentic coding assistants modifying the Allround Server repository must strictly follow this phased workflow. Deviating from this workflow introduces high risks of architectural drift or production outages.
 
 ## The 18-Step Required Workflow
 

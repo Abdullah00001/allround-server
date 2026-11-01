@@ -1,6 +1,6 @@
 # AI Agent Architecture Map
 
-This document provides a concise, high-level map of the ALUA Academy Management architecture tailored specifically for AI context ingestion.
+This document provides a concise, high-level map of the Allround Server architecture tailored specifically for AI context ingestion.
 
 ## Repository Structure
 

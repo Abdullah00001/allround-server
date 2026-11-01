@@ -1,6 +1,6 @@
-# ALUA Academy Management Documentation Index
+# Allround Server Documentation Index
 
-Welcome to the central documentation knowledge base for the ALUA Academy Management backend.
+Welcome to the central documentation knowledge base for the Allround Server backend (powering the Allround real estate project management mobile app and web admin panel).
 
 ## 🧭 Source of Truth Boundaries
 

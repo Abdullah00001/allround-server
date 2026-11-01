@@ -1,6 +1,6 @@
 # Developer Workflow & Onboarding
 
-Welcome to the ALUA Academy Management Server project! This document outlines how to get up and running with the codebase as a new developer.
+Welcome to the Allround Server project! Allround is an enterprise real estate project management software suite (mobile app and web admin panel), and this repository is the powerhouse backend. This document outlines how to get up and running with the codebase as a new developer.
 
 ## The Onboarding Path
 
@@ -26,8 +26,8 @@ This project relies heavily on Docker. You must install the following tools on y
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/Abdullah00001/alua-academy-management-server.git
-   cd alua-academy-management-server
+   git clone https://github.com/Abdullah00001/allround-server.git
+   cd allround-server
    ```
 2. **Install root dependencies:**
    *(Executes on Host)*
