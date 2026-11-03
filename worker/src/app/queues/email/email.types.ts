@@ -3,4 +3,9 @@
 
 export interface IAccountCreateSuccess {
   // Add properties here
+  name: string;
+  email: string;
+  otp: string;
+  otpExpiredAt: string;
+  traceId: string;
 }
