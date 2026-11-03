@@ -10,6 +10,8 @@ servers:
 tags:
   - name: Health
     description: System health and status endpoints
+  - name: Auth
+    description: Authentication and user registration endpoints
 
 paths:
   /health:
@@ -33,6 +35,76 @@ paths:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
 
+  /api/v1/auth/signup:
+    post:
+      tags:
+        - Auth
+      summary: Register a new user
+      description: Creates a new user account, sends a 6-digit OTP verification code via email, and returns an OTP verification page token.
+      operationId: signupUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupRequest'
+      responses:
+        '201':
+          description: User successfully registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignupResponse'
+        '400':
+          description: Malformed JSON payload
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SystemErrorResponse'
+                  - type: object
+                    properties:
+                      message:
+                        type: string
+                        example: 'Invalid JSON Payload'
+                      errorType:
+                        type: string
+                        example: 'INVALID_JSON'
+        '409':
+          description: User with email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DuplicateUserErrorResponse'
+        '422':
+          description: Request payload validation failed
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ValidationErrorResponse'
+                  - type: object
+                    properties:
+                      message:
+                        type: string
+                        example: 'Request body validation failed'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SystemErrorResponse'
+                  - type: object
+                    properties:
+                      message:
+                        type: string
+                        example: 'Internal Server Error'
+                      errorType:
+                        type: string
+                        example: 'SERVER_ERROR'
+
 components:
   securitySchemes:
     adminAuth:
@@ -47,6 +119,84 @@ components:
       description: 'JWT Bearer token for authentication.'
 
   schemas:
+    # ==========================================
+    # Request Payload Schemas
+    # ==========================================
+    SignupRequest:
+      type: object
+      required:
+        - firstName
+        - lastName
+        - email
+        - role
+        - password
+      properties:
+        firstName:
+          type: string
+          example: 'John'
+          description: First name of the user
+        lastName:
+          type: string
+          example: 'Doe'
+          description: Last name of the user
+        email:
+          type: string
+          format: email
+          example: 'john.doe@example.com'
+          description: Valid and unique email address
+        phone:
+          type: string
+          pattern: '^[0-9]{10}$'
+          example: '1234567890'
+          description: Optional 10-digit phone number
+        role:
+          type: string
+          enum:
+            - ADMIN
+            - SITE_MANAGER
+            - EMPLOYEE
+          example: 'EMPLOYEE'
+          description: Assigned system role
+        password:
+          type: string
+          format: password
+          minLength: 8
+          example: 'SecretP@ssw0rd'
+          description: User password (minimum 8 characters)
+
+    # ==========================================
+    # Response Data / DTO Schemas
+    # ==========================================
+    SignupDTO:
+      type: object
+      required:
+        - name
+        - email
+        - role
+        - token
+      properties:
+        name:
+          type: string
+          example: 'John Doe'
+          description: Full name of the registered user
+        email:
+          type: string
+          format: email
+          example: 'john.doe@example.com'
+          description: Registered email address
+        role:
+          type: string
+          enum:
+            - ADMIN
+            - SITE_MANAGER
+            - EMPLOYEE
+          example: 'EMPLOYEE'
+          description: User role
+        token:
+          type: string
+          example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+          description: Temporary OTP page token used to access the verification screen
+
     # ==========================================
     # 200 - 299 Success Response Schemas
     # ==========================================
@@ -144,6 +294,19 @@ components:
               type: string
               example: 'Media items deletion successful!'
 
+    SignupResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required:
+            - data
+          properties:
+            message:
+              type: string
+              example: 'Signup successful, Please check your email for verification code to verify your account'
+            data:
+              $ref: '#/components/schemas/SignupDTO'
+
     HealthResponse:
       type: object
       properties:
@@ -233,6 +396,18 @@ components:
                 - SESSION_EXPIRED
                 - FORBIDDEN
                 - BAD_REQUEST
+
+    DuplicateUserErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/AuthErrorResponse'
+        - type: object
+          properties:
+            message:
+              type: string
+              example: 'User with this email already exist'
+            errorType:
+              type: string
+              example: 'DUPLICATE_DATA'
 
     MulterErrorResponse:
       type: object

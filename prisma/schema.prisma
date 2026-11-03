@@ -22,6 +22,12 @@ enum Role {
   EMPLOYEE
 }
 
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
 enum CustomerCategory {
   COMMERCIAL
   MUNICIPALITY
@@ -124,36 +130,47 @@ enum NotificationType {
 // ==========================================
 
 model User {
-  id                String    @id @default(uuid())
-  email             String    @unique
-  passwordHash      String
-  firstName         String
-  lastName          String
-  role              Role
-  phone             String?
-  avatarUrl         String?   
-  weeklyHoursTarget Decimal   @default(40.00) @db.Decimal(5, 2)
+  id                  String     @id @default(uuid())
+  email               String     @unique
+  passwordHash        String
+  firstName           String
+  lastName            String
+  role                Role
   
-  isActive          Boolean   @default(true) 
-  deletedAt         DateTime? 
+  // Auth & Onboarding Lifecycle (Taken from File 1)
+  status              UserStatus @default(INACTIVE) // Starts INACTIVE until OTP verified
+  phone               String?
+  avatarUrl           String?
+  
+  emailVerifiedAt     DateTime?
+  phoneVerifiedAt     DateTime?
+  lastLoginAt         DateTime?
+  isProfileSetup      Boolean    @default(false)   // For the Mobile "Complete Profile" screen
+  isLegalTermAccepted Boolean    @default(false)   // Tracks if they accepted Privacy Policy
+  
+  // Construction Specific
+  weeklyHoursTarget   Decimal    @default(40.00) @db.Decimal(5, 2)
+  
+  // Soft Delete (Keep this from File 2)
+  deletedAt           DateTime? 
 
   // Relations
-  projectManagements ProjectManagerAssignment[]
-  timeLogs           TimeLog[]
-  crewAssignments    CrewAssignment[]
-  absences           Absence[]
-  vehicleHistory     VehicleAssignment[]
-  devices            Device[]          
-  preferences        UserPreference?   
-  notifications      Notification[]    
-  auditLogs          AuditLog[]        
-  projectNotes       ProjectNote[]     
+  projectManagements  ProjectManagerAssignment[]
+  timeLogs            TimeLog[]
+  crewAssignments     CrewAssignment[]
+  absences            Absence[]
+  vehicleHistory      VehicleAssignment[]
+  devices             Device[]          
+  preferences         UserPreference?   
+  notifications       Notification[]    
+  auditLogs           AuditLog[]        
+  projectNotes        ProjectNote[]     
 
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
 
   @@index([deletedAt]) 
-  @@index([role, isActive])
+  @@index([role, status])
 }
 
 // ==========================================

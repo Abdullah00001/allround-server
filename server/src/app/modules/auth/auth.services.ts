@@ -1,32 +1,30 @@
-import {
-  generateAccessTokenForUser,
-  generateOtpPageToken,
-  verifyOtpPageToken,
-} from '@/app/utils/jwt.utils';
+import { generateOtpPageToken } from '@/app/utils/jwt.utils';
 import { hashOtp } from '@/app/utils/otp.utils';
 import { hashPassword } from '@/app/utils/password.utils';
 import {
   calculateMilliseconds,
   createRedisKey,
   generate,
-  sessionTimeCalculation,
 } from '@/app/utils/system.utils';
 import prisma from '@/app/configs/db.configs';
 import { TSignupServiceParams } from '@/app/modules/auth/auth.types';
 import { getRedisClient } from '@/app/configs/redis.configs';
-import { otpExpireAt } from '@/const';
+import { otpExpireAt, QUEUE_JOBS, REDIS_PREFIXES } from '@/const';
+import { getEmailQueue } from '@/app/queues/email/email.queue';
+import { SignupServiceDTO } from '@/app/modules/auth/auth.dto';
 
 /**
  * Signup new user service
  * @param {TSignupServiceParams} payload
- * @returns {Promise<void>}
+ * @returns {Promise<SignupServiceDTO>}
  */
 export const signupService = async ({
   payload,
   traceId,
-}: TSignupServiceParams): Promise<void> => {
+}: TSignupServiceParams): Promise<SignupServiceDTO> => {
   try {
     const redisClient = getRedisClient();
+    const emailQueue = getEmailQueue();
     const { email, firstName, lastName, password, role, phone } = payload;
     const plainOtp = generate(6, {
       digits: true,
@@ -53,8 +51,27 @@ export const signupService = async ({
         role,
       },
     });
-    
-    return;
+    const otpPageToken = generateOtpPageToken({
+      role: user.role,
+      sub: user.id,
+      accountStatus: user.status,
+    });
+
+    await Promise.all([
+      redisClient.set(
+        createRedisKey(REDIS_PREFIXES.otp, user.id),
+        hashedOtp,
+        'EX',
+        calculateMilliseconds(otpExpireAt, 'minutes')
+      ),
+      emailQueue.add(QUEUE_JOBS.ACCOUNT_CREATE_SUCCESS, emailPayload),
+    ]);
+    return SignupServiceDTO.build(
+      `${firstName} ${lastName}`,
+      email,
+      role,
+      otpPageToken
+    );
   } catch (error) {
     throw error;
   }
