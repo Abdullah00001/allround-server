@@ -3,7 +3,11 @@ import {
   signupController,
   resendOtpController,
 } from '@/app/modules/auth/auth.controllers';
-import { checkIsSignupUserExist } from '@/app/modules/auth/auth.middlewares';
+import {
+  checkIsSignupUserExist,
+  checkUserExistenceMiddleware,
+  checkOtpPageTokenMiddleware,
+} from '@/app/modules/auth/auth.middlewares';
 import { validateReqBody } from '@/app/utils/system.utils';
 import { signupSchema } from '@/app/modules/auth/auth.schema';
 
@@ -22,6 +26,12 @@ router
     signupController
   );
 
-router.route('/auth/resend').post(resendOtpController);
+router
+  .route('/auth/resend')
+  .post(
+    checkOtpPageTokenMiddleware,
+    checkUserExistenceMiddleware,
+    resendOtpController
+  );
 
 export default router;
