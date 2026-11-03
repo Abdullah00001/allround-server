@@ -323,6 +323,7 @@ export const REDIS_PREFIXES = {
  */
 export const QUEUE_JOBS = {
   // AUTO-GENERATED-JOBS-START
+  ACCOUNT_CREATE_SUCCESS: 'account-create-success',
   
   // AUTO-GENERATED-JOBS-END
 } as const;
