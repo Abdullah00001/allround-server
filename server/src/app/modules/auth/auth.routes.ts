@@ -1,5 +1,8 @@
 import { Router } from 'express';
-import { signupController } from '@/app/modules/auth/auth.controllers';
+import {
+  signupController,
+  resendOtpController,
+} from '@/app/modules/auth/auth.controllers';
 import { checkIsSignupUserExist } from '@/app/modules/auth/auth.middlewares';
 import { validateReqBody } from '@/app/utils/system.utils';
 import { signupSchema } from '@/app/modules/auth/auth.schema';
@@ -18,5 +21,7 @@ router
     checkIsSignupUserExist,
     signupController
   );
+
+router.route('/auth/resend').post(resendOtpController);
 
 export default router;

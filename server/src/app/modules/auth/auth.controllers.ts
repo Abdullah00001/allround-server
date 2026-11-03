@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { getTraceId } from '@/app/configs/requestContext.configs';
 import { asyncHandler } from '@/app/utils/system.utils';
-import { signupService } from '@/app/modules/auth/auth.services';
+import { signupService, resendOtpService } from '@/app/modules/auth/auth.services';
 import { TSignupPayload } from './auth.types';
 
 export const signupController = asyncHandler(
@@ -16,6 +16,20 @@ export const signupController = asyncHandler(
         'Signup successful, Please check your email for verification code to verify your account',
       data,
       traceId,
+    });
+    return;
+  }
+);
+
+export const resendOtpController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    await resendOtpService();
+    
+    res.status(200).json({
+      success: true,
+      message: 'Otp resend successful',
+      traceId
     });
     return;
   }

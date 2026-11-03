@@ -76,3 +76,12 @@ export const signupService = async ({
     throw error;
   }
 };
+
+export const resendOtpService = async (): Promise<void> => {
+  try {
+    console.log("resendOtpService called");
+    return;
+  } catch (error) {
+    throw error;
+  }
+};
