@@ -7,6 +7,7 @@ import { TSignupPayload } from '@/app/modules/auth/auth.types';
 import { compareOtp } from '@/app/utils/otp.utils';
 import { getRedisClient } from '@/app/configs/redis.configs';
 import { User } from '@prisma/client';
+import { JwtPayload } from 'jsonwebtoken';
 
 /**
  * This middleware is for check that is the requested signup user email already exist or not.
@@ -38,7 +39,37 @@ export const checkIsSignupUserExist = asyncHandler(
 );
 
 
-
+/**
+ * This middleware is used to check if the user exists.
+ * If the user does not exist, it will return a 404 response.
+ * If the user exists, it will call return next() for further process.
+ * @param req Request
+ * @param res Response
+ * @param next NextFunction
+ */
+export const checkUserExistenceMiddleware = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as JwtPayload;
+    const userId = user.sub;
+    const isUserExist = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { preferences: true },
+    });
+    if (!isUserExist) {
+      res.status(404).json({
+        success: false,
+        message: 'User not found',
+        errorType: AuthErrorType.USER_NOT_FOUND,
+        traceId,
+      });
+      return;
+    }
+    req.jwtPayload = user;
+    req.user = isUserExist as User;
+    next();
+  }
+);
 
 /**
  * This middleware is used to check if the OTP is valid and not expired.
