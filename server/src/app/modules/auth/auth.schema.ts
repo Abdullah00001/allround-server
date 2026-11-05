@@ -1,6 +1,9 @@
 import { Role } from '@prisma/client';
 import { z } from 'zod';
 
+/**
+ * @description This schema is for signup schema endpoint
+ */
 export const signupSchema = z
   .object({
     firstName: z.string().trim().min(1, { message: 'First name is required' }),
@@ -16,5 +19,25 @@ export const signupSchema = z
       .string()
       .trim()
       .min(8, { message: 'Password must be at least 8 characters long' }),
+  })
+  .strict();
+
+/**
+ * @description This schema is for verify signup schema endpoint
+ */
+export const verifySignupSchema = z
+  .object({
+    otp: z.string().min(6, { error: 'Otp must be at least 6 characters long' }),
+    deviceIdentifier: z
+      .string({ error: 'Device identifier is required' })
+      .min(1, { error: 'Device identifier is required' })
+      .trim(),
+    fcmToken: z.string().min(1).trim().optional(),
+    platform: z.enum(
+      ['ANDROID', 'IOS'],
+      'error: Invalid platform. Please provide a valid platform'
+    ),
+    lat: z.number(),
+    lng: z.number(),
   })
   .strict();

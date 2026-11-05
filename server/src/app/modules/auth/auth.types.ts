@@ -1,5 +1,8 @@
 import { z } from 'zod';
-import { signupSchema } from '@/app/modules/auth/auth.schema';
+import {
+  signupSchema,
+  verifySignupSchema,
+} from '@/app/modules/auth/auth.schema';
 import { User } from '@prisma/client';
 
 export type TSignupPayload = z.infer<typeof signupSchema>;
@@ -13,3 +16,5 @@ export type TResendOtpServiceParams = {
   traceId: string;
   user: User;
 };
+
+export type TVerifySignupPayload = z.infer<typeof verifySignupSchema>;

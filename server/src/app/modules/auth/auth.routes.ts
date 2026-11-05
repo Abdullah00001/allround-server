@@ -1,12 +1,19 @@
 import { Router } from 'express';
-import { signupController, resendSignupOtpController,  verifySignupUserControllerController } from '@/app/modules/auth/auth.controllers';
+import {
+  signupController,
+  resendSignupOtpController,
+  verifySignupUserControllerController,
+} from '@/app/modules/auth/auth.controllers';
 import {
   checkIsSignupUserExist,
   checkUserExistenceMiddleware,
   checkOtpPageTokenMiddleware,
 } from '@/app/modules/auth/auth.middlewares';
 import { validateReqBody } from '@/app/utils/system.utils';
-import { signupSchema } from '@/app/modules/auth/auth.schema';
+import {
+  signupSchema,
+  verifySignupSchema,
+} from '@/app/modules/auth/auth.schema';
 
 const router = Router();
 
@@ -31,6 +38,13 @@ router
     resendSignupOtpController
   );
 
-router.route('/auth/verify').post(verifySignupUserControllerController);
+router
+  .route('/auth/verify')
+  .post(
+    checkOtpPageTokenMiddleware,
+    checkUserExistenceMiddleware,
+    validateReqBody(verifySignupSchema),
+    verifySignupUserControllerController
+  );
 
 export default router;
