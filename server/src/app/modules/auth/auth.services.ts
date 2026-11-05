@@ -7,7 +7,10 @@ import {
   generate,
 } from '@/app/utils/system.utils';
 import prisma from '@/app/configs/db.configs';
-import { TResendOtpServiceParams, TSignupServiceParams } from '@/app/modules/auth/auth.types';
+import {
+  TResendOtpServiceParams,
+  TSignupServiceParams,
+} from '@/app/modules/auth/auth.types';
 import { getRedisClient } from '@/app/configs/redis.configs';
 import { otpExpireAt, QUEUE_JOBS, REDIS_PREFIXES } from '@/const';
 import { getEmailQueue } from '@/app/queues/email/email.queue';
@@ -77,9 +80,38 @@ export const signupService = async ({
   }
 };
 
-export const resendOtpService = async ({user,traceId}:TResendOtpServiceParams): Promise<void> => {
+export const resendOtpService = async ({
+  user,
+  traceId,
+}: TResendOtpServiceParams): Promise<void> => {
   try {
-    
+    const redisClient = getRedisClient();
+    const emailQueue = getEmailQueue();
+    const name = `${user.firstName} ${user.lastName}`;
+    const { email, id } = user;
+    const plainOtp = generate(6, {
+      digits: true,
+      lowerCaseAlphabets: false,
+      upperCaseAlphabets: false,
+      specialChars: false,
+    });
+    const hashedOtp = hashOtp({ otp: plainOtp });
+    const emailPayload = {
+      name,
+      otp: plainOtp,
+      otpExpireAt,
+      traceId,
+      email,
+    };
+    await Promise.all([
+      redisClient.set(
+        createRedisKey(REDIS_PREFIXES.otp, id),
+        hashedOtp,
+        'EX',
+        calculateMilliseconds(otpExpireAt, 'minutes')
+      ),
+      emailQueue.add(QUEUE_JOBS.RESEND_OTP, emailPayload),
+    ]);
     return;
   } catch (error) {
     throw error;

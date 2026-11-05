@@ -12,4 +12,9 @@ export interface IAccountCreateSuccess {
 
 export interface IResendOtp {
   // Add properties here
+  name: string;
+  email: string;
+  otp: string;
+  otpExpiredAt: string;
+  traceId: string;
 }

@@ -29,7 +29,7 @@ export const resendSignupOtpController = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const traceId = getTraceId();
     const user = req.user as User;
-    await resendOtpService();
+    await resendOtpService({ user, traceId });
 
     res.status(200).json({
       success: true,
