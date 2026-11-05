@@ -18,3 +18,10 @@ export interface IResendOtp {
   otpExpiredAt: string;
   traceId: string;
 }
+
+export interface ISignupUserVerificationSuccessful {
+  // Add properties here
+  name: string;
+  email: string;
+  traceId: string;
+}

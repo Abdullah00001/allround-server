@@ -8,6 +8,7 @@ import {
   checkIsSignupUserExist,
   checkUserExistenceMiddleware,
   checkOtpPageTokenMiddleware,
+  checkOtpMiddleware,
 } from '@/app/modules/auth/auth.middlewares';
 import { validateReqBody } from '@/app/utils/system.utils';
 import {
@@ -44,6 +45,7 @@ router
     checkOtpPageTokenMiddleware,
     checkUserExistenceMiddleware,
     validateReqBody(verifySignupSchema),
+    checkOtpMiddleware,
     verifySignupUserControllerController
   );
 

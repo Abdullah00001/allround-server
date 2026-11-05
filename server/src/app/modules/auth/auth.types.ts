@@ -18,3 +18,10 @@ export type TResendOtpServiceParams = {
 };
 
 export type TVerifySignupPayload = z.infer<typeof verifySignupSchema>;
+
+export type TVerifySignupServiceParams = {
+  payload: TVerifySignupPayload;
+  traceId: string;
+  token: string;
+  user: User;
+};

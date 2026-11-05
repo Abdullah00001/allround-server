@@ -6,8 +6,9 @@ import {
   resendOtpService,
   verifySignupUserControllerService,
 } from '@/app/modules/auth/auth.services';
-import { TSignupPayload } from './auth.types';
+import { TSignupPayload, TVerifySignupPayload } from './auth.types';
 import { User } from '@prisma/client';
+import { extractToken } from '@/app/utils/jwt.utils';
 
 export const signupController = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
@@ -44,11 +45,20 @@ export const resendSignupOtpController = asyncHandler(
 export const verifySignupUserControllerController = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const traceId = getTraceId();
-    await verifySignupUserControllerService();
+    const token = extractToken(req) as string;
+    const payload = req.body as TVerifySignupPayload;
+    const user = req.user as User;
+    const data = await verifySignupUserControllerService({
+      payload,
+      traceId,
+      token,
+      user,
+    });
 
     res.status(200).json({
       success: true,
       message: 'Email verified successfully.',
+      data,
       traceId,
     });
     return;
