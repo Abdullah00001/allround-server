@@ -117,3 +117,12 @@ export const resendOtpService = async ({
     throw error;
   }
 };
+
+export const verifySignupUserControllerService = async (): Promise<void> => {
+  try {
+    console.log("verifySignupUserControllerService called");
+    return;
+  } catch (error) {
+    throw error;
+  }
+};

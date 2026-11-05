@@ -1,8 +1,5 @@
 import { Router } from 'express';
-import {
-  signupController,
-  resendSignupOtpController,
-} from '@/app/modules/auth/auth.controllers';
+import { signupController, resendSignupOtpController,  verifySignupUserControllerController } from '@/app/modules/auth/auth.controllers';
 import {
   checkIsSignupUserExist,
   checkUserExistenceMiddleware,
@@ -33,5 +30,7 @@ router
     checkUserExistenceMiddleware,
     resendSignupOtpController
   );
+
+router.route('/auth/verify').post(verifySignupUserControllerController);
 
 export default router;

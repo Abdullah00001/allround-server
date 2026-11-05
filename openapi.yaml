@@ -105,6 +105,94 @@ paths:
                         type: string
                         example: 'SERVER_ERROR'
 
+  /api/v1/auth/resend:
+    post:
+      tags:
+        - Auth
+      summary: Resend signup verification OTP
+      description: Resends a new 6-digit OTP verification code to the registered user's email using their temporary OTP page token.
+      operationId: resendSignupOtp
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Verification OTP resent successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResendOtpResponse'
+        '400':
+          description: Malformed JSON payload
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SystemErrorResponse'
+                  - type: object
+                    properties:
+                      message:
+                        type: string
+                        example: 'Invalid JSON Payload'
+                      errorType:
+                        type: string
+                        example: 'INVALID_JSON'
+        '401':
+          description: Authentication token missing, expired, revoked, or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                tokenMissing:
+                  summary: Authentication token missing
+                  value:
+                    success: false
+                    message: 'Authentication token not found'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                tokenExpired:
+                  summary: Token has expired
+                  value:
+                    success: false
+                    message: 'Token has been expired'
+                    errorType: 'TOKEN_EXPIRED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                tokenRevoked:
+                  summary: Token has been revoked
+                  value:
+                    success: false
+                    message: 'Token has been revoked'
+                    errorType: 'TOKEN_BLACKLISTED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                tokenInvalid:
+                  summary: Token is invalid
+                  value:
+                    success: false
+                    message: 'Token is invalid'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserNotFoundErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SystemErrorResponse'
+                  - type: object
+                    properties:
+                      message:
+                        type: string
+                        example: 'Internal Server Error'
+                      errorType:
+                        type: string
+                        example: 'SERVER_ERROR'
+
 components:
   securitySchemes:
     adminAuth:
@@ -307,6 +395,15 @@ components:
             data:
               $ref: '#/components/schemas/SignupDTO'
 
+    ResendOtpResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            message:
+              type: string
+              example: 'Signup verification otp resend successful!'
+
     HealthResponse:
       type: object
       properties:
@@ -408,6 +505,18 @@ components:
             errorType:
               type: string
               example: 'DUPLICATE_DATA'
+
+    UserNotFoundErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/AuthErrorResponse'
+        - type: object
+          properties:
+            message:
+              type: string
+              example: 'User not found'
+            errorType:
+              type: string
+              example: 'USER_NOT_FOUND'
 
     MulterErrorResponse:
       type: object

@@ -4,6 +4,7 @@ import { asyncHandler } from '@/app/utils/system.utils';
 import {
   signupService,
   resendOtpService,
+  verifySignupUserControllerService,
 } from '@/app/modules/auth/auth.services';
 import { TSignupPayload } from './auth.types';
 import { User } from '@prisma/client';
@@ -34,6 +35,20 @@ export const resendSignupOtpController = asyncHandler(
     res.status(200).json({
       success: true,
       message: 'Signup verification otp resend successful!',
+      traceId,
+    });
+    return;
+  }
+);
+
+export const verifySignupUserControllerController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    await verifySignupUserControllerService();
+
+    res.status(200).json({
+      success: true,
+      message: 'Email verified successfully.',
       traceId,
     });
     return;
