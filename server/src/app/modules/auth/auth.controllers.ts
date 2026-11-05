@@ -1,8 +1,12 @@
 import { Request, Response } from 'express';
 import { getTraceId } from '@/app/configs/requestContext.configs';
 import { asyncHandler } from '@/app/utils/system.utils';
-import { signupService, resendOtpService } from '@/app/modules/auth/auth.services';
+import {
+  signupService,
+  resendOtpService,
+} from '@/app/modules/auth/auth.services';
 import { TSignupPayload } from './auth.types';
+import { User } from '@prisma/client';
 
 export const signupController = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
@@ -21,15 +25,16 @@ export const signupController = asyncHandler(
   }
 );
 
-export const resendOtpController = asyncHandler(
+export const resendSignupOtpController = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const traceId = getTraceId();
+    const user = req.user as User;
     await resendOtpService();
-    
+
     res.status(200).json({
       success: true,
-      message: 'Otp resend successful',
-      traceId
+      message: 'Signup verification otp resend successful!',
+      traceId,
     });
     return;
   }

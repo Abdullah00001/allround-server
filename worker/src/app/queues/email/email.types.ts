@@ -9,3 +9,7 @@ export interface IAccountCreateSuccess {
   otpExpiredAt: string;
   traceId: string;
 }
+
+export interface IResendOtp {
+  // Add properties here
+}

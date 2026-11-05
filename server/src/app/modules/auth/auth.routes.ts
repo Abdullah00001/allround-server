@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import {
   signupController,
-  resendOtpController,
+  resendSignupOtpController,
 } from '@/app/modules/auth/auth.controllers';
 import {
   checkIsSignupUserExist,
@@ -31,7 +31,7 @@ router
   .post(
     checkOtpPageTokenMiddleware,
     checkUserExistenceMiddleware,
-    resendOtpController
+    resendSignupOtpController
   );
 
 export default router;

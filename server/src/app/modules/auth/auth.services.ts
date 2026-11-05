@@ -7,7 +7,7 @@ import {
   generate,
 } from '@/app/utils/system.utils';
 import prisma from '@/app/configs/db.configs';
-import { TSignupServiceParams } from '@/app/modules/auth/auth.types';
+import { TResendOtpServiceParams, TSignupServiceParams } from '@/app/modules/auth/auth.types';
 import { getRedisClient } from '@/app/configs/redis.configs';
 import { otpExpireAt, QUEUE_JOBS, REDIS_PREFIXES } from '@/const';
 import { getEmailQueue } from '@/app/queues/email/email.queue';
@@ -77,9 +77,9 @@ export const signupService = async ({
   }
 };
 
-export const resendOtpService = async (): Promise<void> => {
+export const resendOtpService = async ({user,traceId}:TResendOtpServiceParams): Promise<void> => {
   try {
-    console.log("resendOtpService called");
+    
     return;
   } catch (error) {
     throw error;

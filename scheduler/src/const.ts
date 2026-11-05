@@ -7,6 +7,7 @@
  */
 export const QUEUE_JOBS = {
   // AUTO-GENERATED-JOBS-START
+  RESEND_OTP: 'resend-otp',
   ACCOUNT_CREATE_SUCCESS: 'account-create-success',
 
   // AUTO-GENERATED-JOBS-END
