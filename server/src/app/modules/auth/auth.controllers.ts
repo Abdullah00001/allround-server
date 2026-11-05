@@ -5,9 +5,14 @@ import {
   signupService,
   resendOtpService,
   verifySignupUserControllerService,
+  checkUserAccessTokenService,
 } from '@/app/modules/auth/auth.services';
-import { TSignupPayload, TVerifySignupPayload } from './auth.types';
-import { User } from '@prisma/client';
+import {
+  TCheckAccessTokenPayload,
+  TSignupPayload,
+  TVerifySignupPayload,
+} from './auth.types';
+import { Device, User } from '@prisma/client';
 import { extractToken } from '@/app/utils/jwt.utils';
 
 export const signupController = asyncHandler(
@@ -58,6 +63,28 @@ export const verifySignupUserControllerController = asyncHandler(
     res.status(200).json({
       success: true,
       message: 'Email verified successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+export const checkUserAccessTokenController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const device = req.user as Device;
+    const payload = req.body as TCheckAccessTokenPayload;
+    const data = await checkUserAccessTokenService({
+      payload,
+      user,
+      device,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'User is authenticated',
       data,
       traceId,
     });

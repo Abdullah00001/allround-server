@@ -6,9 +6,10 @@ import prisma from '@/app/configs/db.configs';
 import { TSignupPayload } from '@/app/modules/auth/auth.types';
 import { compareOtp } from '@/app/utils/otp.utils';
 import { getRedisClient } from '@/app/configs/redis.configs';
-import { User } from '@prisma/client';
+import { DeviceStatus, User, UserStatus } from '@prisma/client';
 import { JwtPayload } from 'jsonwebtoken';
-import { extractToken, verifyOtpPageToken } from '@/app/utils/jwt.utils';
+import { extractToken, verifyAccessToken, verifyOtpPageToken } from '@/app/utils/jwt.utils';
+import { ITokenPayload } from '@/app/@types/jwt.types';
 
 /**
  * This middleware is for check that is the requested signup user email already exist or not.
@@ -168,5 +169,192 @@ export const checkOtpPageTokenMiddleware = asyncHandler(
     }
     req.user = decoded.data as JwtPayload;
     return next();
+  }
+);
+
+export const checkUserAccessTokenMiddleware = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const traceId = getTraceId();
+    const token = extractToken(req);
+    const redisClient = getRedisClient();
+    if (!token) {
+      res.status(401).json({
+        success: false,
+        message: 'Token not found',
+        errorType: AuthErrorType.TOKEN_INVALID,
+        traceId,
+      });
+      return;
+    }
+    const isBlackListed = await redisClient.get(
+      createRedisKey(REDIS_PREFIXES.blacklist, token)
+    );
+    if (isBlackListed) {
+      res.status(401).json({
+        success: false,
+        message: 'Token has been revoked',
+        errorType: AuthErrorType.TOKEN_BLACKLISTED,
+        traceId,
+      });
+      return;
+    }
+    const decoded = verifyAccessToken(token);
+    if (decoded.error) {
+      if (decoded.error === AuthErrorType.TOKEN_EXPIRED) {
+        res.status(401).json({
+          success: false,
+          message: 'Token has been expired',
+          errorType: AuthErrorType.TOKEN_EXPIRED,
+          traceId,
+        });
+        return;
+      }
+      res.status(401).json({
+        success: false,
+        message: 'Token is invalid',
+        errorType: AuthErrorType.TOKEN_INVALID,
+        traceId,
+      });
+      return;
+    }
+    req.user = decoded.data as JwtPayload;
+    return next();
+  }
+);
+
+/**
+ * Checks if the authenticated user's account is active.
+ * Rejects the request if the user is SUSPENDED or INACTIVE.
+ *
+ * Assumes req.user is already populated by the auth (JWT) middleware upstream.
+ * Only validates the USER-level status — device session validity is handled
+ * by a separate middleware (checkDeviceSession).
+ *
+ * @param req Request
+ * @param res Response
+ * @param next NextFunction
+ */
+export const checkAccountStatus = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const user = req.user as User;
+    const traceId = getTraceId();
+
+    if (user.status === UserStatus.SUSPENDED) {
+      res.status(403).json({
+        success: false,
+        errorType: AuthErrorType.USER_SUSPENDED,
+        message: 'Your account has been suspended. Please contact the academy.',
+        traceId,
+      });
+      return;
+    }
+
+    if (user.status === UserStatus.INACTIVE) {
+      res.status(403).json({
+        success: false,
+        errorType: AuthErrorType.ACCOUNT_INACTIVE,
+        message:
+          'Your account is not active. Please verify your email or contact support.',
+        traceId,
+      });
+      return;
+    }
+
+    next();
+  }
+);
+
+/**
+ * This middleware is used to validate the device context bound to the JWT.
+ * It checks device existence, ownership, session status, and expiry.
+ * If the device is found in INACTIVE state, it revives it to ACTIVE and refreshes lastSeenAt.
+ * If the context is invalid or the session has ended, it returns a 401 response.
+ * If valid, it attaches the trusted Device to req.device and calls next().
+ * @param req Request
+ * @param res Response
+ * @param next NextFunction
+ */
+export const checkDeviceSessionMiddleware = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const traceId = getTraceId();
+    const jwtPayload = req.jwtPayload as ITokenPayload;
+    const { sub, deviceId } = jwtPayload;
+
+    if (!deviceId) {
+      res.status(401).json({
+        success: false,
+        message: 'Session is missing device information.',
+        errorType: AuthErrorType.INVALID_DEVICE_CONTEXT,
+        traceId,
+      });
+      return;
+    }
+
+    const device = await prisma.device.findUnique({
+      where: { id: deviceId },
+    });
+
+    if (!device) {
+      res.status(401).json({
+        success: false,
+        message: 'Session is no longer valid. Please log in again.',
+        errorType: AuthErrorType.DEVICE_NOT_FOUND,
+        traceId,
+      });
+      return;
+    }
+
+    if (device.userId !== sub) {
+      res.status(401).json({
+        success: false,
+        message: 'Session is no longer valid. Please log in again.',
+        errorType: AuthErrorType.DEVICE_NOT_OWNED,
+        traceId,
+      });
+      return;
+    }
+
+    if (device.status === DeviceStatus.LOGGED_OUT) {
+      res.status(401).json({
+        success: false,
+        message: 'You have been logged out. Please log in again.',
+        errorType: AuthErrorType.SESSION_LOGGED_OUT,
+        traceId,
+      });
+      return;
+    }
+
+    if (device.status === DeviceStatus.REVOKED) {
+      res.status(401).json({
+        success: false,
+        message: 'Your session has ended. Please log in again.',
+        errorType: AuthErrorType.SESSION_REVOKED,
+        traceId,
+      });
+      return;
+    }
+
+    if (device.sessionExpiresAt.getTime() < Date.now()) {
+      res.status(401).json({
+        success: false,
+        message: 'Your session has expired. Please log in again.',
+        errorType: AuthErrorType.SESSION_EXPIRED,
+        traceId,
+      });
+      return;
+    }
+
+    if (device.status === DeviceStatus.INACTIVE) {
+      const now = new Date();
+      await prisma.device.updateMany({
+        where: { id: device.id, status: DeviceStatus.INACTIVE },
+        data: { status: DeviceStatus.ACTIVE, lastSeenAt: now },
+      });
+      req.device = { ...device, status: DeviceStatus.ACTIVE, lastSeenAt: now };
+      return next();
+    }
+
+    req.device = device;
+    next();
   }
 );

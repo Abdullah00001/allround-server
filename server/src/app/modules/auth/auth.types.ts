@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import {
+  checkAccessTokenSchema,
   signupSchema,
   verifySignupSchema,
 } from '@/app/modules/auth/auth.schema';
-import { User } from '@prisma/client';
+import { Device, User } from '@prisma/client';
 
 export type TSignupPayload = z.infer<typeof signupSchema>;
 
@@ -24,4 +25,12 @@ export type TVerifySignupServiceParams = {
   traceId: string;
   token: string;
   user: User;
+};
+
+export type TCheckAccessTokenPayload = z.infer<typeof checkAccessTokenSchema>;
+
+export type TCheckAccessTokenServiceParams = {
+  payload: TCheckAccessTokenPayload;
+  user: User;
+  device: Device;
 };

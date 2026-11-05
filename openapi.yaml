@@ -193,6 +193,119 @@ paths:
                         type: string
                         example: 'SERVER_ERROR'
 
+  /api/v1/auth/verify:
+    post:
+      tags:
+        - Auth
+      summary: Verify signup OTP and activate account
+      description: Verifies the 6-digit OTP code against the temporary OTP page token, marks the user account ACTIVE, creates a new active device session, and issues a JWT access token.
+      operationId: verifySignupUser
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifySignupRequest'
+      responses:
+        '200':
+          description: Email verified successfully and access token issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifySignupResponse'
+        '400':
+          description: Malformed JSON payload
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SystemErrorResponse'
+                  - type: object
+                    properties:
+                      message:
+                        type: string
+                        example: 'Invalid JSON Payload'
+                      errorType:
+                        type: string
+                        example: 'INVALID_JSON'
+        '401':
+          description: Unauthorized - Invalid/expired OTP or authentication token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                invalidOtp:
+                  summary: Invalid OTP code
+                  value:
+                    success: false
+                    message: 'Invalid OTP, please check and try again'
+                    errorType: 'INVALID_OTP'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                otpExpired:
+                  summary: OTP expired
+                  value:
+                    success: false
+                    message: 'OTP has expired, please request a new one'
+                    errorType: 'OTP_EXPIRED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                tokenMissing:
+                  summary: Authentication token missing
+                  value:
+                    success: false
+                    message: 'Authentication token not found'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                tokenExpired:
+                  summary: Authentication token expired
+                  value:
+                    success: false
+                    message: 'Token has been expired'
+                    errorType: 'TOKEN_EXPIRED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                tokenRevoked:
+                  summary: Authentication token revoked
+                  value:
+                    success: false
+                    message: 'Token has been revoked'
+                    errorType: 'TOKEN_BLACKLISTED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserNotFoundErrorResponse'
+        '422':
+          description: Request payload validation failed
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ValidationErrorResponse'
+                  - type: object
+                    properties:
+                      message:
+                        type: string
+                        example: 'Request body validation failed'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SystemErrorResponse'
+                  - type: object
+                    properties:
+                      message:
+                        type: string
+                        example: 'Internal Server Error'
+                      errorType:
+                        type: string
+                        example: 'SERVER_ERROR'
+
 components:
   securitySchemes:
     adminAuth:
@@ -252,6 +365,47 @@ components:
           example: 'SecretP@ssw0rd'
           description: User password (minimum 8 characters)
 
+    VerifySignupRequest:
+      type: object
+      required:
+        - otp
+        - deviceIdentifier
+        - platform
+        - lat
+        - lng
+      properties:
+        otp:
+          type: string
+          minLength: 6
+          example: '123456'
+          description: 6-digit OTP verification code received via email
+        deviceIdentifier:
+          type: string
+          minLength: 1
+          example: 'd8e8fca2-dc0f-48d8-993d-82d8c399b662'
+          description: Unique device identifier
+        fcmToken:
+          type: string
+          example: 'fcm-device-push-token-xyz'
+          description: Optional FCM token for push notifications
+        platform:
+          type: string
+          enum:
+            - ANDROID
+            - IOS
+          example: 'ANDROID'
+          description: Operating system platform of the client device
+        lat:
+          type: number
+          format: double
+          example: 52.5200
+          description: Current latitude coordinate
+        lng:
+          type: number
+          format: double
+          example: 13.4050
+          description: Current longitude coordinate
+
     # ==========================================
     # Response Data / DTO Schemas
     # ==========================================
@@ -284,6 +438,57 @@ components:
           type: string
           example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
           description: Temporary OTP page token used to access the verification screen
+
+    VerifySignupUserDTO:
+      type: object
+      required:
+        - accessToken
+        - isProfileSetup
+        - role
+        - accountStatus
+        - id
+        - fullName
+        - avatarUrl
+      properties:
+        accessToken:
+          type: string
+          example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+          description: JWT access token for authenticating subsequent requests
+        isProfileSetup:
+          type: boolean
+          example: false
+          description: Whether the user has completed onboarding profile setup
+        role:
+          type: string
+          enum:
+            - ADMIN
+            - SITE_MANAGER
+            - EMPLOYEE
+          example: 'EMPLOYEE'
+          description: Assigned system role
+        accountStatus:
+          type: string
+          enum:
+            - ACTIVE
+            - INACTIVE
+            - SUSPENDED
+          example: 'ACTIVE'
+          description: Current account status
+        id:
+          type: string
+          format: uuid
+          example: '123e4567-e89b-12d3-a456-426614174000'
+          description: User unique identifier
+        fullName:
+          type: string
+          example: 'John Doe'
+          description: Full name of the user
+        avatarUrl:
+          type: string
+          nullable: true
+          format: uri
+          example: null
+          description: Avatar image URL (or null if none set)
 
     # ==========================================
     # 200 - 299 Success Response Schemas
@@ -403,6 +608,19 @@ components:
             message:
               type: string
               example: 'Signup verification otp resend successful!'
+
+    VerifySignupResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required:
+            - data
+          properties:
+            message:
+              type: string
+              example: 'Email verified successfully.'
+            data:
+              $ref: '#/components/schemas/VerifySignupUserDTO'
 
     HealthResponse:
       type: object

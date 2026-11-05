@@ -41,3 +41,16 @@ export const verifySignupSchema = z
     lng: z.number(),
   })
   .strict();
+
+/**
+ * @description This schema is for check access token schema endpoint
+ */
+export const checkAccessTokenSchema = z
+  .object({
+    deviceIdentifier: z.string().min(1, 'Device Identifier is required'),
+    lat: z.number(),
+    lng: z.number(),
+    platform: z.enum(['ANDROID', 'IOS']),
+    fcmToken: z.string().optional(),
+  })
+  .strict();

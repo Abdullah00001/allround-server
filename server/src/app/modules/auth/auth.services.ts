@@ -13,6 +13,7 @@ import {
 } from '@/app/utils/system.utils';
 import prisma from '@/app/configs/db.configs';
 import {
+  TCheckAccessTokenServiceParams,
   TResendOtpServiceParams,
   TSignupServiceParams,
   TVerifySignupServiceParams,
@@ -249,6 +250,48 @@ export const verifySignupUserControllerService = async ({
       ),
     ]);
     return VerifySignupUserDTO.build(accessToken, updatedUser);
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const checkUserAccessTokenService = async ({
+  payload,
+  user,
+  device,
+}: TCheckAccessTokenServiceParams): Promise<void> => {
+  try {
+    const { lat, lng, fcmToken } = payload;
+    const redisClient = getRedisClient();
+    const LAST_SEEN_THROTTLE_MS = 60 * 60 * 1000;
+    const shouldUpdateLastSeenAt =
+      Date.now() - device.lastSeenAt.getTime() > LAST_SEEN_THROTTLE_MS;
+    const shouldUpdateFcmToken = !!fcmToken && fcmToken !== device.fcmToken;
+
+    if (shouldUpdateLastSeenAt || shouldUpdateFcmToken) {
+      await prisma.device.update({
+        where: { id: device.id },
+        data: {
+          lastSeenAt: shouldUpdateLastSeenAt ? new Date() : undefined,
+          fcmToken: shouldUpdateFcmToken ? fcmToken : undefined,
+        },
+      });
+    }
+    await Promise.all([
+      redisClient.set(
+        createRedisKey(REDIS_PREFIXES.location, user.id),
+        JSON.stringify({ lat, lng }),
+        'EX',
+        calculateMilliseconds(locationExpireAt, 'days')
+      ),
+      redisClient.geoadd(
+        createRedisKey(REDIS_PREFIXES.locations),
+        lng,
+        lat,
+        user.id
+      ),
+    ]);
+    return;
   } catch (error) {
     throw error;
   }
