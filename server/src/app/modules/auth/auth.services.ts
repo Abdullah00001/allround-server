@@ -14,6 +14,7 @@ import {
 import prisma from '@/app/configs/db.configs';
 import {
   TCheckAccessTokenServiceParams,
+  TLoginServiceParams,
   TResendOtpServiceParams,
   TSignupServiceParams,
   TVerifySignupServiceParams,
@@ -277,6 +278,103 @@ export const checkUserAccessTokenService = async ({
         },
       });
     }
+    await Promise.all([
+      redisClient.set(
+        createRedisKey(REDIS_PREFIXES.location, user.id),
+        JSON.stringify({ lat, lng }),
+        'EX',
+        calculateMilliseconds(locationExpireAt, 'days')
+      ),
+      redisClient.geoadd(
+        createRedisKey(REDIS_PREFIXES.locations),
+        lng,
+        lat,
+        user.id
+      ),
+    ]);
+    return;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const loginService = async ({
+  payload,
+  user,
+}: TLoginServiceParams): Promise<void> => {
+  try {
+    const redisClient = getRedisClient();
+    const { deviceIdentifier, fcmToken, platform, rememberMe, lat, lng } =
+      payload;
+    const sessionDuration = rememberMe ? '30d' : '7d';
+    const sessionExpiresAt = sessionTimeCalculation(sessionDuration);
+
+    const { updatedUser, device } = await prisma.$transaction(async (tx) => {
+      // 1. Revoke any ACTIVE session with the same deviceIdentifier
+      await tx.device.updateMany({
+        where: {
+          deviceIdentifier,
+          status: DeviceStatus.ACTIVE,
+        },
+        data: {
+          status: DeviceStatus.REVOKED,
+          revokeReason: RevokeReason.NEW_LOGIN_SUPERSEDED,
+          fcmToken: null,
+        },
+      });
+
+      // 2. Revoke any ACTIVE session with the same fcmToken (different deviceIdentifier)
+      if (fcmToken) {
+        await tx.device.updateMany({
+          where: {
+            fcmToken,
+            deviceIdentifier: { not: deviceIdentifier },
+            status: DeviceStatus.ACTIVE,
+          },
+          data: {
+            status: DeviceStatus.REVOKED,
+            revokeReason: RevokeReason.FCM_SUPERSEDED,
+            fcmToken: null,
+          },
+        });
+      }
+
+      // 3. Update user lastLoginAt
+      const updatedUser = await tx.user.update({
+        where: { id: user.id },
+        data: {
+          lastLoginAt: new Date(),
+        },
+        include: {
+          preferences: true,
+        },
+      });
+
+      // 4. Create new device session
+      const device = await tx.device.create({
+        data: {
+          userId: user.id,
+          deviceIdentifier,
+          fcmToken: fcmToken ?? null,
+          platform: platform as Platform,
+          status: DeviceStatus.ACTIVE,
+          sessionExpiresAt,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      return { updatedUser, device };
+    });
+
+    const token = generateAccessTokenForUser({
+      sub: updatedUser.id,
+      deviceId: device.id,
+      role: updatedUser.role,
+      accountStatus: updatedUser.status,
+      rememberMe,
+    });
     await Promise.all([
       redisClient.set(
         createRedisKey(REDIS_PREFIXES.location, user.id),

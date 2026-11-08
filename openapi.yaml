@@ -306,6 +306,154 @@ paths:
                         type: string
                         example: 'SERVER_ERROR'
 
+  /api/v1/auth/check:
+    post:
+      tags:
+        - Auth
+      summary: Validate user access token and device session
+      description: Validates the user JWT access token, verifies account active status, validates device session status and expiry, and updates device last-seen timestamp and GPS coordinates.
+      operationId: checkUserAccessToken
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckAccessTokenRequest'
+      responses:
+        '200':
+          description: User access token and device session are valid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckAccessTokenResponse'
+        '400':
+          description: Malformed JSON payload
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SystemErrorResponse'
+                  - type: object
+                    properties:
+                      message:
+                        type: string
+                        example: 'Invalid JSON Payload'
+                      errorType:
+                        type: string
+                        example: 'INVALID_JSON'
+        '401':
+          description: Unauthorized - Invalid token or expired/revoked device session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                tokenMissing:
+                  summary: Token not found
+                  value:
+                    success: false
+                    message: 'Token not found'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                tokenExpired:
+                  summary: Token expired
+                  value:
+                    success: false
+                    message: 'Token has been expired'
+                    errorType: 'TOKEN_EXPIRED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                tokenRevoked:
+                  summary: Token revoked
+                  value:
+                    success: false
+                    message: 'Token has been revoked'
+                    errorType: 'TOKEN_BLACKLISTED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                sessionExpired:
+                  summary: Device session expired
+                  value:
+                    success: false
+                    message: 'Your session has expired. Please log in again.'
+                    errorType: 'SESSION_EXPIRED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                sessionRevoked:
+                  summary: Device session revoked
+                  value:
+                    success: false
+                    message: 'Your session has ended. Please log in again.'
+                    errorType: 'SESSION_REVOKED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                sessionLoggedOut:
+                  summary: Device logged out
+                  value:
+                    success: false
+                    message: 'You have been logged out. Please log in again.'
+                    errorType: 'SESSION_LOGGED_OUT'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                deviceNotFound:
+                  summary: Device session not found
+                  value:
+                    success: false
+                    message: 'Session is no longer valid. Please log in again.'
+                    errorType: 'DEVICE_NOT_FOUND'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Forbidden - Account is suspended or inactive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                userSuspended:
+                  summary: Account suspended
+                  value:
+                    success: false
+                    message: 'Your account has been suspended. Please contact the academy.'
+                    errorType: 'USER_SUSPENDED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                accountInactive:
+                  summary: Account inactive
+                  value:
+                    success: false
+                    message: 'Your account is not active. Please verify your email or contact support.'
+                    errorType: 'ACCOUNT_INACTIVE'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserNotFoundErrorResponse'
+        '422':
+          description: Request payload validation failed
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ValidationErrorResponse'
+                  - type: object
+                    properties:
+                      message:
+                        type: string
+                        example: 'Request body validation failed'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SystemErrorResponse'
+                  - type: object
+                    properties:
+                      message:
+                        type: string
+                        example: 'Internal Server Error'
+                      errorType:
+                        type: string
+                        example: 'SERVER_ERROR'
+
 components:
   securitySchemes:
     adminAuth:
@@ -405,6 +553,41 @@ components:
           format: double
           example: 13.4050
           description: Current longitude coordinate
+
+    CheckAccessTokenRequest:
+      type: object
+      required:
+        - deviceIdentifier
+        - lat
+        - lng
+        - platform
+      properties:
+        deviceIdentifier:
+          type: string
+          minLength: 1
+          example: 'd8e8fca2-dc0f-48d8-993d-82d8c399b662'
+          description: Unique device identifier
+        lat:
+          type: number
+          format: double
+          example: 52.5200
+          description: Current latitude coordinate
+        lng:
+          type: number
+          format: double
+          example: 13.4050
+          description: Current longitude coordinate
+        platform:
+          type: string
+          enum:
+            - ANDROID
+            - IOS
+          example: 'ANDROID'
+          description: Operating system platform of the client device
+        fcmToken:
+          type: string
+          example: 'fcm-device-push-token-xyz'
+          description: Optional FCM token for push notifications
 
     # ==========================================
     # Response Data / DTO Schemas
@@ -621,6 +804,15 @@ components:
               example: 'Email verified successfully.'
             data:
               $ref: '#/components/schemas/VerifySignupUserDTO'
+
+    CheckAccessTokenResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            message:
+              type: string
+              example: 'User is authenticated'
 
     HealthResponse:
       type: object

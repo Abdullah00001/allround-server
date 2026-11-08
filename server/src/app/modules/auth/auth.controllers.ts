@@ -6,9 +6,11 @@ import {
   resendOtpService,
   verifySignupUserControllerService,
   checkUserAccessTokenService,
+  loginService,
 } from '@/app/modules/auth/auth.services';
 import {
   TCheckAccessTokenPayload,
+  TLoginPayload,
   TSignupPayload,
   TVerifySignupPayload,
 } from './auth.types';
@@ -85,6 +87,23 @@ export const checkUserAccessTokenController = asyncHandler(
     res.status(200).json({
       success: true,
       message: 'User is authenticated',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+export const loginController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const payload = req.body as TLoginPayload;
+    const user = req.user as User;
+    const data = await loginService({ payload, user });
+
+    res.status(200).json({
+      success: true,
+      message: 'User login successful.',
       data,
       traceId,
     });

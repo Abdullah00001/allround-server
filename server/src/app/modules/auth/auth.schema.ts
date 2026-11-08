@@ -54,3 +54,26 @@ export const checkAccessTokenSchema = z
     fcmToken: z.string().optional(),
   })
   .strict();
+
+/**
+ * @description
+ */
+
+export const loginSchema = z
+  .object({
+    email: z
+      .email({ error: 'Please provide a valid email address' })
+      .toLowerCase(),
+    password: z.string().min(1, { error: 'Password is required' }),
+    role: z.enum(Role),
+    deviceIdentifier: z
+      .string({ error: 'Device identifier is required' })
+      .min(1, { error: 'Device identifier is required' })
+      .trim(),
+    fcmToken: z.string().min(1).trim().optional(),
+    platform: z.enum(['ANDROID', 'IOS']),
+    lat: z.number(),
+    lng: z.number(),
+    rememberMe: z.boolean().default(false),
+  })
+  .strict();

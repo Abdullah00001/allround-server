@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   checkAccessTokenSchema,
+  loginSchema,
   signupSchema,
   verifySignupSchema,
 } from '@/app/modules/auth/auth.schema';
@@ -33,4 +34,11 @@ export type TCheckAccessTokenServiceParams = {
   payload: TCheckAccessTokenPayload;
   user: User;
   device: Device;
+};
+
+export type TLoginPayload = z.infer<typeof loginSchema>;
+
+export type TLoginServiceParams = {
+  payload: TLoginPayload;
+  user: User;
 };
