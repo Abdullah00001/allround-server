@@ -25,3 +25,9 @@ export interface ISignupUserVerificationSuccessful {
   email: string;
   traceId: string;
 }
+
+export interface IResetRecoverUserPasswordSuccessful {
+  name: string;
+  email: string;
+  traceId: string;
+}

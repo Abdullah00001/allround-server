@@ -6,7 +6,7 @@ import prisma from '@/app/configs/db.configs';
 import { TLoginPayload, TSignupPayload } from '@/app/modules/auth/auth.types';
 import { compareOtp } from '@/app/utils/otp.utils';
 import { getRedisClient } from '@/app/configs/redis.configs';
-import { DeviceStatus, User, UserStatus } from '@prisma/client';
+import { DeviceStatus, Role, User, UserStatus } from '@prisma/client';
 import { JwtPayload } from 'jsonwebtoken';
 import {
   extractToken,
@@ -417,3 +417,25 @@ export const checkPassword = asyncHandler(
     next();
   }
 );
+
+/**
+ * Restricts access to users whose role is in the allowed list.
+ */
+export const requireRole = (...allowedRoles: Role[]) =>
+  asyncHandler(
+    async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+      const traceId = getTraceId();
+      const user = req.user as User;
+
+      if (!allowedRoles.includes(user.role)) {
+        res.status(403).json({
+          success: false,
+          message: 'You do not have permission to access this resource.',
+          errorType: AuthErrorType.FORBIDDEN,
+          traceId,
+        });
+        return;
+      }
+      next();
+    }
+  );

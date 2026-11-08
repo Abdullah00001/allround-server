@@ -6,6 +6,7 @@ import {
   verifySignupSchema,
 } from '@/app/modules/auth/auth.schema';
 import { Device, User } from '@prisma/client';
+import { ITokenPayload } from '@/app/@types/jwt.types';
 
 export type TSignupPayload = z.infer<typeof signupSchema>;
 
@@ -41,4 +42,10 @@ export type TLoginPayload = z.infer<typeof loginSchema>;
 export type TLoginServiceParams = {
   payload: TLoginPayload;
   user: User;
+};
+
+export type ILogoutServiceParams = {
+  device: Device;
+  jwtPayload: ITokenPayload;
+  token: string;
 };

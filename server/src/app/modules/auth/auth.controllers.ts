@@ -7,15 +7,17 @@ import {
   verifySignupUserControllerService,
   checkUserAccessTokenService,
   loginService,
+  logoutService,
 } from '@/app/modules/auth/auth.services';
 import {
   TCheckAccessTokenPayload,
   TLoginPayload,
   TSignupPayload,
   TVerifySignupPayload,
-} from './auth.types';
+} from '@/app/modules/auth/auth.types';
 import { Device, User } from '@prisma/client';
 import { extractToken } from '@/app/utils/jwt.utils';
+import { ITokenPayload } from '@/app/@types/jwt.types';
 
 export const signupController = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
@@ -105,6 +107,24 @@ export const loginController = asyncHandler(
       success: true,
       message: 'User login successful.',
       data,
+      traceId,
+    });
+    return;
+  }
+);
+
+export const logoutController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const device = req.device as Device;
+    const jwtPayload = req.jwtPayload as ITokenPayload;
+    const token = extractToken(req) as string;
+
+    await logoutService({ device, jwtPayload, token });
+
+    res.status(200).json({
+      success: true,
+      message: 'Logout successful.',
       traceId,
     });
     return;

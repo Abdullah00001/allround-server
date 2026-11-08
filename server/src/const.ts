@@ -323,6 +323,7 @@ export const REDIS_PREFIXES = {
  */
 export const QUEUE_JOBS = {
   // AUTO-GENERATED-JOBS-START
+  RESET_RECOVER_USER_PASSWORD_SUCCESSFUL: 'reset-recover-user-password-successful',
   SIGNUP_USER_VERIFICATION_SUCCESSFUL: 'signup-user-verification-successful',
   RESEND_OTP: 'resend-otp',
   ACCOUNT_CREATE_SUCCESS: 'account-create-success',
