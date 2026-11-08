@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: myStrongPassword
       POSTGRES_DB: allround-server
     ports:
-      - 5441:5432
+      - 5442:5432
     networks:
       - allround-server-network
     volumes:
@@ -26,7 +26,7 @@ services:
       PGADMIN_DEFAULT_EMAIL: admin@admin.com
       PGADMIN_DEFAULT_PASSWORD: root
     ports:
-      - "5050:80"
+      - "5051:80"
     networks:
       - allround-server-network
     depends_on:
@@ -37,7 +37,7 @@ services:
     container_name: allround-server-redis
     command: redis-server --requirepass myStrongPassword
     ports:
-      - 6383:6379
+      - 6384:6379
     networks:
       - allround-server-network
     volumes:
@@ -60,7 +60,7 @@ services:
       - HTTP_USER=admin
       - HTTP_PASSWORD=admin
     ports:
-      - 8084:8081
+      - 8085:8081
     networks:
       - allround-server-network
     depends_on:
@@ -140,7 +140,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:myStrongPassword@postgres:5432/allround-server?schema=public
     ports:
-      - 5006:5000
+      - 5007:5000
     volumes:
       - ./server:/app
       - /app/node_modules

@@ -44,7 +44,7 @@ export function buildPaginationMeta({
 }: IBuildPaginationMetaParams): IPaginationMeta {
   const totalPages = Math.ceil(total / limit);
   const protocol = req.protocol;
-  const host = req.get('host') || 'localhost:5006';
+  const host = req.get('host') || 'localhost:5007';
   const pathname = req.baseUrl + req.path;
   const baseUrl = `${protocol}://${host}${pathname}`;
 
