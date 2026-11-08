@@ -1,4 +1,10 @@
-import { Language, Role, User, UserPreference, UserStatus } from '@prisma/client';
+import {
+  Language,
+  Role,
+  User,
+  UserPreference,
+  UserStatus,
+} from '@prisma/client';
 
 export class SignupServiceDTO {
   constructor(
@@ -55,7 +61,7 @@ export class SessionDTO {
     public language: Language
   ) {}
 
-  static buildSession(user: User & { preferences?: UserPreference | null }) {
+  static build(user: User & { preferences?: UserPreference | null }) {
     return new SessionDTO(
       user.id,
       `${user.firstName} ${user.lastName}`,
@@ -65,10 +71,18 @@ export class SessionDTO {
       user.role,
       user.status,
       user.isProfileSetup,
-      // Defensive fallback for users created before the UserPreference
-      // backfill, or in edge cases where the preference row was deleted.
-      // After migration, every active user should have a preferences row.
       user.preferences?.language ?? Language.EN
     );
+  }
+}
+
+export class LoginDTO {
+  constructor(
+    public token: string,
+    public user: SessionDTO
+  ) {}
+
+  static build(token: string, user: SessionDTO) {
+    return new LoginDTO(token, user);
   }
 }

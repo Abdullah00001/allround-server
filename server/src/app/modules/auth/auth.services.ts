@@ -29,6 +29,8 @@ import {
 } from '@/const';
 import { getEmailQueue } from '@/app/queues/email/email.queue';
 import {
+  LoginDTO,
+  SessionDTO,
   SignupServiceDTO,
   VerifySignupUserDTO,
 } from '@/app/modules/auth/auth.dto';
@@ -301,7 +303,7 @@ export const checkUserAccessTokenService = async ({
 export const loginService = async ({
   payload,
   user,
-}: TLoginServiceParams): Promise<void> => {
+}: TLoginServiceParams): Promise<LoginDTO> => {
   try {
     const redisClient = getRedisClient();
     const { deviceIdentifier, fcmToken, platform, rememberMe, lat, lng } =
@@ -389,7 +391,7 @@ export const loginService = async ({
         user.id
       ),
     ]);
-    return;
+    return LoginDTO.build(token, SessionDTO.build(updatedUser));
   } catch (error) {
     throw error;
   }

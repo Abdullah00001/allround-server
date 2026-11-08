@@ -14,10 +14,13 @@ import {
   checkUserAccessTokenMiddleware,
   checkAccountStatus,
   checkDeviceSessionMiddleware,
+  findUserForLoginByEmail,
+  checkPassword,
 } from '@/app/modules/auth/auth.middlewares';
 import { validateReqBody } from '@/app/utils/system.utils';
 import {
   checkAccessTokenSchema,
+  loginSchema,
   signupSchema,
   verifySignupSchema,
 } from '@/app/modules/auth/auth.schema';
@@ -66,6 +69,14 @@ router
     checkUserAccessTokenController
   );
 
-router.route('/auth/login').post(loginController);
+router
+  .route('/auth/login')
+  .post(
+    validateReqBody(loginSchema),
+    findUserForLoginByEmail,
+    checkAccountStatus,
+    checkPassword,
+    loginController
+  );
 
 export default router;

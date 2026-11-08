@@ -454,6 +454,105 @@ paths:
                         type: string
                         example: 'SERVER_ERROR'
 
+  /api/v1/auth/login:
+    post:
+      tags:
+        - Auth
+      summary: User login
+      description: Authenticates user credentials against the specified role, verifies active account status, initializes a new device session, updates last login time and location coordinates, and returns a JWT access token and user session data.
+      operationId: loginUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: User successfully authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: Malformed JSON payload
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SystemErrorResponse'
+                  - type: object
+                    properties:
+                      message:
+                        type: string
+                        example: 'Invalid JSON Payload'
+                      errorType:
+                        type: string
+                        example: 'INVALID_JSON'
+        '401':
+          description: Unauthorized - Invalid email, role, or password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                invalidCredentials:
+                  summary: Invalid credentials
+                  value:
+                    success: false
+                    message: 'Invalid Credential,Check Your Email And Password'
+                    errorType: 'INVALID_CREDENTIALS'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Forbidden - Account is suspended or inactive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                userSuspended:
+                  summary: Account suspended
+                  value:
+                    success: false
+                    message: 'Your account has been suspended. Please contact the academy.'
+                    errorType: 'USER_SUSPENDED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                accountInactive:
+                  summary: Account inactive
+                  value:
+                    success: false
+                    message: 'Your account is not active. Please verify your email or contact support.'
+                    errorType: 'ACCOUNT_INACTIVE'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request payload validation failed
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ValidationErrorResponse'
+                  - type: object
+                    properties:
+                      message:
+                        type: string
+                        example: 'Request body validation failed'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SystemErrorResponse'
+                  - type: object
+                    properties:
+                      message:
+                        type: string
+                        example: 'Internal Server Error'
+                      errorType:
+                        type: string
+                        example: 'SERVER_ERROR'
+
 components:
   securitySchemes:
     adminAuth:
@@ -589,6 +688,68 @@ components:
           example: 'fcm-device-push-token-xyz'
           description: Optional FCM token for push notifications
 
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+        - role
+        - deviceIdentifier
+        - platform
+        - lat
+        - lng
+      properties:
+        email:
+          type: string
+          format: email
+          example: 'john.doe@example.com'
+          description: Registered user email address
+        password:
+          type: string
+          format: password
+          minLength: 1
+          example: 'SecretP@ssw0rd'
+          description: User account password
+        role:
+          type: string
+          enum:
+            - ADMIN
+            - SITE_MANAGER
+            - EMPLOYEE
+          example: 'EMPLOYEE'
+          description: System role expected for login
+        deviceIdentifier:
+          type: string
+          minLength: 1
+          example: 'd8e8fca2-dc0f-48d8-993d-82d8c399b662'
+          description: Unique client device identifier
+        fcmToken:
+          type: string
+          example: 'fcm-device-push-token-xyz'
+          description: Optional FCM token for push notifications
+        platform:
+          type: string
+          enum:
+            - ANDROID
+            - IOS
+          example: 'ANDROID'
+          description: Operating system platform of the device
+        lat:
+          type: number
+          format: double
+          example: 52.5200
+          description: Current latitude coordinate
+        lng:
+          type: number
+          format: double
+          example: 13.4050
+          description: Current longitude coordinate
+        rememberMe:
+          type: boolean
+          default: false
+          example: false
+          description: Flag to extend session token expiration (30 days vs 7 days)
+
     # ==========================================
     # Response Data / DTO Schemas
     # ==========================================
@@ -672,6 +833,85 @@ components:
           format: uri
           example: null
           description: Avatar image URL (or null if none set)
+
+    SessionDTO:
+      type: object
+      required:
+        - userId
+        - fullName
+        - email
+        - phone
+        - avatarUrl
+        - role
+        - status
+        - isProfileSetup
+        - language
+      properties:
+        userId:
+          type: string
+          format: uuid
+          example: '123e4567-e89b-12d3-a456-426614174000'
+          description: Unique user identifier
+        fullName:
+          type: string
+          example: 'John Doe'
+          description: Full name of the user
+        email:
+          type: string
+          format: email
+          example: 'john.doe@example.com'
+          description: User email address
+        phone:
+          type: string
+          example: '+1234567890'
+          description: User phone number
+        avatarUrl:
+          type: string
+          nullable: true
+          format: uri
+          example: null
+          description: URL to user avatar image (or null if none set)
+        role:
+          type: string
+          enum:
+            - ADMIN
+            - SITE_MANAGER
+            - EMPLOYEE
+          example: 'EMPLOYEE'
+          description: System role of the user
+        status:
+          type: string
+          enum:
+            - ACTIVE
+            - INACTIVE
+            - SUSPENDED
+          example: 'ACTIVE'
+          description: Account status
+        isProfileSetup:
+          type: boolean
+          example: true
+          description: Whether the user completed profile setup
+        language:
+          type: string
+          enum:
+            - EN
+            - DE
+            - TR
+          example: 'EN'
+          description: Preferred user interface language
+
+    LoginDTO:
+      type: object
+      required:
+        - token
+        - user
+      properties:
+        token:
+          type: string
+          example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+          description: JWT authentication access token
+        user:
+          $ref: '#/components/schemas/SessionDTO'
 
     # ==========================================
     # 200 - 299 Success Response Schemas
@@ -813,6 +1053,19 @@ components:
             message:
               type: string
               example: 'User is authenticated'
+
+    LoginResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required:
+            - data
+          properties:
+            message:
+              type: string
+              example: 'User login successful.'
+            data:
+              $ref: '#/components/schemas/LoginDTO'
 
     HealthResponse:
       type: object
