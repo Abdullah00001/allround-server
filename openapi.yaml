@@ -16,6 +16,8 @@ tags:
     description: Admin authentication and panel endpoints
   - name: Recover
     description: Password recovery endpoints for user and admin
+  - name: Media
+    description: Media attachment upload and deletion endpoints
 
 paths:
   /health:
@@ -2109,6 +2111,148 @@ paths:
                 errorType: 'SERVER_ERROR'
                 traceId: '123e4567-e89b-12d3-a456-426614174000'
 
+  /api/v1/media:
+    post:
+      tags:
+        - Media
+      summary: Upload media attachments
+      description: Uploads up to 10 media attachment files to S3 and returns their public URLs. Uses multipart field `files` via uploadAttachmentArray(max 10, required) and handleAttachmentMulterError.
+      operationId: uploadMedia
+      security: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - files
+              properties:
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  description: Up to 10 media/attachment files to upload (max 50MB per file).
+      responses:
+        '200':
+          description: Media uploads successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaResponse'
+              example:
+                success: true
+                message: 'Media uploads successful'
+                data:
+                  - 'https://allround-bucket.s3.amazonaws.com/attachments/123e4567-e89b-12d3-a456-426614174000-1697280000000.jpg'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '400':
+          description: Upload validation or limits error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MulterErrorResponse'
+              examples:
+                fileRequired:
+                  summary: Files required
+                  value:
+                    success: false
+                    status: 400
+                    message: "'files' attachments are required."
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                fileTooLarge:
+                  summary: File size limit exceeded
+                  value:
+                    success: false
+                    status: 400
+                    message: 'Attachment size too large. Maximum allowed size is 50MB per file.'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                fileCountExceeded:
+                  summary: File count limit exceeded
+                  value:
+                    success: false
+                    status: 400
+                    message: 'Too many attachments. Maximum allowed is 10.'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                invalidAttachmentType:
+                  summary: Invalid attachment type
+                  value:
+                    success: false
+                    status: 400
+                    message: 'Invalid attachment type!'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Internal Server Error'
+                errorType: 'SERVER_ERROR'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+    delete:
+      tags:
+        - Media
+      summary: Delete media attachments
+      description: Deletes media attachments from S3 by their URLs. Body validated by deleteMediaSchema (urls string array, strict).
+      operationId: removeMedia
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteMediaPayload'
+      responses:
+        '200':
+          description: Media deletion successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteMediaResponse'
+              example:
+                success: true
+                message: 'Media items deletion successful!'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '400':
+          description: Invalid JSON payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Invalid JSON Payload'
+                errorType: 'INVALID_JSON'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request body validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+              example:
+                success: false
+                message: 'Request body validation failed'
+                errors:
+                  - field: urls
+                    message: 'Media url is required'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Internal Server Error'
+                errorType: 'SERVER_ERROR'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
 components:
   securitySchemes:
     adminAuth:
@@ -2539,6 +2683,18 @@ components:
               required:
                 - token
 
+    DeleteMediaPayload:
+      type: object
+      required:
+        - urls
+      properties:
+        urls:
+          type: array
+          items:
+            type: string
+            format: uri
+            example: 'https://allround-bucket.s3.amazonaws.com/attachments/123e4567-e89b-12d3-a456-426614174000-1697280000000.jpg'
+          description: List of media S3 URLs to delete.
     MediaResponse:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
