@@ -25,7 +25,6 @@ export type TEnv = {
   S3_SECRET_KEY: string;
   S3_BUCKET_NAME: string;
   S3_PUBLIC_URL: string;
-  STRIPE_SECRET_KEY: string;
   SERVER_URL: string;
 };
 

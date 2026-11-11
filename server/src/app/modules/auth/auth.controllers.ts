@@ -78,7 +78,7 @@ export const checkUserAccessTokenController = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const traceId = getTraceId();
     const user = req.user as User;
-    const device = req.user as Device;
+    const device = req.device as Device;
     const payload = req.body as TCheckAccessTokenPayload;
     const data = await checkUserAccessTokenService({
       payload,

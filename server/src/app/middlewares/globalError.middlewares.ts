@@ -7,7 +7,7 @@ import { SystemErrorType } from '@/const';
 
 export const globalErrorMiddleware = (
   err: Error,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction
 ) => {
@@ -15,12 +15,17 @@ export const globalErrorMiddleware = (
   if (err instanceof Error) {
     const e = err as ExtendedError;
     const causeObj = e.cause;
-    const causeStr = causeObj ? ` | Cause: [${causeObj.name}] ${causeObj.message} (Code: ${causeObj.code})` : '';
-    const metaStr = e.$metadata ? ` | $metadata: ${JSON.stringify(e.$metadata)}` : '';
+    const causeStr = causeObj
+      ? ` | Cause: [${causeObj.name}] ${causeObj.message} (Code: ${causeObj.code})`
+      : '';
+    const metaStr = e.$metadata
+      ? ` | $metadata: ${JSON.stringify(e.$metadata)}`
+      : '';
+    const routeStr = ` | ${req.method} ${req.originalUrl}`;
 
     logger.error({
-      traceId: traceId,
-      message: `${err.name}: ${err.message}${causeStr}${metaStr}`,
+      traceId,
+      message: `${err.name}: ${err.message}${routeStr}${causeStr}${metaStr}`,
       stack: err.stack,
     });
 

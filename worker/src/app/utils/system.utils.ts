@@ -24,7 +24,7 @@ export function mailOption({
 }): SendMailOptions {
   return {
     // allround.com
-    from: '"Allround" <no-reply@allround.com>',
+    from: '"Allround" <no-reply@allround-geruestbau.de>',
     to,
     subject,
     html,
