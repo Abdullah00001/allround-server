@@ -4,8 +4,10 @@ import adminRoutes from '@/app/modules/admin/admin.routes';
 import recoverRoutes from '@/app/modules/recover/recover.routes';
 import mediaRoutes from '@/app/modules/media/media.routes';
 import customerRoutes from '@/app/modules/customer/customer.routes';
+import inspectionRoutes from '@/app/modules/inspection/inspection.routes';
 
 const routes: Router[] = [
+  inspectionRoutes,
   customerRoutes,
   mediaRoutes,
   recoverRoutes,

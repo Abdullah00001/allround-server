@@ -1,5 +1,6 @@
 import {
   Customer,
+  Inspection,
   Profile,
   User,
   Device,
@@ -25,6 +26,7 @@ declare global {
       profile: Profile;
       device?: Device;
       customer?: Customer;
+      inspection?: Inspection;
       serviceCharge: ServiceCharge;
       validatedQuery?: unknown;
       connectCallbackUserId: string;

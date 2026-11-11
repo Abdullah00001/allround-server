@@ -20,6 +20,8 @@ tags:
     description: Media attachment upload and deletion endpoints
   - name: Customer
     description: Admin CRM customer and contact management endpoints
+  - name: Inspection
+    description: Admin CRM inspection management and project conversion endpoints
 
 paths:
   /health:
@@ -2790,6 +2792,493 @@ paths:
                 errorType: 'SERVER_ERROR'
                 traceId: '123e4567-e89b-12d3-a456-426614174000'
 
+  /api/v1/admin/inspections:
+    post:
+      tags: [Inspection]
+      summary: Create inspection
+      description: Creates a new inspection in PENDING status for an existing customer.
+      operationId: createInspection
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInspectionRequest'
+      responses:
+        '201':
+          description: Inspection created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateInspectionResponse'
+        '400':
+          description: Invalid JSON payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Invalid JSON Payload'
+                errorType: 'INVALID_JSON'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                tokenInvalid:
+                  value:
+                    success: false
+                    message: 'Access token not found in cookies'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Forbidden or CSRF validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                csrfInvalid:
+                  value:
+                    success: false
+                    message: 'Invalid or missing CSRF token'
+                    errorType: 'FORBIDDEN'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: Customer or site manager not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                customerNotFound:
+                  value:
+                    success: false
+                    message: 'Customer not found'
+                    errorType: 'CUSTOMER_NOT_FOUND'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                siteManagerNotFound:
+                  value:
+                    success: false
+                    message: 'User not found'
+                    errorType: 'USER_NOT_FOUND'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request body validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Internal Server Error'
+                errorType: 'SERVER_ERROR'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+    get:
+      tags: [Inspection]
+      summary: List inspections
+      description: Lists non-deleted inspections with pagination and optional status/customerId filters.
+      operationId: listInspections
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [PENDING, SURVEY_DONE, CONVERTED]
+        - in: query
+          name: customerId
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Inspections fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListInspectionsResponse'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                tokenInvalid:
+                  value:
+                    success: false
+                    message: 'Access token not found in cookies'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Forbidden or CSRF validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                csrfInvalid:
+                  value:
+                    success: false
+                    message: 'Invalid or missing CSRF token'
+                    errorType: 'FORBIDDEN'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '422':
+          description: Request query validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Internal Server Error'
+                errorType: 'SERVER_ERROR'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+  /api/v1/admin/inspections/{id}:
+    get:
+      tags: [Inspection]
+      summary: Get inspection by id
+      description: Returns inspection details including customer and site manager projections.
+      operationId: getInspectionById
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Inspection fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetInspectionResponse'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                tokenInvalid:
+                  value:
+                    success: false
+                    message: 'Access token not found in cookies'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Forbidden or CSRF validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                csrfInvalid:
+                  value:
+                    success: false
+                    message: 'Invalid or missing CSRF token'
+                    errorType: 'FORBIDDEN'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: Inspection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Inspection not found'
+                errorType: 'INSPECTION_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request params validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Internal Server Error'
+                errorType: 'SERVER_ERROR'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+    patch:
+      tags: [Inspection]
+      summary: Update inspection
+      description: Updates a non-deleted inspection. Soft-deleted inspections cannot be updated.
+      operationId: updateInspection
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateInspectionRequest'
+      responses:
+        '200':
+          description: Inspection updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateInspectionResponse'
+        '400':
+          description: Invalid JSON payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Invalid JSON Payload'
+                errorType: 'INVALID_JSON'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                tokenInvalid:
+                  value:
+                    success: false
+                    message: 'Access token not found in cookies'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Forbidden or CSRF validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                csrfInvalid:
+                  value:
+                    success: false
+                    message: 'Invalid or missing CSRF token'
+                    errorType: 'FORBIDDEN'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: Inspection or site manager not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                inspectionNotFound:
+                  value:
+                    success: false
+                    message: 'Inspection not found'
+                    errorType: 'INSPECTION_NOT_FOUND'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                siteManagerNotFound:
+                  value:
+                    success: false
+                    message: 'User not found'
+                    errorType: 'USER_NOT_FOUND'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Internal Server Error'
+                errorType: 'SERVER_ERROR'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+  /api/v1/admin/inspections/{id}/convert:
+    post:
+      tags: [Inspection]
+      summary: Convert inspection to project
+      description: Transactionally creates Project, ProjectMeasurement, and initial ProjectPhase, then marks the inspection as CONVERTED. Already-converted inspections are rejected with 409.
+      operationId: convertInspection
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConvertInspectionRequest'
+      responses:
+        '201':
+          description: Inspection converted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConvertInspectionResponse'
+        '400':
+          description: Invalid JSON payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Invalid JSON Payload'
+                errorType: 'INVALID_JSON'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                tokenInvalid:
+                  value:
+                    success: false
+                    message: 'Access token not found in cookies'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Forbidden or CSRF validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                csrfInvalid:
+                  value:
+                    success: false
+                    message: 'Invalid or missing CSRF token'
+                    errorType: 'FORBIDDEN'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: Inspection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Inspection not found'
+                errorType: 'INSPECTION_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '409':
+          description: Inspection already converted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Inspection is already converted to a project'
+                errorType: 'INSPECTION_ALREADY_CONVERTED'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Internal Server Error'
+                errorType: 'SERVER_ERROR'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
 components:
   securitySchemes:
     adminAuth:
@@ -3873,6 +4362,275 @@ components:
             data:
               $ref: '#/components/schemas/CustomerContactDTO'
 
+
+    CreateInspectionRequest:
+      type: object
+      required: [customerId, siteTitle, address, appointmentDate]
+      properties:
+        customerId:
+          type: string
+          format: uuid
+        siteManagerId:
+          type: string
+          format: uuid
+        siteTitle:
+          type: string
+          example: 'Roof scaffold survey'
+        address:
+          type: string
+          example: 'Hauptstr. 10, Berlin'
+        postalCode:
+          type: string
+          example: '10115'
+        city:
+          type: string
+          example: 'Berlin'
+        appointmentDate:
+          type: string
+          format: date-time
+        scaffoldArea:
+          type: number
+          example: 120.5
+        scaffoldHeight:
+          type: number
+          example: 8.2
+        scaffoldType:
+          type: string
+          example: 'Facade'
+    UpdateInspectionRequest:
+      type: object
+      properties:
+        siteManagerId:
+          type: string
+          format: uuid
+          nullable: true
+        siteTitle:
+          type: string
+        address:
+          type: string
+        postalCode:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        appointmentDate:
+          type: string
+          format: date-time
+        scaffoldArea:
+          type: number
+          nullable: true
+        scaffoldHeight:
+          type: number
+          nullable: true
+        scaffoldType:
+          type: string
+          nullable: true
+      description: At least one field is required.
+    ConvertInspectionRequest:
+      type: object
+      required: [projectName, phaseType]
+      properties:
+        projectName:
+          type: string
+          example: 'Project Hauptstr. 10'
+        phaseType:
+          type: string
+          enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
+          example: 'ERECTION'
+    InspectionCustomerDTO:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+    InspectionSiteManagerDTO:
+      type: object
+      required: [id, firstName, lastName]
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+    InspectionDTO:
+      type: object
+      required:
+        - id
+        - customerId
+        - siteManagerId
+        - siteTitle
+        - address
+        - postalCode
+        - city
+        - appointmentDate
+        - scaffoldArea
+        - scaffoldHeight
+        - scaffoldType
+        - status
+        - customer
+        - siteManager
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+          format: uuid
+        siteManagerId:
+          type: string
+          format: uuid
+          nullable: true
+        siteTitle:
+          type: string
+        address:
+          type: string
+        postalCode:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        appointmentDate:
+          type: string
+          format: date-time
+        scaffoldArea:
+          type: number
+          nullable: true
+        scaffoldHeight:
+          type: number
+          nullable: true
+        scaffoldType:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [PENDING, SURVEY_DONE, CONVERTED]
+        customer:
+          $ref: '#/components/schemas/InspectionCustomerDTO'
+        siteManager:
+          nullable: true
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/InspectionSiteManagerDTO'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ConvertInspectionDTO:
+      type: object
+      required: [inspection, project, phase, measurement]
+      properties:
+        inspection:
+          $ref: '#/components/schemas/InspectionDTO'
+        project:
+          type: object
+          required: [id, name, address]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            address:
+              type: string
+        phase:
+          type: object
+          required: [id, type, status]
+          properties:
+            id:
+              type: string
+              format: uuid
+            type:
+              type: string
+              enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
+            status:
+              type: string
+              example: 'ENQUIRY'
+        measurement:
+          type: object
+          nullable: true
+          required: [id, area, height, scaffoldType]
+          properties:
+            id:
+              type: string
+              format: uuid
+            area:
+              type: number
+            height:
+              type: number
+            scaffoldType:
+              type: string
+              nullable: true
+    CreateInspectionResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Inspection created successfully.'
+            data:
+              $ref: '#/components/schemas/InspectionDTO'
+    ListInspectionsResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data, meta]
+          properties:
+            message:
+              type: string
+              example: 'Inspections fetched successfully.'
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/InspectionDTO'
+    GetInspectionResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Inspection fetched successfully.'
+            data:
+              $ref: '#/components/schemas/InspectionDTO'
+    UpdateInspectionResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Inspection updated successfully.'
+            data:
+              $ref: '#/components/schemas/InspectionDTO'
+    ConvertInspectionResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Inspection converted to project successfully.'
+            data:
+              $ref: '#/components/schemas/ConvertInspectionDTO'
+
     HealthResponse:
       type: object
       properties:
@@ -3954,6 +4712,9 @@ components:
                 - INVALID_OTP
                 - ACCESS_DENIED
                 - USER_NOT_FOUND
+                - CUSTOMER_NOT_FOUND
+                - INSPECTION_NOT_FOUND
+                - INSPECTION_ALREADY_CONVERTED
                 - INVALID_DEVICE_CONTEXT
                 - DEVICE_NOT_FOUND
                 - DEVICE_NOT_OWNED
