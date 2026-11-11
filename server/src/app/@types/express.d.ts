@@ -1,4 +1,13 @@
-import { Profile, User, Device, ServiceCharge, ClubPackage, Event, ClubOpeningHour } from '@prisma/client';
+import {
+  Customer,
+  Profile,
+  User,
+  Device,
+  ServiceCharge,
+  ClubPackage,
+  Event,
+  ClubOpeningHour,
+} from '@prisma/client';
 import { JwtPayload } from 'jsonwebtoken';
 
 declare global {
@@ -13,13 +22,16 @@ declare global {
       files?: { [fieldname: string]: Express.Multer.File[] };
       user: JwtPayload | User;
       jwtPayload?: JwtPayload;
-      profile:Profile
+      profile: Profile;
       device?: Device;
+      customer?: Customer;
       serviceCharge: ServiceCharge;
       validatedQuery?: unknown;
       connectCallbackUserId: string;
       purchaseIdempotencyKey: string;
-      purchaseClubPackage?: ClubPackage & { club: { clubOpeningHours: ClubOpeningHour[] } };
+      purchaseClubPackage?: ClubPackage & {
+        club: { clubOpeningHours: ClubOpeningHour[] };
+      };
       purchaseEvent?: Event;
       purchaseBuyerAge?: number;
     }

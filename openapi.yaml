@@ -18,6 +18,8 @@ tags:
     description: Password recovery endpoints for user and admin
   - name: Media
     description: Media attachment upload and deletion endpoints
+  - name: Customer
+    description: Admin CRM customer and contact management endpoints
 
 paths:
   /health:
@@ -2253,6 +2255,541 @@ paths:
                 errorType: 'SERVER_ERROR'
                 traceId: '123e4567-e89b-12d3-a456-426614174000'
 
+  /api/v1/admin/customers:
+    post:
+      tags:
+        - Customer
+      summary: Create customer
+      description: Creates a customer and optional nested contacts in a transaction. Enforces a single primary contact.
+      operationId: createCustomer
+      security:
+        - adminAuth: []
+
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+          description: Double Submit CSRF token matching the admin_csrf_token cookie.
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCustomerRequest'
+      responses:
+        '201':
+          description: Customer created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateCustomerResponse'
+        '400':
+          description: Invalid JSON payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Invalid JSON Payload'
+                errorType: 'INVALID_JSON'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                tokenExpired:
+                  value:
+                    success: false
+                    message: 'Token has been expired'
+                    errorType: 'TOKEN_EXPIRED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                tokenInvalid:
+                  value:
+                    success: false
+                    message: 'Access token not found in cookies'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Forbidden or CSRF validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                csrfInvalid:
+                  value:
+                    success: false
+                    message: 'Invalid or missing CSRF token'
+                    errorType: 'FORBIDDEN'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                accessDenied:
+                  value:
+                    success: false
+                    message: 'Access denied: Requires admin privileges'
+                    errorType: 'ACCESS_DENIED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '422':
+          description: Request body validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+              example:
+                success: false
+                message: 'Request body validation failed'
+                errors:
+                  - field: name
+                    message: 'Customer name is required'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Internal Server Error'
+                errorType: 'SERVER_ERROR'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+    get:
+      tags:
+        - Customer
+      summary: List customers
+      description: Lists non-deleted customers with pagination, optional name search, and category filter.
+      operationId: listCustomers
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - in: query
+          name: search
+          schema:
+            type: string
+        - in: query
+          name: category
+          schema:
+            type: string
+            enum: [COMMERCIAL, MUNICIPALITY, ARCHITECT, PRIVATE]
+      responses:
+        '200':
+          description: Customers fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListCustomersResponse'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                tokenExpired:
+                  value:
+                    success: false
+                    message: 'Token has been expired'
+                    errorType: 'TOKEN_EXPIRED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                tokenInvalid:
+                  value:
+                    success: false
+                    message: 'Access token not found in cookies'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Forbidden or CSRF validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                csrfInvalid:
+                  value:
+                    success: false
+                    message: 'Invalid or missing CSRF token'
+                    errorType: 'FORBIDDEN'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                accessDenied:
+                  value:
+                    success: false
+                    message: 'Access denied: Requires admin privileges'
+                    errorType: 'ACCESS_DENIED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '422':
+          description: Request query validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+              example:
+                success: false
+                message: 'Request query validation failed'
+                errors:
+                  - field: page
+                    message: 'Too small: expected number to be >=1'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Internal Server Error'
+                errorType: 'SERVER_ERROR'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+  /api/v1/admin/customers/{id}:
+    get:
+      tags:
+        - Customer
+      summary: Get customer by id
+      description: Returns customer details including contacts and non-deleted projects with current phase status.
+      operationId: getCustomerById
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Customer fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetCustomerResponse'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                tokenExpired:
+                  value:
+                    success: false
+                    message: 'Token has been expired'
+                    errorType: 'TOKEN_EXPIRED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                tokenInvalid:
+                  value:
+                    success: false
+                    message: 'Access token not found in cookies'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Forbidden or CSRF validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                csrfInvalid:
+                  value:
+                    success: false
+                    message: 'Invalid or missing CSRF token'
+                    errorType: 'FORBIDDEN'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                accessDenied:
+                  value:
+                    success: false
+                    message: 'Access denied: Requires admin privileges'
+                    errorType: 'ACCESS_DENIED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: Customer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Customer not found'
+                errorType: 'CUSTOMER_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request params validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Internal Server Error'
+                errorType: 'SERVER_ERROR'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+    patch:
+      tags:
+        - Customer
+      summary: Update customer
+      description: Updates a non-deleted customer. Soft-deleted customers cannot be updated.
+      operationId: updateCustomer
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCustomerRequest'
+      responses:
+        '200':
+          description: Customer updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateCustomerResponse'
+        '400':
+          description: Invalid JSON payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Invalid JSON Payload'
+                errorType: 'INVALID_JSON'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                tokenExpired:
+                  value:
+                    success: false
+                    message: 'Token has been expired'
+                    errorType: 'TOKEN_EXPIRED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                tokenInvalid:
+                  value:
+                    success: false
+                    message: 'Access token not found in cookies'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Forbidden or CSRF validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                csrfInvalid:
+                  value:
+                    success: false
+                    message: 'Invalid or missing CSRF token'
+                    errorType: 'FORBIDDEN'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                accessDenied:
+                  value:
+                    success: false
+                    message: 'Access denied: Requires admin privileges'
+                    errorType: 'ACCESS_DENIED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: Customer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Customer not found'
+                errorType: 'CUSTOMER_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Internal Server Error'
+                errorType: 'SERVER_ERROR'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+  /api/v1/admin/customers/{id}/contacts:
+    post:
+      tags:
+        - Customer
+      summary: Add customer contact
+      description: Adds a contact to an existing non-deleted customer. If isPrimary is true, other contacts are demoted in the same transaction.
+      operationId: addCustomerContact
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateContactRequest'
+      responses:
+        '201':
+          description: Contact added successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddCustomerContactResponse'
+        '400':
+          description: Invalid JSON payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Invalid JSON Payload'
+                errorType: 'INVALID_JSON'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                tokenExpired:
+                  value:
+                    success: false
+                    message: 'Token has been expired'
+                    errorType: 'TOKEN_EXPIRED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                tokenInvalid:
+                  value:
+                    success: false
+                    message: 'Access token not found in cookies'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Forbidden or CSRF validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                csrfInvalid:
+                  value:
+                    success: false
+                    message: 'Invalid or missing CSRF token'
+                    errorType: 'FORBIDDEN'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                accessDenied:
+                  value:
+                    success: false
+                    message: 'Access denied: Requires admin privileges'
+                    errorType: 'ACCESS_DENIED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: Customer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Customer not found'
+                errorType: 'CUSTOMER_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Internal Server Error'
+                errorType: 'SERVER_ERROR'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
 components:
   securitySchemes:
     adminAuth:
@@ -3049,6 +3586,292 @@ components:
             message:
               type: string
               example: 'Password reset successful'
+
+
+    CreateCustomerContactInput:
+      type: object
+      required:
+        - name
+        - role
+      properties:
+        name:
+          type: string
+          example: 'Jane Doe'
+        role:
+          type: string
+          example: 'Site Manager'
+        phone:
+          type: string
+          example: '1234567890'
+        email:
+          type: string
+          format: email
+          example: 'jane@example.com'
+        isPrimary:
+          type: boolean
+          default: false
+          example: true
+    CreateCustomerRequest:
+      type: object
+      required:
+        - name
+        - category
+        - address
+      properties:
+        name:
+          type: string
+          example: 'Acme Construction GmbH'
+        category:
+          type: string
+          enum: [COMMERCIAL, MUNICIPALITY, ARCHITECT, PRIVATE]
+          example: 'COMMERCIAL'
+        address:
+          type: string
+          example: 'Berliner Str. 12, 10115 Berlin'
+        latitude:
+          type: number
+          example: 52.520008
+        longitude:
+          type: number
+          example: 13.404954
+        contacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreateCustomerContactInput'
+    UpdateCustomerRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          example: 'Acme Construction GmbH'
+        category:
+          type: string
+          enum: [COMMERCIAL, MUNICIPALITY, ARCHITECT, PRIVATE]
+        address:
+          type: string
+        latitude:
+          type: number
+          nullable: true
+        longitude:
+          type: number
+          nullable: true
+      description: At least one field is required.
+    CreateContactRequest:
+      type: object
+      required:
+        - name
+        - role
+      properties:
+        name:
+          type: string
+          example: 'John Smith'
+        role:
+          type: string
+          example: 'Procurement'
+        phone:
+          type: string
+          example: '0987654321'
+        email:
+          type: string
+          format: email
+          example: 'john@example.com'
+        isPrimary:
+          type: boolean
+          default: false
+          example: false
+    GetCustomersQuery:
+      type: object
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          default: 1
+          example: 1
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 10
+          example: 10
+        search:
+          type: string
+          example: 'Acme'
+        category:
+          type: string
+          enum: [COMMERCIAL, MUNICIPALITY, ARCHITECT, PRIVATE]
+    CustomerContactDTO:
+      type: object
+      required: [id, name, role, phone, email, isPrimary, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        role:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        isPrimary:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CustomerProjectDTO:
+      type: object
+      required: [id, name, address, createdAt, currentPhaseStatus]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: 'Scaffold erection - Site A'
+        address:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        currentPhaseStatus:
+          type: string
+          nullable: true
+          enum: [ENQUIRY, QUOTATION, ORDER_CONFIRMED, IN_PROGRESS, COMPLETED, POSTPONED]
+          example: 'IN_PROGRESS'
+    CustomerListItemDTO:
+      type: object
+      required: [id, name, category, address, latitude, longitude, contactsCount, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        category:
+          type: string
+          enum: [COMMERCIAL, MUNICIPALITY, ARCHITECT, PRIVATE]
+        address:
+          type: string
+        latitude:
+          type: number
+          nullable: true
+        longitude:
+          type: number
+          nullable: true
+        contactsCount:
+          type: integer
+          example: 2
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CustomerSummaryDTO:
+      type: object
+      required: [id, name, category, address, latitude, longitude, contacts, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        category:
+          type: string
+          enum: [COMMERCIAL, MUNICIPALITY, ARCHITECT, PRIVATE]
+        address:
+          type: string
+        latitude:
+          type: number
+          nullable: true
+        longitude:
+          type: number
+          nullable: true
+        contacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomerContactDTO'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CustomerDetailDTO:
+      allOf:
+        - $ref: '#/components/schemas/CustomerSummaryDTO'
+        - type: object
+          required: [projects]
+          properties:
+            projects:
+              type: array
+              items:
+                $ref: '#/components/schemas/CustomerProjectDTO'
+    CreateCustomerResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Customer created successfully.'
+            data:
+              $ref: '#/components/schemas/CustomerSummaryDTO'
+    ListCustomersResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data, meta]
+          properties:
+            message:
+              type: string
+              example: 'Customers fetched successfully.'
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/CustomerListItemDTO'
+    GetCustomerResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Customer fetched successfully.'
+            data:
+              $ref: '#/components/schemas/CustomerDetailDTO'
+    UpdateCustomerResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Customer updated successfully.'
+            data:
+              $ref: '#/components/schemas/CustomerSummaryDTO'
+    AddCustomerContactResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Contact added successfully.'
+            data:
+              $ref: '#/components/schemas/CustomerContactDTO'
 
     HealthResponse:
       type: object
