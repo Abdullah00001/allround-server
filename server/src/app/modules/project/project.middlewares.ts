@@ -39,10 +39,27 @@ export const checkProjectExistenceMiddleware = asyncHandler(
 );
 
 /**
- * Verifies that a project phase exists for `req.params.phaseId`.
+ * Resolves a phase id from route params or request body.
+ *
+ * @param {Request} req - Express request.
+ * @returns {string | undefined} Phase UUID when present.
+ */
+const resolvePhaseId = (req: Request): string | undefined => {
+  if (typeof req.params.phaseId === 'string' && req.params.phaseId.length > 0) {
+    return req.params.phaseId;
+  }
+  const body = req.body as { phaseId?: unknown } | undefined;
+  if (body && typeof body.phaseId === 'string' && body.phaseId.length > 0) {
+    return body.phaseId;
+  }
+  return undefined;
+};
+
+/**
+ * Verifies that a project phase exists for `req.params.phaseId` or `req.body.phaseId`.
  * Attaches the Prisma `ProjectPhase` to `req.phase` on success.
  *
- * @param {Request} req - Express request with validated `params.phaseId`.
+ * @param {Request} req - Express request with validated phase id in params or body.
  * @param {Response} res - Express response used for the 404 envelope.
  * @param {NextFunction} next - Continues when the phase exists.
  * @returns {Promise<void>}
@@ -50,7 +67,17 @@ export const checkProjectExistenceMiddleware = asyncHandler(
 export const checkPhaseExistenceMiddleware = asyncHandler(
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const traceId = getTraceId();
-    const phaseId = req.params.phaseId as string;
+    const phaseId = resolvePhaseId(req);
+
+    if (!phaseId) {
+      res.status(404).json({
+        success: false,
+        message: 'Phase not found',
+        errorType: AuthErrorType.PHASE_NOT_FOUND,
+        traceId,
+      });
+      return;
+    }
 
     const phase = await prisma.projectPhase.findUnique({
       where: { id: phaseId },

@@ -5,6 +5,7 @@ import {
   Project,
   ProjectPhase,
   User,
+  Vehicle,
   Device,
   ServiceCharge,
   ClubPackage,
@@ -31,6 +32,8 @@ declare global {
       inspection?: Inspection;
       project?: Project;
       phase?: ProjectPhase;
+      vehicle?: Vehicle;
+      planningUser?: User;
       serviceCharge: ServiceCharge;
       validatedQuery?: unknown;
       connectCallbackUserId: string;

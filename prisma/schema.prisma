@@ -304,8 +304,9 @@ model ProjectPhase {
   endDate      DateTime?
   durationDays Decimal?    @db.Decimal(5, 2)
 
-  timeLogs         TimeLog[]
-  crewAssignments  CrewAssignment[]
+  timeLogs            TimeLog[]
+  crewAssignments     CrewAssignment[]
+  vehicleAssignments  VehicleAssignment[]
 
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
@@ -401,12 +402,20 @@ model VehicleAssignment {
   
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  phaseId   String
+  phase     ProjectPhase @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+
+  date      DateTime
   
   assignedAt DateTime @default(now())
   returnedAt DateTime? 
 
+  @@unique([vehicleId, date])
   @@index([vehicleId, returnedAt])
   @@index([userId, returnedAt])
+  @@index([phaseId, date])
+  @@index([date])
 }
 
 // ==========================================

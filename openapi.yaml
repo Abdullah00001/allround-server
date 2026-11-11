@@ -24,6 +24,8 @@ tags:
     description: Admin CRM inspection management and project conversion endpoints
   - name: Project
     description: Admin project management and Kanban phase board endpoints
+  - name: Planning
+    description: Admin daily planning and resource assignment endpoints
 
 paths:
   /health:
@@ -3767,6 +3769,333 @@ paths:
                 errorType: 'SERVER_ERROR'
                 traceId: '123e4567-e89b-12d3-a456-426614174000'
 
+  /api/v1/admin/plannings/daily:
+    get:
+      tags: [Planning]
+      summary: Get daily plan
+      description: Returns IN_PROGRESS/ORDER_CONFIRMED phases scheduled for the date (start/end overlap) or with crew assigned that day, including day-scoped crew and vehicle assignments.
+      operationId: getDailyPlan
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema: {type: string}
+        - in: query
+          name: date
+          required: true
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+            example: '2026-11-11'
+      responses:
+        '200':
+          description: Daily plan fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetDailyPlanResponse'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                tokenInvalid:
+                  value:
+                    success: false
+                    message: 'Access token not found in cookies'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Invalid CSRF token'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '422':
+          description: Request query validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/plannings/available-resources:
+    get:
+      tags: [Planning]
+      summary: Get available resources
+      description: Returns ACTIVE EMPLOYEE/SITE_MANAGER users without overlapping Absence on the date, and non-deleted vehicles without a VehicleAssignment on that date. Populates the Assign Resources modal.
+      operationId: getAvailableResources
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema: {type: string}
+        - in: query
+          name: date
+          required: true
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+            example: '2026-11-11'
+        - in: query
+          name: phaseId
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Available resources fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetAvailableResourcesResponse'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                tokenInvalid:
+                  value:
+                    success: false
+                    message: 'Access token not found in cookies'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Invalid CSRF token'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: Phase not found when optional phaseId is provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Phase not found'
+                errorType: 'PHASE_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request query validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/plannings/assign-crew:
+    post:
+      tags: [Planning]
+      summary: Assign crew to phase for a date
+      description: Upserts CrewAssignment on unique (phaseId, userId, date). Updates hours when the assignment already exists.
+      operationId: assignCrew
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignCrewRequest'
+      responses:
+        '201':
+          description: Crew assigned successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignCrewResponse'
+        '400':
+          description: Invalid JSON payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                tokenInvalid:
+                  value:
+                    success: false
+                    message: 'Access token not found in cookies'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Invalid CSRF token'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: Phase or user not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                phaseNotFound:
+                  value:
+                    success: false
+                    message: 'Phase not found'
+                    errorType: 'PHASE_NOT_FOUND'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                userNotFound:
+                  value:
+                    success: false
+                    message: 'User not found'
+                    errorType: 'USER_NOT_FOUND'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/plannings/assign-vehicle:
+    post:
+      tags: [Planning]
+      summary: Assign vehicle to phase for a date
+      description: Creates VehicleAssignment for vehicleId+date (unique). Rejects with 409 when the vehicle is already assigned that day.
+      operationId: assignVehicle
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignVehicleRequest'
+      responses:
+        '201':
+          description: Vehicle assigned successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignVehicleResponse'
+        '400':
+          description: Invalid JSON payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                tokenInvalid:
+                  value:
+                    success: false
+                    message: 'Access token not found in cookies'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Invalid CSRF token'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: Phase, user, or vehicle not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                vehicleNotFound:
+                  value:
+                    success: false
+                    message: 'Vehicle not found'
+                    errorType: 'VEHICLE_NOT_FOUND'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '409':
+          description: Vehicle already assigned on this date
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Vehicle is already assigned on this date'
+                errorType: 'VEHICLE_ALREADY_ASSIGNED'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
 components:
   securitySchemes:
     adminAuth:
@@ -5430,6 +5759,241 @@ components:
             data:
               $ref: '#/components/schemas/ProjectPhaseDTO'
 
+
+    AssignCrewRequest:
+      type: object
+      required: [phaseId, userId, date, hours]
+      properties:
+        phaseId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        date:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          example: '2026-11-11'
+        hours:
+          type: number
+          example: 8
+    AssignVehicleRequest:
+      type: object
+      required: [phaseId, userId, vehicleId, date]
+      properties:
+        phaseId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        vehicleId:
+          type: string
+          format: uuid
+        date:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          example: '2026-11-11'
+    PlanningUserDTO:
+      type: object
+      required: [id, firstName, lastName, avatarUrl]
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+    PlanningVehicleDTO:
+      type: object
+      required: [id, name, plateNumber, imageUrl]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        plateNumber:
+          type: string
+        imageUrl:
+          type: string
+          nullable: true
+    DailyPlanCrewAssignmentDTO:
+      type: object
+      required: [id, date, hours, user]
+      properties:
+        id:
+          type: string
+          format: uuid
+        date:
+          type: string
+          example: '2026-11-11'
+        hours:
+          type: number
+        user:
+          $ref: '#/components/schemas/PlanningUserDTO'
+    DailyPlanVehicleAssignmentDTO:
+      type: object
+      required: [id, date, vehicle, user]
+      properties:
+        id:
+          type: string
+          format: uuid
+        date:
+          type: string
+        vehicle:
+          $ref: '#/components/schemas/PlanningVehicleDTO'
+        user:
+          $ref: '#/components/schemas/PlanningUserDTO'
+    DailyPlanProjectDTO:
+      type: object
+      required: [id, name, address]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        address:
+          type: string
+    DailyPlanPhaseDTO:
+      type: object
+      required: [id, type, status, priority, startDate, endDate, project, crewAssignments, vehicleAssignments]
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
+        status:
+          type: string
+          enum: [ENQUIRY, QUOTATION, ORDER_CONFIRMED, IN_PROGRESS, COMPLETED, POSTPONED]
+        priority:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+        startDate:
+          type: string
+          format: date-time
+          nullable: true
+        endDate:
+          type: string
+          format: date-time
+          nullable: true
+        project:
+          $ref: '#/components/schemas/DailyPlanProjectDTO'
+        crewAssignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DailyPlanCrewAssignmentDTO'
+        vehicleAssignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DailyPlanVehicleAssignmentDTO'
+    AvailableResourcesDTO:
+      type: object
+      required: [employees, vehicles]
+      properties:
+        employees:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanningUserDTO'
+        vehicles:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanningVehicleDTO'
+    AssignCrewDTO:
+      type: object
+      required: [id, phaseId, userId, date, hours, user]
+      properties:
+        id:
+          type: string
+          format: uuid
+        phaseId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        date:
+          type: string
+        hours:
+          type: number
+        user:
+          $ref: '#/components/schemas/PlanningUserDTO'
+    AssignVehicleDTO:
+      type: object
+      required: [id, phaseId, userId, vehicleId, date, user, vehicle]
+      properties:
+        id:
+          type: string
+          format: uuid
+        phaseId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        vehicleId:
+          type: string
+          format: uuid
+        date:
+          type: string
+        user:
+          $ref: '#/components/schemas/PlanningUserDTO'
+        vehicle:
+          $ref: '#/components/schemas/PlanningVehicleDTO'
+    GetDailyPlanResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Daily plan fetched successfully.'
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/DailyPlanPhaseDTO'
+    GetAvailableResourcesResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Available resources fetched successfully.'
+            data:
+              $ref: '#/components/schemas/AvailableResourcesDTO'
+    AssignCrewResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Crew assigned successfully.'
+            data:
+              $ref: '#/components/schemas/AssignCrewDTO'
+    AssignVehicleResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Vehicle assigned successfully.'
+            data:
+              $ref: '#/components/schemas/AssignVehicleDTO'
+
     HealthResponse:
       type: object
       properties:
@@ -5516,6 +6080,8 @@ components:
                 - INSPECTION_ALREADY_CONVERTED
                 - PROJECT_NOT_FOUND
                 - PHASE_NOT_FOUND
+                - VEHICLE_NOT_FOUND
+                - VEHICLE_ALREADY_ASSIGNED
                 - INVALID_DEVICE_CONTEXT
                 - DEVICE_NOT_FOUND
                 - DEVICE_NOT_OWNED
