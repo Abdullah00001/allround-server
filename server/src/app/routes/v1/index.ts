@@ -7,8 +7,12 @@ import customerRoutes from '@/app/modules/customer/customer.routes';
 import inspectionRoutes from '@/app/modules/inspection/inspection.routes';
 import projectRoutes from '@/app/modules/project/project.routes';
 import planningRoutes from '@/app/modules/planning/planning.routes';
+import timelogRoutes from '@/app/modules/timelog/timelog.routes';
+import absenceRoutes from '@/app/modules/absence/absence.routes';
 
 const routes: Router[] = [
+  absenceRoutes,
+  timelogRoutes,
   planningRoutes,
   projectRoutes,
   inspectionRoutes,

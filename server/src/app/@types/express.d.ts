@@ -1,9 +1,11 @@
 import {
+  Absence,
   Customer,
   Inspection,
   Profile,
   Project,
   ProjectPhase,
+  TimeLog,
   User,
   Vehicle,
   Device,
@@ -34,6 +36,9 @@ declare global {
       phase?: ProjectPhase;
       vehicle?: Vehicle;
       planningUser?: User;
+      targetUser?: User;
+      timeLog?: TimeLog;
+      absence?: Absence;
       serviceCharge: ServiceCharge;
       validatedQuery?: unknown;
       connectCallbackUserId: string;

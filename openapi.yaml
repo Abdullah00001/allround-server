@@ -26,6 +26,10 @@ tags:
     description: Admin project management and Kanban phase board endpoints
   - name: Planning
     description: Admin daily planning and resource assignment endpoints
+  - name: TimeLog
+    description: Admin time tracking and approval endpoints
+  - name: Absence
+    description: Admin workforce absence management endpoints
 
 paths:
   /health:
@@ -4096,6 +4100,619 @@ paths:
               schema:
                 $ref: '#/components/schemas/SystemErrorResponse'
 
+  /api/v1/admin/time-logs:
+    get:
+      tags: [TimeLog]
+      summary: List time logs
+      description: Returns paginated time logs with user, phase/project, breakMinutes, and netHours. Filters by projectId, userId, status (PENDING_APPROVAL|APPROVED), and startTime date range.
+      operationId: listTimeLogs
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema: {type: string}
+        - in: query
+          name: page
+          schema: {type: integer, minimum: 1, default: 1}
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 100, default: 10}
+        - in: query
+          name: projectId
+          schema: {type: string, format: uuid}
+        - in: query
+          name: userId
+          schema: {type: string, format: uuid}
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [PENDING_APPROVAL, APPROVED]
+        - in: query
+          name: startDate
+          schema: {type: string, format: date-time}
+        - in: query
+          name: endDate
+          schema: {type: string, format: date-time}
+      responses:
+        '200':
+          description: Time logs fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListTimeLogsResponse'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Access token not found in cookies'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Invalid CSRF token'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '422':
+          description: Request query validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+    post:
+      tags: [TimeLog]
+      summary: Create manual time log
+      description: Admin override creates a time log with isManual=true and status=APPROVED. Optional breakMinutes creates a TimeLogBreak.
+      operationId: createTimeLog
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTimeLogRequest'
+      responses:
+        '201':
+          description: Time log created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateTimeLogResponse'
+        '400':
+          description: Invalid JSON payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Access token not found in cookies'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Invalid CSRF token'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: User or phase not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                userNotFound:
+                  value:
+                    success: false
+                    message: 'User not found'
+                    errorType: 'USER_NOT_FOUND'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                phaseNotFound:
+                  value:
+                    success: false
+                    message: 'Phase not found'
+                    errorType: 'PHASE_NOT_FOUND'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/time-logs/{id}/approve:
+    patch:
+      tags: [TimeLog]
+      summary: Approve time log
+      description: Approves a PENDING_APPROVAL time log. Returns 400 when status is not PENDING_APPROVAL (checkTimeLogPendingMiddleware).
+      operationId: approveTimeLog
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema: {type: string}
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Time log approved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MutateTimeLogResponse'
+        '400':
+          description: Time log is not pending approval
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Time log is not pending approval'
+                errorType: 'BAD_REQUEST'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Access token not found in cookies'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Invalid CSRF token'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: Time log not found (checkTimeLogExistenceMiddleware)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Time log not found'
+                errorType: 'TIMELOG_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request params validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/time-logs/{id}/reject:
+    patch:
+      tags: [TimeLog]
+      summary: Reject time log
+      description: Rejects a PENDING_APPROVAL time log. Returns 400 when status is not PENDING_APPROVAL.
+      operationId: rejectTimeLog
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema: {type: string}
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Time log rejected successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MutateTimeLogResponse'
+        '400':
+          description: Time log is not pending approval
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Time log is not pending approval'
+                errorType: 'BAD_REQUEST'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Access token not found in cookies'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Invalid CSRF token'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: Time log not found (checkTimeLogExistenceMiddleware)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Time log not found'
+                errorType: 'TIMELOG_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request params validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/time-logs/{id}:
+    delete:
+      tags: [TimeLog]
+      summary: Delete time log
+      description: Hard-deletes a time log (breaks cascade). Relies on checkTimeLogExistenceMiddleware for 404.
+      operationId: deleteTimeLog
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema: {type: string}
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Time log deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteTimeLogResponse'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Access token not found in cookies'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Invalid CSRF token'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: Time log not found (checkTimeLogExistenceMiddleware)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Time log not found'
+                errorType: 'TIMELOG_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request params validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/absences:
+    get:
+      tags: [Absence]
+      summary: List absences
+      description: Returns paginated absences with nested user. Optional userId and overlapping date-range filters.
+      operationId: listAbsences
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema: {type: string}
+        - in: query
+          name: page
+          schema: {type: integer, minimum: 1, default: 1}
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 100, default: 10}
+        - in: query
+          name: userId
+          schema: {type: string, format: uuid}
+        - in: query
+          name: startDate
+          schema: {type: string, format: date-time}
+        - in: query
+          name: endDate
+          schema: {type: string, format: date-time}
+      responses:
+        '200':
+          description: Absences fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAbsencesResponse'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Access token not found in cookies'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Invalid CSRF token'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '422':
+          description: Request query validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+    post:
+      tags: [Absence]
+      summary: Create absence
+      description: Logs a new employee absence. Validates startDate before endDate.
+      operationId: createAbsence
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAbsenceRequest'
+      responses:
+        '201':
+          description: Absence created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateAbsenceResponse'
+        '400':
+          description: Invalid JSON payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Access token not found in cookies'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Invalid CSRF token'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'User not found'
+                errorType: 'USER_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/absences/{id}:
+    delete:
+      tags: [Absence]
+      summary: Delete absence
+      description: Cancels/deletes an absence. Relies on checkAbsenceExistenceMiddleware for 404.
+      operationId: deleteAbsence
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema: {type: string}
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Absence deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteAbsenceResponse'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Access token not found in cookies'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Invalid CSRF token'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: Absence not found (checkAbsenceExistenceMiddleware)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Absence not found'
+                errorType: 'ABSENCE_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request params validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
 components:
   securitySchemes:
     adminAuth:
@@ -5994,6 +6611,258 @@ components:
             data:
               $ref: '#/components/schemas/AssignVehicleDTO'
 
+
+    CreateTimeLogRequest:
+      type: object
+      required: [userId, phaseId, activityType, startTime, endTime]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        phaseId:
+          type: string
+          format: uuid
+        activityType:
+          type: string
+          enum: [ERECTION, DISMANTLING, TRANSPORT, MAINTENANCE, OTHER]
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        breakMinutes:
+          type: integer
+          minimum: 0
+          default: 0
+          example: 30
+    TimeLogUserDTO:
+      type: object
+      required: [id, firstName, lastName]
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+    TimeLogPhaseDTO:
+      type: object
+      required: [id, type, project]
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
+        project:
+          type: object
+          required: [id, name]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+    TimeLogDTO:
+      type: object
+      required: [id, userId, phaseId, activityType, startTime, endTime, isManual, status, breakMinutes, netHours, user, phase, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        phaseId:
+          type: string
+          format: uuid
+        activityType:
+          type: string
+          enum: [ERECTION, DISMANTLING, TRANSPORT, MAINTENANCE, OTHER]
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+          nullable: true
+        isManual:
+          type: boolean
+        status:
+          type: string
+          enum: [PENDING_APPROVAL, APPROVED, REJECTED]
+        breakMinutes:
+          type: number
+        netHours:
+          type: number
+          example: 7.5
+        user:
+          $ref: '#/components/schemas/TimeLogUserDTO'
+        phase:
+          $ref: '#/components/schemas/TimeLogPhaseDTO'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ListTimeLogsResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data, meta]
+          properties:
+            message:
+              type: string
+              example: 'Time logs fetched successfully.'
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/TimeLogDTO'
+    CreateTimeLogResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Time log created successfully.'
+            data:
+              $ref: '#/components/schemas/TimeLogDTO'
+    MutateTimeLogResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Time log approved successfully.'
+            data:
+              $ref: '#/components/schemas/TimeLogDTO'
+    DeleteTimeLogResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Time log deleted successfully.'
+            data:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: string
+                  format: uuid
+    CreateAbsenceRequest:
+      type: object
+      required: [userId, type, startDate, endDate]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [VACATION, SICK_LEAVE]
+          example: 'VACATION'
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+        note:
+          type: string
+          example: 'Family trip'
+    AbsenceUserDTO:
+      type: object
+      required: [id, firstName, lastName]
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+    AbsenceDTO:
+      type: object
+      required: [id, userId, type, startDate, endDate, note, user, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [VACATION, SICK_LEAVE]
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+        note:
+          type: string
+          nullable: true
+        user:
+          $ref: '#/components/schemas/AbsenceUserDTO'
+        createdAt:
+          type: string
+          format: date-time
+    ListAbsencesResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data, meta]
+          properties:
+            message:
+              type: string
+              example: 'Absences fetched successfully.'
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/AbsenceDTO'
+    CreateAbsenceResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Absence created successfully.'
+            data:
+              $ref: '#/components/schemas/AbsenceDTO'
+    DeleteAbsenceResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Absence deleted successfully.'
+            data:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: string
+                  format: uuid
+
     HealthResponse:
       type: object
       properties:
@@ -6082,6 +6951,8 @@ components:
                 - PHASE_NOT_FOUND
                 - VEHICLE_NOT_FOUND
                 - VEHICLE_ALREADY_ASSIGNED
+                - TIMELOG_NOT_FOUND
+                - ABSENCE_NOT_FOUND
                 - INVALID_DEVICE_CONTEXT
                 - DEVICE_NOT_FOUND
                 - DEVICE_NOT_OWNED
