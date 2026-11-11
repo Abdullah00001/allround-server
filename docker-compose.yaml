@@ -140,7 +140,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:myStrongPassword@postgres:5432/allround-server?schema=public
     ports:
-      - 5007:5000
+      - 5008:5000
     volumes:
       - ./server:/app
       - /app/node_modules
