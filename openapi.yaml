@@ -22,6 +22,8 @@ tags:
     description: Admin CRM customer and contact management endpoints
   - name: Inspection
     description: Admin CRM inspection management and project conversion endpoints
+  - name: Project
+    description: Admin project management and Kanban phase board endpoints
 
 paths:
   /health:
@@ -3279,6 +3281,492 @@ paths:
                 errorType: 'SERVER_ERROR'
                 traceId: '123e4567-e89b-12d3-a456-426614174000'
 
+  /api/v1/admin/projects:
+    get:
+      tags: [Project]
+      summary: List projects
+      description: Returns paginated non-deleted projects with customer name and all phases ordered by createdAt desc. Optional case-insensitive name search.
+      operationId: listProjects
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - in: query
+          name: search
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Projects fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListProjectsResponse'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                tokenExpired:
+                  value:
+                    success: false
+                    message: 'Token has been expired'
+                    errorType: 'TOKEN_EXPIRED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                tokenInvalid:
+                  value:
+                    success: false
+                    message: 'Access token not found in cookies'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Invalid CSRF token'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '422':
+          description: Request query validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Internal Server Error'
+                errorType: 'SERVER_ERROR'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+  /api/v1/admin/projects/{id}:
+    get:
+      tags: [Project]
+      summary: Get project by id
+      description: Returns project master data, customer, all phases, totalLoggedHours, hoursByActivity, and assignedCrew (crew assignments + project managers). Relies on checkProjectExistenceMiddleware for 404.
+      operationId: getProjectById
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Project fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetProjectResponse'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                tokenExpired:
+                  value:
+                    success: false
+                    message: 'Token has been expired'
+                    errorType: 'TOKEN_EXPIRED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                tokenInvalid:
+                  value:
+                    success: false
+                    message: 'Access token not found in cookies'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Invalid CSRF token'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: Project not found (checkProjectExistenceMiddleware)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Project not found'
+                errorType: 'PROJECT_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request params validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Internal Server Error'
+                errorType: 'SERVER_ERROR'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+    patch:
+      tags: [Project]
+      summary: Update project
+      description: Updates project master data, budgeted hours, and site access fields. Soft-deleted projects cannot be updated.
+      operationId: updateProject
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProjectRequest'
+      responses:
+        '200':
+          description: Project updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateProjectResponse'
+        '400':
+          description: Invalid JSON payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Invalid JSON Payload'
+                errorType: 'INVALID_JSON'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                tokenExpired:
+                  value:
+                    success: false
+                    message: 'Token has been expired'
+                    errorType: 'TOKEN_EXPIRED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                tokenInvalid:
+                  value:
+                    success: false
+                    message: 'Access token not found in cookies'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Invalid CSRF token'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: Project not found (checkProjectExistenceMiddleware)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Project not found'
+                errorType: 'PROJECT_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Internal Server Error'
+                errorType: 'SERVER_ERROR'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+  /api/v1/admin/projects/{id}/phases:
+    post:
+      tags: [Project]
+      summary: Create project phase
+      description: Adds a new Kanban phase under the project (default status ENQUIRY).
+      operationId: createProjectPhase
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePhaseRequest'
+      responses:
+        '201':
+          description: Phase created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatePhaseResponse'
+        '400':
+          description: Invalid JSON payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Invalid JSON Payload'
+                errorType: 'INVALID_JSON'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                tokenExpired:
+                  value:
+                    success: false
+                    message: 'Token has been expired'
+                    errorType: 'TOKEN_EXPIRED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                tokenInvalid:
+                  value:
+                    success: false
+                    message: 'Access token not found in cookies'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Invalid CSRF token'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: Project not found (checkProjectExistenceMiddleware)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Project not found'
+                errorType: 'PROJECT_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Internal Server Error'
+                errorType: 'SERVER_ERROR'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+  /api/v1/admin/phases/{phaseId}/status:
+    patch:
+      tags: [Project]
+      summary: Update phase status (Kanban)
+      description: Kanban drag-and-drop update for phase status, optional dates/priority. Recalculates durationDays when both dates are provided. Writes AuditLog PHASE_STATUS_UPDATED when status/dates/priority change. Relies on checkPhaseExistenceMiddleware for 404.
+      operationId: updatePhaseStatus
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: phaseId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePhaseStatusRequest'
+      responses:
+        '200':
+          description: Phase status updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdatePhaseStatusResponse'
+        '400':
+          description: Invalid JSON payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Invalid JSON Payload'
+                errorType: 'INVALID_JSON'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                tokenExpired:
+                  value:
+                    success: false
+                    message: 'Token has been expired'
+                    errorType: 'TOKEN_EXPIRED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                tokenInvalid:
+                  value:
+                    success: false
+                    message: 'Access token not found in cookies'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Invalid CSRF token'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: Phase not found (checkPhaseExistenceMiddleware)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Phase not found'
+                errorType: 'PHASE_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Internal Server Error'
+                errorType: 'SERVER_ERROR'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
 components:
   securitySchemes:
     adminAuth:
@@ -4631,6 +5119,317 @@ components:
             data:
               $ref: '#/components/schemas/ConvertInspectionDTO'
 
+
+    UpdateProjectRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          example: 'Scaffold erection - Site A'
+        address:
+          type: string
+          example: 'Hauptstr. 10, 10115 Berlin'
+        budgetedHours:
+          type: number
+          example: 120
+        siteAccessCode:
+          type: string
+          nullable: true
+          example: 'GATE-4421'
+        siteAccessNotes:
+          type: string
+          nullable: true
+          example: 'Call site manager on arrival'
+      description: At least one field is required.
+    CreatePhaseRequest:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
+          example: 'DISMANTLING'
+        priority:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+          example: 'MEDIUM'
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+    UpdatePhaseStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ENQUIRY, QUOTATION, ORDER_CONFIRMED, IN_PROGRESS, COMPLETED, POSTPONED]
+          example: 'IN_PROGRESS'
+        startDate:
+          type: string
+          format: date-time
+          nullable: true
+        endDate:
+          type: string
+          format: date-time
+          nullable: true
+        priority:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+    ProjectCustomerDTO:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+    ProjectPhaseDTO:
+      type: object
+      required: [id, projectId, type, status, priority, startDate, endDate, durationDays, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
+        status:
+          type: string
+          enum: [ENQUIRY, QUOTATION, ORDER_CONFIRMED, IN_PROGRESS, COMPLETED, POSTPONED]
+        priority:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+        startDate:
+          type: string
+          format: date-time
+          nullable: true
+        endDate:
+          type: string
+          format: date-time
+          nullable: true
+        durationDays:
+          type: number
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ProjectCrewMemberDTO:
+      type: object
+      required: [id, firstName, lastName, email]
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          format: email
+    HoursByActivityDTO:
+      type: object
+      required: [activityType, hours]
+      properties:
+        activityType:
+          type: string
+          enum: [ERECTION, DISMANTLING, TRANSPORT, MAINTENANCE, OTHER]
+        hours:
+          type: number
+          example: 12.5
+    ProjectListItemDTO:
+      type: object
+      required: [id, name, address, budgetedHours, customer, phases, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        address:
+          type: string
+        budgetedHours:
+          type: number
+        customer:
+          $ref: '#/components/schemas/ProjectCustomerDTO'
+        phases:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectPhaseDTO'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ProjectSummaryDTO:
+      type: object
+      required: [id, customerId, name, address, budgetedHours, siteAccessCode, siteAccessNotes, customer, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        address:
+          type: string
+        budgetedHours:
+          type: number
+        siteAccessCode:
+          type: string
+          nullable: true
+        siteAccessNotes:
+          type: string
+          nullable: true
+        customer:
+          $ref: '#/components/schemas/ProjectCustomerDTO'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ProjectDetailDTO:
+      type: object
+      required:
+        - id
+        - customerId
+        - name
+        - address
+        - latitude
+        - longitude
+        - budgetedHours
+        - siteAccessCode
+        - siteAccessNotes
+        - customer
+        - phases
+        - totalLoggedHours
+        - hoursByActivity
+        - assignedCrew
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        address:
+          type: string
+        latitude:
+          type: number
+          nullable: true
+        longitude:
+          type: number
+          nullable: true
+        budgetedHours:
+          type: number
+        siteAccessCode:
+          type: string
+          nullable: true
+        siteAccessNotes:
+          type: string
+          nullable: true
+        customer:
+          $ref: '#/components/schemas/ProjectCustomerDTO'
+        phases:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectPhaseDTO'
+        totalLoggedHours:
+          type: number
+          example: 86.25
+          description: Net approved logged hours excluding breaks
+        hoursByActivity:
+          type: array
+          items:
+            $ref: '#/components/schemas/HoursByActivityDTO'
+        assignedCrew:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectCrewMemberDTO'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ListProjectsResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data, meta]
+          properties:
+            message:
+              type: string
+              example: 'Projects fetched successfully.'
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/ProjectListItemDTO'
+    GetProjectResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Project fetched successfully.'
+            data:
+              $ref: '#/components/schemas/ProjectDetailDTO'
+    UpdateProjectResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Project updated successfully.'
+            data:
+              $ref: '#/components/schemas/ProjectSummaryDTO'
+    CreatePhaseResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Phase created successfully.'
+            data:
+              $ref: '#/components/schemas/ProjectPhaseDTO'
+    UpdatePhaseStatusResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Phase status updated successfully.'
+            data:
+              $ref: '#/components/schemas/ProjectPhaseDTO'
+
     HealthResponse:
       type: object
       properties:
@@ -4715,6 +5514,8 @@ components:
                 - CUSTOMER_NOT_FOUND
                 - INSPECTION_NOT_FOUND
                 - INSPECTION_ALREADY_CONVERTED
+                - PROJECT_NOT_FOUND
+                - PHASE_NOT_FOUND
                 - INVALID_DEVICE_CONTEXT
                 - DEVICE_NOT_FOUND
                 - DEVICE_NOT_OWNED

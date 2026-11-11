@@ -2,6 +2,8 @@ import {
   Customer,
   Inspection,
   Profile,
+  Project,
+  ProjectPhase,
   User,
   Device,
   ServiceCharge,
@@ -27,6 +29,8 @@ declare global {
       device?: Device;
       customer?: Customer;
       inspection?: Inspection;
+      project?: Project;
+      phase?: ProjectPhase;
       serviceCharge: ServiceCharge;
       validatedQuery?: unknown;
       connectCallbackUserId: string;

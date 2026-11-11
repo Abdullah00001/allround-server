@@ -5,8 +5,10 @@ import recoverRoutes from '@/app/modules/recover/recover.routes';
 import mediaRoutes from '@/app/modules/media/media.routes';
 import customerRoutes from '@/app/modules/customer/customer.routes';
 import inspectionRoutes from '@/app/modules/inspection/inspection.routes';
+import projectRoutes from '@/app/modules/project/project.routes';
 
 const routes: Router[] = [
+  projectRoutes,
   inspectionRoutes,
   customerRoutes,
   mediaRoutes,
