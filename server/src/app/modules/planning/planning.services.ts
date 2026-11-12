@@ -1,4 +1,10 @@
-import { PhaseStatus, Prisma, Role, UserStatus } from '@prisma/client';
+import {
+  NotificationType,
+  PhaseStatus,
+  Prisma,
+  Role,
+  UserStatus,
+} from '@prisma/client';
 import prisma from '@/app/configs/db.configs';
 import {
   AssignCrewDTO,
@@ -16,6 +22,7 @@ import {
   TGetAvailableResourcesServiceParams,
   TGetDailyPlanServiceParams,
 } from '@/app/modules/planning/planning.types';
+import { triggerPushNotification } from '@/app/utils/notification.utils';
 
 const userSelect = {
   id: true,
@@ -121,8 +128,26 @@ export const assignCrewService = async ({
     },
     include: {
       user: { select: userSelect },
+      phase: {
+        select: {
+          type: true,
+          project: { select: { name: true } },
+        },
+      },
     },
   });
+
+  await triggerPushNotification(
+    [payload.userId],
+    NotificationType.PROJECT_ASSIGNED,
+    'notification.project_assigned.title',
+    'notification.project_assigned.body',
+    {
+      projectName: assignment.phase.project.name,
+      phaseType: assignment.phase.type,
+      date: dayDate.toISOString().slice(0, 10),
+    }
+  );
 
   return AssignCrewDTO.build(assignment);
 };

@@ -1,4 +1,4 @@
-import { TimeLogStatus } from '@prisma/client';
+import { NotificationType, TimeLogStatus } from '@prisma/client';
 import prisma from '@/app/configs/db.configs';
 import { TimeLogDTO } from '@/app/modules/timelog/timelog.dto';
 import {
@@ -7,6 +7,7 @@ import {
   TTimeLogMutationServiceParams,
   TUpdateTimeLogServiceParams,
 } from '@/app/modules/timelog/timelog.types';
+import { triggerPushNotification } from '@/app/utils/notification.utils';
 
 const timeLogInclude = {
   breaks: true,
@@ -134,6 +135,15 @@ export const approveTimeLogService = async ({
     data: { status: TimeLogStatus.APPROVED },
     include: timeLogInclude,
   });
+
+  await triggerPushNotification(
+    [timeLog.userId],
+    NotificationType.TIME_LOG_APPROVED,
+    'notification.time_log_approved.title',
+    'notification.time_log_approved.body',
+    { date: timeLog.startTime.toISOString().slice(0, 10) }
+  );
+
   return TimeLogDTO.build(updated);
 };
 
@@ -152,6 +162,15 @@ export const rejectTimeLogService = async ({
     data: { status: TimeLogStatus.REJECTED },
     include: timeLogInclude,
   });
+
+  await triggerPushNotification(
+    [timeLog.userId],
+    NotificationType.TIME_LOG_REJECTED,
+    'notification.time_log_rejected.title',
+    'notification.time_log_rejected.body',
+    { date: timeLog.startTime.toISOString().slice(0, 10) }
+  );
+
   return TimeLogDTO.build(updated);
 };
 

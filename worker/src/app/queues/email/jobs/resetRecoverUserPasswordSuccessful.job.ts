@@ -7,11 +7,15 @@ import mailTransporter from '@/app/configs/nodemailer.config';
 import { mailOption } from '@/app/utils/system.utils';
 import { compile } from 'handlebars';
 import resetRecoverUserPasswordSuccessfulTemplate from '@/app/templates/resetRecoverUserPasswordSuccessful.template';
+import { getEmailSubject } from '@/app/i18n';
 
+/**
+ * Sends the password-reset confirmation email.
+ */
 const handler: IJobHandler<IResetRecoverUserPasswordSuccessful> = {
   name: QUEUE_JOBS.RESET_RECOVER_USER_PASSWORD_SUCCESSFUL,
   handler: async (data: IResetRecoverUserPasswordSuccessful, job: Job) => {
-    const { email, name, traceId } = data;
+    const { email, name, traceId, language } = data;
     try {
       const template = compile(resetRecoverUserPasswordSuccessfulTemplate);
       const personalizedTemplate = template({
@@ -20,7 +24,7 @@ const handler: IJobHandler<IResetRecoverUserPasswordSuccessful> = {
       });
       const mail = mailOption({
         to: email,
-        subject: `Your ${companyInformation.name} password was reset successfully`,
+        subject: getEmailSubject('password.reset.subject', language),
         html: personalizedTemplate,
         replyTo: companyInformation.email,
       });

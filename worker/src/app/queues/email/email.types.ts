@@ -1,33 +1,43 @@
-// Types specific to the email queue can be defined here
-// export interface IEmailJobData { ... }
-
-export interface IAccountCreateSuccess {
-  // Add properties here
+/**
+ * Shared OTP email payload for account-create and resend flows.
+ */
+export interface IOtpEmailPayload {
   name: string;
   email: string;
   otp: string;
-  otpExpiredAt: string;
+  /** OTP validity window label/minutes from producer. */
+  otpExpireAt: string | number;
   traceId: string;
+  /** Recipient language preference (e.g. `DE`, `EN`). */
+  language?: string;
 }
 
-export interface IResendOtp {
-  // Add properties here
-  name: string;
-  email: string;
-  otp: string;
-  otpExpiredAt: string;
-  traceId: string;
-}
+/**
+ * Account-create success email payload.
+ */
+export type IAccountCreateSuccess = IOtpEmailPayload;
 
+/**
+ * Resend OTP email payload.
+ */
+export type IResendOtp = IOtpEmailPayload;
+
+/**
+ * Signup verification success email payload.
+ */
 export interface ISignupUserVerificationSuccessful {
-  // Add properties here
   name: string;
   email: string;
   traceId: string;
+  language?: string;
 }
 
+/**
+ * Password-reset success email payload.
+ */
 export interface IResetRecoverUserPasswordSuccessful {
   name: string;
   email: string;
   traceId: string;
+  language?: string;
 }

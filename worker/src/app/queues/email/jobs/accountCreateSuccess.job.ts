@@ -7,23 +7,26 @@ import { compile } from 'handlebars';
 import accountCreateSuccessEmailTemplate from '@/app/templates/accountCreateSuccessEmail.template';
 import { mailOption } from '@/app/utils/system.utils';
 import mailTransporter from '@/app/configs/nodemailer.config';
+import { getEmailSubject } from '@/app/i18n';
 
+/**
+ * Sends the welcome / verify-email OTP message after signup.
+ */
 const handler: IJobHandler<IAccountCreateSuccess> = {
   name: QUEUE_JOBS.ACCOUNT_CREATE_SUCCESS,
   handler: async (data: IAccountCreateSuccess, job: Job) => {
-    // Write your processing logic here
-    const { email, name, otp, otpExpiredAt, traceId } = data;
+    const { email, name, otp, otpExpireAt, traceId, language } = data;
     try {
       const template = compile(accountCreateSuccessEmailTemplate);
       const personalizedTemplate = template({
         name,
         email,
         otp,
-        otpExpiredAt,
+        otpExpiredAt: otpExpireAt,
       });
       const mail = mailOption({
         to: email,
-        subject: `Welcome to ${companyInformation.name}. Please verify your email.`,
+        subject: getEmailSubject('welcome.subject', language),
         html: personalizedTemplate,
         replyTo: companyInformation.email,
       });

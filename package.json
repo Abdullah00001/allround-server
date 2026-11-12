@@ -10,6 +10,7 @@
     "prisma:migrate": "bash scripts/prisma-migrate.sh",
     "prisma:generate": "bash scripts/prisma-generate.sh",
     "prisma:sync": "bash scripts/prisma-sync.sh",
+    "prisma:seed": "prisma db seed",
     "clean": "bash scripts/clean.sh",
     "prepare": "husky",
     "create:job": "bash scheduler/scripts/create-job.sh",
@@ -25,9 +26,14 @@
     "remove:route": "node server/scripts/remove-route.js",
     "create:endpoint": "node server/scripts/create-endpoint.js"
   },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
   "dependencies": {
     "@aws-sdk/s3-request-presigner": "^3.1141.0",
     "@prisma/client": "^6.19.2",
+    "bcrypt": "^6.0.0",
+    "dotenv": "^17.2.3",
     "geo-tz": "^8.1.9",
     "prisma": "^6.19.2"
   },
@@ -41,6 +47,8 @@
   "homepage": "https://github.com/Abdullah00001/allround-server#readme",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/bcrypt": "^6.0.0",
+    "@types/node": "^22.19.1",
     "@typescript-eslint/eslint-plugin": "^8.66.0",
     "@typescript-eslint/parser": "^8.66.0",
     "eslint": "^10.8.1",
@@ -51,6 +59,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^17.3.0",
     "prettier": "^3.9.6",
+    "tsx": "^4.23.10",
     "typescript": "^7.0.2",
     "typescript-eslint": "^8.66.0"
   },

@@ -8,9 +8,12 @@ export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
+    // ts-node is incompatible with TypeScript 7 in this repo; tsx runs the seed reliably.
+    seed: "tsx prisma/seed.ts",
   },
   engine: "classic",
   datasource: {
     url: env("DATABASE_URL"),
   },
 });
+

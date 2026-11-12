@@ -7,6 +7,8 @@
  */
 export const QUEUE_JOBS = {
   // AUTO-GENERATED-JOBS-START
+  PROCESS_TRANSLATION: 'process-translation',
+  SEND_PUSH_NOTIFICATION: 'send-push-notification',
   RESET_RECOVER_USER_PASSWORD_SUCCESSFUL:
     'reset-recover-user-password-successful',
   SIGNUP_USER_VERIFICATION_SUCCESSFUL: 'signup-user-verification-successful',

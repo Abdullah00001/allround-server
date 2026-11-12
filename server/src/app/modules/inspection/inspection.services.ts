@@ -1,4 +1,9 @@
-import { InspectionStatus, PhaseStatus, Prisma } from '@prisma/client';
+import {
+  InspectionStatus,
+  NotificationType,
+  PhaseStatus,
+  Prisma,
+} from '@prisma/client';
 import prisma from '@/app/configs/db.configs';
 import {
   ConvertInspectionDTO,
@@ -12,6 +17,7 @@ import {
   TListInspectionsServiceParams,
   TUpdateInspectionServiceParams,
 } from '@/app/modules/inspection/inspection.types';
+import { triggerPushNotification } from '@/app/utils/notification.utils';
 
 /**
  * Loads a site-manager projection by user id, or null when absent.
@@ -263,6 +269,19 @@ export const convertInspectionToProjectService = async ({
 
   const siteManager = await loadSiteManager(result.converted.siteManagerId);
   const inspectionDto = InspectionDTO.build(result.converted, siteManager);
+
+  if (result.converted.siteManagerId) {
+    await triggerPushNotification(
+      [result.converted.siteManagerId],
+      NotificationType.INSPECTION_SCHEDULED,
+      'notification.inspection_scheduled.title',
+      'notification.inspection_scheduled.body',
+      {
+        siteTitle: result.converted.siteTitle,
+        projectName: result.project.name,
+      }
+    );
+  }
 
   return ConvertInspectionDTO.build(
     inspectionDto,

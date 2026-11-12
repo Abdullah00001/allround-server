@@ -28,7 +28,10 @@ import {
   REDIS_PREFIXES,
   userAccessTokenExpiresIn,
 } from '@/const';
-import { getEmailQueue } from '@/app/queues/email/email.queue';
+import {
+  enqueueEmailJob,
+  resolveEmailLanguage,
+} from '@/app/utils/emailQueue.utils';
 import {
   LoginDTO,
   SessionDTO,
@@ -54,7 +57,6 @@ export const signupService = async ({
 }: TSignupServiceParams): Promise<SignupServiceDTO> => {
   try {
     const redisClient = getRedisClient();
-    const emailQueue = getEmailQueue();
     const { email, firstName, lastName, password, role, phone } = payload;
     const plainOtp = generate(6, {
       digits: true,
@@ -64,12 +66,14 @@ export const signupService = async ({
     });
     const hashedPassword = await hashPassword(password);
     const hashedOtp = hashOtp({ otp: plainOtp });
+    const language = await resolveEmailLanguage(null);
     const emailPayload = {
       name: `${firstName} ${lastName}`,
       otp: plainOtp,
       otpExpireAt,
       traceId,
       email,
+      language,
     };
     const user = await prisma.user.create({
       data: {
@@ -87,15 +91,13 @@ export const signupService = async ({
       accountStatus: user.status,
     });
 
-    await Promise.all([
-      redisClient.set(
-        createRedisKey(REDIS_PREFIXES.otp, user.id),
-        hashedOtp,
-        'EX',
-        calculateMilliseconds(otpExpireAt, 'minutes')
-      ),
-      emailQueue.add(QUEUE_JOBS.ACCOUNT_CREATE_SUCCESS, emailPayload),
-    ]);
+    await redisClient.set(
+      createRedisKey(REDIS_PREFIXES.otp, user.id),
+      hashedOtp,
+      'EX',
+      calculateMilliseconds(otpExpireAt, 'minutes')
+    );
+    await enqueueEmailJob(QUEUE_JOBS.ACCOUNT_CREATE_SUCCESS, emailPayload);
     return SignupServiceDTO.build(
       `${firstName} ${lastName}`,
       email,
@@ -113,7 +115,6 @@ export const resendOtpService = async ({
 }: TResendOtpServiceParams): Promise<void> => {
   try {
     const redisClient = getRedisClient();
-    const emailQueue = getEmailQueue();
     const name = `${user.firstName} ${user.lastName}`;
     const { email, id } = user;
     const plainOtp = generate(6, {
@@ -123,22 +124,22 @@ export const resendOtpService = async ({
       specialChars: false,
     });
     const hashedOtp = hashOtp({ otp: plainOtp });
+    const language = await resolveEmailLanguage(user);
     const emailPayload = {
       name,
       otp: plainOtp,
       otpExpireAt,
       traceId,
       email,
+      language,
     };
-    await Promise.all([
-      redisClient.set(
-        createRedisKey(REDIS_PREFIXES.otp, id),
-        hashedOtp,
-        'EX',
-        calculateMilliseconds(otpExpireAt, 'minutes')
-      ),
-      emailQueue.add(QUEUE_JOBS.RESEND_OTP, emailPayload),
-    ]);
+    await redisClient.set(
+      createRedisKey(REDIS_PREFIXES.otp, id),
+      hashedOtp,
+      'EX',
+      calculateMilliseconds(otpExpireAt, 'minutes')
+    );
+    await enqueueEmailJob(QUEUE_JOBS.RESEND_OTP, emailPayload);
     return;
   } catch (error) {
     throw error;
@@ -153,8 +154,7 @@ export const verifySignupUserControllerService = async ({
 }: TVerifySignupServiceParams): Promise<VerifySignupUserDTO> => {
   try {
     const redisClient = getRedisClient();
-    const emailQueue = getEmailQueue();
-    const { deviceIdentifier, lat, lng, otp, platform, fcmToken } = payload;
+    const { deviceIdentifier, lat, lng, platform, fcmToken } = payload;
     const sessionExpiresAt = sessionTimeCalculation(userAccessTokenExpiresIn);
     const { updatedUser, device } = await prisma.$transaction(async (tx) => {
       // 1. Revoke any ACTIVE session with the same deviceIdentifier (different user)
@@ -230,10 +230,12 @@ export const verifySignupUserControllerService = async ({
         'EX',
         ttl
       );
+    const language = await resolveEmailLanguage(updatedUser);
     const emailPayload = {
       email: updatedUser.email,
       name: `${updatedUser.firstName} ${updatedUser.lastName}`,
       traceId,
+      language,
     };
     await Promise.all([
       redisClient.set(
@@ -248,11 +250,11 @@ export const verifySignupUserControllerService = async ({
         lat,
         updatedUser.id
       ),
-      emailQueue.add(
-        QUEUE_JOBS.SIGNUP_USER_VERIFICATION_SUCCESSFUL,
-        emailPayload
-      ),
     ]);
+    await enqueueEmailJob(
+      QUEUE_JOBS.SIGNUP_USER_VERIFICATION_SUCCESSFUL,
+      emailPayload
+    );
     return VerifySignupUserDTO.build(accessToken, updatedUser);
   } catch (error) {
     throw error;

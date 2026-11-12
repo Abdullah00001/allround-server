@@ -17,7 +17,10 @@ import {
 import { otpExpireAt, QUEUE_JOBS, REDIS_PREFIXES } from '@/const';
 import { FindRecoverUserServiceDTO } from '@/app/modules/recover/recover.dto';
 import { getRedisClient } from '@/app/configs/redis.configs';
-import { getEmailQueue } from '@/app/queues/email/email.queue';
+import {
+  enqueueEmailJob,
+  resolveEmailLanguage,
+} from '@/app/utils/emailQueue.utils';
 import prisma from '@/app/configs/db.configs';
 import { hashPassword } from '@/app/utils/password.utils';
 
@@ -30,7 +33,6 @@ export const findRecoverUserService = async ({
 }: TFindRecoverUserByEmailServiceParams): Promise<FindRecoverUserServiceDTO> => {
   try {
     const redisClient = getRedisClient();
-    const emailQueue = getEmailQueue();
     const otp = generate(6, {
       digits: true,
       lowerCaseAlphabets: false,
@@ -43,22 +45,22 @@ export const findRecoverUserService = async ({
       role: user.role,
       sub: user.id,
     });
+    const language = await resolveEmailLanguage(user);
     const emailPayload = {
       name: `${user.firstName} ${user.lastName}`,
       email: user.email,
       otp,
       otpExpireAt,
       traceId,
+      language,
     };
-    await Promise.all([
-      redisClient.set(
-        createRedisKey(REDIS_PREFIXES.otp, user.id.toString()),
-        hashedOtp,
-        'EX',
-        calculateMilliseconds(otpExpireAt, 'minutes')
-      ),
-      emailQueue.add(QUEUE_JOBS.RESEND_OTP, emailPayload),
-    ]);
+    await redisClient.set(
+      createRedisKey(REDIS_PREFIXES.otp, user.id.toString()),
+      hashedOtp,
+      'EX',
+      calculateMilliseconds(otpExpireAt, 'minutes')
+    );
+    await enqueueEmailJob(QUEUE_JOBS.RESEND_OTP, emailPayload);
     return FindRecoverUserServiceDTO.build({
       fullName: `${user.firstName} ${user.lastName}`,
       email: user.email,
@@ -81,7 +83,6 @@ export const resendRecoverUserOtpService = async ({
 }: TResendRecoverUserOtpServiceParams): Promise<void> => {
   try {
     const redisClient = getRedisClient();
-    const emailQueue = getEmailQueue();
     const otp = generate(6, {
       digits: true,
       lowerCaseAlphabets: false,
@@ -89,22 +90,22 @@ export const resendRecoverUserOtpService = async ({
       upperCaseAlphabets: false,
     });
     const hashedOtp = hashOtp({ otp });
+    const language = await resolveEmailLanguage(user);
     const emailPayload = {
       name: `${user.firstName} ${user.lastName}`,
       email: user.email,
       otp,
       otpExpireAt,
       traceId,
+      language,
     };
-    await Promise.all([
-      redisClient.set(
-        createRedisKey(REDIS_PREFIXES.otp, user.id.toString()),
-        hashedOtp,
-        'EX',
-        calculateMilliseconds(otpExpireAt, 'minutes')
-      ),
-      emailQueue.add(QUEUE_JOBS.RESEND_OTP, emailPayload),
-    ]);
+    await redisClient.set(
+      createRedisKey(REDIS_PREFIXES.otp, user.id.toString()),
+      hashedOtp,
+      'EX',
+      calculateMilliseconds(otpExpireAt, 'minutes')
+    );
+    await enqueueEmailJob(QUEUE_JOBS.RESEND_OTP, emailPayload);
     return;
   } catch (error) {
     throw error;
@@ -137,7 +138,6 @@ export const resetRecoverUserPasswordService = async ({
 }: TResetRecoverUserPasswordServiceParams): Promise<void> => {
   try {
     const redisClient = getRedisClient();
-    const emailQueue = getEmailQueue();
     const hashedPassword = await hashPassword(password);
     await prisma.user.update({
       where: { id: user.id },
@@ -145,10 +145,12 @@ export const resetRecoverUserPasswordService = async ({
         passwordHash: hashedPassword,
       },
     });
+    const language = await resolveEmailLanguage(user);
     const emailPayload = {
       name: `${user.firstName} ${user.lastName}`,
       email: user.email,
       traceId,
+      language,
     };
     const decoded = verifyResetPasswordPageToken(token);
     const tokenExpirationTime = decoded.data?.exp as number;
@@ -162,7 +164,7 @@ export const resetRecoverUserPasswordService = async ({
         ttl
       );
     }
-    await emailQueue.add(
+    await enqueueEmailJob(
       QUEUE_JOBS.RESET_RECOVER_USER_PASSWORD_SUCCESSFUL,
       emailPayload
     );
