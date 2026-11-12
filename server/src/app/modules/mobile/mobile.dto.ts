@@ -1,11 +1,19 @@
 import {
+  ActivityType,
   PhaseStatus,
   PhaseType,
   Priority,
   Role,
+  TimeLog,
+  TimeLogBreak,
+  TimeLogStatus,
   User,
 } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
+import {
+  calculateNetHours,
+  sumBreakMinutes,
+} from '@/app/modules/timelog/timelog.helpers';
 
 /**
  * Converts a Prisma Decimal (or null) into a plain number (or null).
@@ -194,6 +202,113 @@ export class MobileProfileDTO {
       completedProjectsCount
     );
   }
+}
+
+/**
+ * Nested user projection for crew-time responses.
+ */
+export class MobileTimeLogUserDTO {
+  /**
+   * @param {string} id - User UUID.
+   * @param {string} firstName - First name.
+   * @param {string} lastName - Last name.
+   */
+  constructor(
+    public id: string,
+    public firstName: string,
+    public lastName: string
+  ) {}
+
+  /**
+   * Builds a compact user DTO.
+   *
+   * @param {Pick<User, 'id' | 'firstName' | 'lastName'>} user - User fields.
+   * @returns {MobileTimeLogUserDTO} API-safe user reference.
+   */
+  static build(user: Pick<User, 'id' | 'firstName' | 'lastName'>) {
+    return new MobileTimeLogUserDTO(user.id, user.firstName, user.lastName);
+  }
+}
+
+/**
+ * Mobile time-log DTO with computed net hours.
+ */
+export class MobileTimeLogDTO {
+  /**
+   * @param {string} id - Time log UUID.
+   * @param {string} phaseId - Phase UUID.
+   * @param {ActivityType} activityType - Activity category.
+   * @param {string} startTime - ISO start timestamp.
+   * @param {string | null} endTime - ISO end timestamp (null while running).
+   * @param {boolean} isManual - Whether the entry was manual.
+   * @param {TimeLogStatus} status - Approval status.
+   * @param {string | null} clientSyncId - Offline sync idempotency key.
+   * @param {number} breakMinutes - Total break minutes.
+   * @param {number} netHours - Net hours after breaks (0 while open).
+   * @param {MobileTimeLogUserDTO | undefined} user - Optional nested user (crew view).
+   * @param {string} createdAt - ISO creation timestamp.
+   * @param {string} updatedAt - ISO update timestamp.
+   */
+  constructor(
+    public id: string,
+    public phaseId: string,
+    public activityType: ActivityType,
+    public startTime: string,
+    public endTime: string | null,
+    public isManual: boolean,
+    public status: TimeLogStatus,
+    public clientSyncId: string | null,
+    public breakMinutes: number,
+    public netHours: number,
+    public createdAt: string,
+    public updatedAt: string,
+    public user?: MobileTimeLogUserDTO
+  ) {}
+
+  /**
+   * Builds a mobile time-log DTO from Prisma data.
+   *
+   * @param {TimeLog & { breaks: TimeLogBreak[]; user?: Pick<User, 'id' | 'firstName' | 'lastName'> }} timeLog - Time log with breaks.
+   * @returns {MobileTimeLogDTO} API-safe time log object.
+   */
+  static build(
+    timeLog: TimeLog & {
+      breaks: TimeLogBreak[];
+      user?: Pick<User, 'id' | 'firstName' | 'lastName'>;
+    }
+  ) {
+    return new MobileTimeLogDTO(
+      timeLog.id,
+      timeLog.phaseId,
+      timeLog.activityType,
+      timeLog.startTime.toISOString(),
+      timeLog.endTime ? timeLog.endTime.toISOString() : null,
+      timeLog.isManual,
+      timeLog.status,
+      timeLog.clientSyncId,
+      Number(sumBreakMinutes(timeLog.breaks).toFixed(2)),
+      calculateNetHours(timeLog),
+      timeLog.createdAt.toISOString(),
+      timeLog.updatedAt.toISOString(),
+      timeLog.user ? MobileTimeLogUserDTO.build(timeLog.user) : undefined
+    );
+  }
+}
+
+/**
+ * Result DTO for offline sync.
+ */
+export class MobileSyncResultDTO {
+  /**
+   * @param {number} created - Newly inserted log count.
+   * @param {number} skipped - Idempotent skip count (existing clientSyncId).
+   * @param {MobileTimeLogDTO[]} logs - Created log DTOs only.
+   */
+  constructor(
+    public created: number,
+    public skipped: number,
+    public logs: MobileTimeLogDTO[]
+  ) {}
 }
 
 export { decimalToNumber };

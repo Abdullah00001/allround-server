@@ -1,12 +1,25 @@
 import { Request, Response } from 'express';
-import { User } from '@prisma/client';
+import { ProjectPhase, TimeLog, User } from '@prisma/client';
 import { getTraceId } from '@/app/configs/requestContext.configs';
 import { asyncHandler } from '@/app/utils/system.utils';
 import {
+  createManualTimeService,
+  getCrewTimeService,
   getDashboardDataService,
   getMyProjectsService,
+  getMyTimeLogsService,
   getProfileStatsService,
+  startTimerService,
+  stopTimerService,
+  syncTimeLogsService,
 } from '@/app/modules/mobile/mobile.services';
+import {
+  TGetMyTimeLogsQuery,
+  TManualTimePayload,
+  TStartTimerPayload,
+  TStopTimerPayload,
+  TSyncTimeLogsPayload,
+} from '@/app/modules/mobile/mobile.types';
 
 /**
  * Handles `GET /mobile/dashboard`.
@@ -73,6 +86,158 @@ export const getProfileController = asyncHandler(
     res.status(200).json({
       success: true,
       message: 'Profile fetched successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `POST /mobile/timer/start`.
+ * Relies on no-active-timer + phase existence middlewares.
+ *
+ * @param {Request} req - Express request with trusted user/phase and body.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const startTimerController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const phase = req.phase as ProjectPhase;
+    const payload = req.body as TStartTimerPayload;
+    const data = await startTimerService({ user, phase, payload });
+
+    res.status(201).json({
+      success: true,
+      message: 'Timer started successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `POST /mobile/timer/stop`.
+ * Relies on owned-active-time-log middleware.
+ *
+ * @param {Request} req - Express request with trusted open `req.timeLog`.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const stopTimerController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const timeLog = req.timeLog as TimeLog;
+    const payload = req.body as TStopTimerPayload;
+    const data = await stopTimerService({ timeLog, payload });
+
+    res.status(200).json({
+      success: true,
+      message: 'Timer stopped successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `POST /mobile/timer/manual`.
+ * Creates a pending-approval manual entry.
+ *
+ * @param {Request} req - Express request with trusted user/phase and body.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const createManualTimeController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const phase = req.phase as ProjectPhase;
+    const payload = req.body as TManualTimePayload;
+    const data = await createManualTimeService({ user, phase, payload });
+
+    res.status(201).json({
+      success: true,
+      message: 'Manual time entry submitted for approval.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `GET /mobile/time-logs`.
+ * Returns the authenticated user's logs for TODAY/WEEK/MONTH.
+ *
+ * @param {Request} req - Express request with `validatedQuery`.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const getMyTimeLogsController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const query = req.validatedQuery as TGetMyTimeLogsQuery;
+    const data = await getMyTimeLogsService({ user, query });
+
+    res.status(200).json({
+      success: true,
+      message: 'Time logs fetched successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `GET /mobile/crew-time/:phaseId`.
+ * Site-manager-only crew time view for a managed project phase.
+ *
+ * @param {Request} req - Express request with trusted user/phase.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const getCrewTimeController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const phase = req.phase as ProjectPhase;
+    const data = await getCrewTimeService({ user, phase });
+
+    res.status(200).json({
+      success: true,
+      message: 'Crew time logs fetched successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `POST /mobile/sync`.
+ * Idempotently syncs offline time logs for the authenticated user.
+ *
+ * @param {Request} req - Express request with validated sync body.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const syncTimeLogsController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const payload = req.body as TSyncTimeLogsPayload;
+    const data = await syncTimeLogsService({ user, payload });
+
+    res.status(200).json({
+      success: true,
+      message: 'Time logs synced successfully.',
       data,
       traceId,
     });

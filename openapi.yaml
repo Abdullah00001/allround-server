@@ -36,6 +36,8 @@ tags:
     description: Admin fleet vehicle management endpoints
   - name: MobileDashboard
     description: Mobile app dashboard, projects, and profile endpoints
+  - name: MobileTimeTracking
+    description: Mobile timer, crew time, and offline sync endpoints
 
 paths:
   /health:
@@ -5566,6 +5568,406 @@ paths:
               schema:
                 $ref: '#/components/schemas/SystemErrorResponse'
 
+  /api/v1/mobile/timer/start:
+    post:
+      tags: [MobileTimeTracking]
+      summary: Start mobile timer
+      description: Starts an active TimeLog for the authenticated user. Rejects with 409 when an open timer already exists.
+      operationId: startMobileTimer
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartMobileTimerRequest'
+      responses:
+        '201':
+          description: Timer started successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileTimeLogMutationResponse'
+        '400':
+          description: Invalid JSON payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
+        '401':
+          description: Authentication or device session failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Token not found'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Forbidden or inactive account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Only site managers can access crew time logs'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: Phase not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Phase not found'
+                errorType: 'PHASE_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '409':
+          description: Active timer already exists (checkNoActiveTimerMiddleware)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'An active timer already exists'
+                errorType: 'ACTIVE_TIMER_EXISTS'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/mobile/timer/stop:
+    post:
+      tags: [MobileTimeTracking]
+      summary: Stop mobile timer
+      description: Stops the authenticated user's open timer by timeLogId and sets endTime/GPS.
+      operationId: stopMobileTimer
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StopMobileTimerRequest'
+      responses:
+        '200':
+          description: Timer stopped successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileTimeLogMutationResponse'
+
+        '401':
+          description: Authentication or device session failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Token not found'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Forbidden or inactive account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Only site managers can access crew time logs'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: Active owned time log not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Active time log not found'
+                errorType: 'TIMELOG_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/mobile/timer/manual:
+    post:
+      tags: [MobileTimeTracking]
+      summary: Create manual time entry
+      description: Creates a manual TimeLog with status PENDING_APPROVAL and optional break minutes.
+      operationId: createMobileManualTime
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManualMobileTimeRequest'
+      responses:
+        '201':
+          description: Manual time entry submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileTimeLogMutationResponse'
+
+        '401':
+          description: Authentication or device session failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Token not found'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Forbidden or inactive account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Only site managers can access crew time logs'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: Phase not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Phase not found'
+                errorType: 'PHASE_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/mobile/time-logs:
+    get:
+      tags: [MobileTimeTracking]
+      summary: List my time logs
+      description: Returns the authenticated user's time logs filtered by UTC period TODAY, WEEK, or MONTH.
+      operationId: getMobileMyTimeLogs
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: query
+          name: period
+          schema:
+            type: string
+            enum: [TODAY, WEEK, MONTH]
+            default: TODAY
+      responses:
+        '200':
+          description: Time logs fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMobileMyTimeLogsResponse'
+
+        '401':
+          description: Authentication or device session failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Token not found'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Forbidden or inactive account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Only site managers can access crew time logs'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '422':
+          description: Request query validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/mobile/crew-time/{phaseId}:
+    get:
+      tags: [MobileTimeTracking]
+      summary: Get crew time for phase
+      description: Site Manager only. Returns all time logs for a phase on a project the manager is assigned to.
+      operationId: getMobileCrewTime
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: path
+          name: phaseId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Crew time logs fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMobileCrewTimeResponse'
+
+        '401':
+          description: Authentication or device session failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Token not found'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Forbidden or inactive account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Only site managers can access crew time logs'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: Phase not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Phase not found'
+                errorType: 'PHASE_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request params validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/mobile/sync:
+    post:
+      tags: [MobileTimeTracking]
+      summary: Sync offline time logs
+      description: Bulk upserts offline logs using clientSyncId for idempotency. New logs are saved as APPROVED non-manual entries.
+      operationId: syncMobileTimeLogs
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncMobileTimeLogsRequest'
+      responses:
+        '200':
+          description: Time logs synced successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncMobileTimeLogsResponse'
+
+        '401':
+          description: Authentication or device session failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Token not found'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Forbidden or inactive account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Only site managers can access crew time logs'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
 components:
   securitySchemes:
     adminAuth:
@@ -8257,6 +8659,195 @@ components:
             data:
               $ref: '#/components/schemas/MobileProfileDTO'
 
+
+    StartMobileTimerRequest:
+      type: object
+      required: [phaseId, activityType]
+      properties:
+        phaseId:
+          type: string
+          format: uuid
+        activityType:
+          type: string
+          enum: [ERECTION, DISMANTLING, TRANSPORT, MAINTENANCE, OTHER]
+        gpsStartLat:
+          type: number
+        gpsStartLng:
+          type: number
+    StopMobileTimerRequest:
+      type: object
+      required: [timeLogId]
+      properties:
+        timeLogId:
+          type: string
+          format: uuid
+        gpsEndLat:
+          type: number
+        gpsEndLng:
+          type: number
+    ManualMobileTimeRequest:
+      type: object
+      required: [phaseId, activityType, startTime, endTime]
+      properties:
+        phaseId:
+          type: string
+          format: uuid
+        activityType:
+          type: string
+          enum: [ERECTION, DISMANTLING, TRANSPORT, MAINTENANCE, OTHER]
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        breakMinutes:
+          type: integer
+          minimum: 0
+          default: 0
+    SyncMobileTimeLogItem:
+      type: object
+      required: [clientSyncId, phaseId, activityType, startTime, endTime]
+      properties:
+        clientSyncId:
+          type: string
+        phaseId:
+          type: string
+          format: uuid
+        activityType:
+          type: string
+          enum: [ERECTION, DISMANTLING, TRANSPORT, MAINTENANCE, OTHER]
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        breakMinutes:
+          type: integer
+          minimum: 0
+          default: 0
+    SyncMobileTimeLogsRequest:
+      type: object
+      required: [logs]
+      properties:
+        logs:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/SyncMobileTimeLogItem'
+    MobileTimeLogUserDTO:
+      type: object
+      required: [id, firstName, lastName]
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+    MobileTimeLogDTO:
+      type: object
+      required: [id, phaseId, activityType, startTime, endTime, isManual, status, clientSyncId, breakMinutes, netHours, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        phaseId:
+          type: string
+          format: uuid
+        activityType:
+          type: string
+          enum: [ERECTION, DISMANTLING, TRANSPORT, MAINTENANCE, OTHER]
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+          nullable: true
+        isManual:
+          type: boolean
+        status:
+          type: string
+          enum: [PENDING_APPROVAL, APPROVED, REJECTED]
+        clientSyncId:
+          type: string
+          nullable: true
+        breakMinutes:
+          type: number
+        netHours:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        user:
+          $ref: '#/components/schemas/MobileTimeLogUserDTO'
+    MobileSyncResultDTO:
+      type: object
+      required: [created, skipped, logs]
+      properties:
+        created:
+          type: integer
+        skipped:
+          type: integer
+        logs:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileTimeLogDTO'
+    MobileTimeLogMutationResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Timer started successfully.'
+            data:
+              $ref: '#/components/schemas/MobileTimeLogDTO'
+    GetMobileMyTimeLogsResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Time logs fetched successfully.'
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/MobileTimeLogDTO'
+    GetMobileCrewTimeResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Crew time logs fetched successfully.'
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/MobileTimeLogDTO'
+    SyncMobileTimeLogsResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Time logs synced successfully.'
+            data:
+              $ref: '#/components/schemas/MobileSyncResultDTO'
+
     HealthResponse:
       type: object
       properties:
@@ -8348,6 +8939,7 @@ components:
                 - VEHICLE_ALREADY_ASSIGNED
                 - PLATE_NUMBER_ALREADY_EXISTS
                 - TIMELOG_NOT_FOUND
+                - ACTIVE_TIMER_EXISTS
                 - ABSENCE_NOT_FOUND
                 - INVALID_DEVICE_CONTEXT
                 - DEVICE_NOT_FOUND
