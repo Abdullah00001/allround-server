@@ -42,6 +42,8 @@ tags:
     description: Mobile site-manager inspection survey endpoints
   - name: MobilePhase
     description: Mobile site-manager phase board endpoints
+  - name: MobileConfig
+    description: Mobile app configuration, languages, and legal content
 
 paths:
   /health:
@@ -4438,6 +4440,90 @@ paths:
               schema:
                 $ref: '#/components/schemas/SystemErrorResponse'
   /api/v1/admin/time-logs/{id}:
+    patch:
+      tags: [TimeLog]
+      summary: Update time log
+      description: Partially updates a time log. When CompanyProfile.requireReasonForTimeEdit is true, a non-empty reason is required (checkReasonForTimeEditMiddleware).
+      operationId: updateTimeLog
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema: {type: string}
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTimeLogRequest'
+      responses:
+        '200':
+          description: Time log updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateTimeLogResponse'
+        '400':
+          description: Reason required when requireReasonForTimeEdit is enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'A reason is required to edit this time log.'
+                errorType: 'BAD_REQUEST'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Access token not found in cookies'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Invalid CSRF token'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '404':
+          description: Time log not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Time log not found'
+                errorType: 'TIMELOG_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
     delete:
       tags: [TimeLog]
       summary: Delete time log
@@ -5412,6 +5498,48 @@ paths:
               schema:
                 $ref: '#/components/schemas/SystemErrorResponse'
 
+  /api/v1/mobile/config:
+    get:
+      tags: [MobileConfig]
+      summary: Get mobile app configuration
+      description: Returns company default/enabled languages, allowEmployeeManualTime, and LegalContent rows for Settings and Legal screens. Uses mobile bearerAuth chain.
+      operationId: getMobileConfig
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: Mobile config fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMobileConfigResponse'
+        '401':
+          description: Authentication or device session failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Token not found'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Forbidden or inactive account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Account is inactive'
+                errorType: 'ACCOUNT_INACTIVE'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
   /api/v1/mobile/dashboard:
     get:
       tags: [MobileDashboard]
@@ -5727,7 +5855,7 @@ paths:
     post:
       tags: [MobileTimeTracking]
       summary: Create manual time entry
-      description: Creates a manual TimeLog with status PENDING_APPROVAL and optional break minutes.
+      description: Creates a manual TimeLog with status PENDING_APPROVAL and optional break minutes. Employees are blocked with 403 when CompanyProfile.allowEmployeeManualTime is false.
       operationId: createMobileManualTime
       security: [{bearerAuth: []}]
       requestBody:
@@ -5756,17 +5884,26 @@ paths:
                 errorType: 'TOKEN_INVALID'
                 traceId: '123e4567-e89b-12d3-a456-426614174000'
         '403':
-          description: Forbidden or inactive account
+          description: Forbidden — inactive account, or employee manual time disabled
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthErrorResponse'
-              example:
-                success: false
-                message: 'Only site managers can access crew time logs'
-                errorType: 'FORBIDDEN'
-                traceId: '123e4567-e89b-12d3-a456-426614174000'
-
+              examples:
+                inactiveAccount:
+                  summary: Inactive account
+                  value:
+                    success: false
+                    message: 'Account is inactive'
+                    errorType: 'ACCOUNT_INACTIVE'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                manualTimeDisabled:
+                  summary: Manual time disabled for employees
+                  value:
+                    success: false
+                    message: 'Manual time entries are disabled by your administrator.'
+                    errorType: 'FORBIDDEN'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
         '404':
           description: Phase not found
           content:
@@ -6745,10 +6882,7 @@ components:
           description: Whether the user completed profile setup
         language:
           type: string
-          enum:
-            - EN
-            - DE
-            - TR
+          enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU]
           example: 'EN'
           description: Preferred user interface language
 
@@ -8360,7 +8494,7 @@ components:
               type: string
     TimeLogDTO:
       type: object
-      required: [id, userId, phaseId, activityType, startTime, endTime, isManual, status, breakMinutes, netHours, user, phase, createdAt, updatedAt]
+      required: [id, userId, phaseId, activityType, startTime, endTime, isManual, status, editReason, breakMinutes, netHours, user, phase, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -8386,6 +8520,9 @@ components:
         status:
           type: string
           enum: [PENDING_APPROVAL, APPROVED, REJECTED]
+        editReason:
+          type: string
+          nullable: true
         breakMinutes:
           type: number
         netHours:
@@ -9609,6 +9746,79 @@ components:
               example: 'Phase status updated successfully.'
             data:
               $ref: '#/components/schemas/MobileManagedPhaseDTO'
+
+
+    MobileLegalContentDTO:
+      type: object
+      required: [legalContentType, content, updatedAt]
+      properties:
+        legalContentType:
+          type: string
+          enum: [ABOUT_US, TERMS_AND_CONDITION, PRIVACY_AND_POLICY, DATA_PROTECTION]
+        content:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+    MobileConfigDTO:
+      type: object
+      required: [defaultLanguage, enabledLanguages, allowEmployeeManualTime, legalContents]
+      properties:
+        defaultLanguage:
+          type: string
+          enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU]
+        enabledLanguages:
+          type: array
+          items:
+            type: string
+            enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU]
+        allowEmployeeManualTime:
+          type: boolean
+        legalContents:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileLegalContentDTO'
+    GetMobileConfigResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Mobile config fetched successfully.'
+            data:
+              $ref: '#/components/schemas/MobileConfigDTO'
+    UpdateTimeLogRequest:
+      type: object
+      properties:
+        activityType:
+          type: string
+          enum: [ERECTION, DISMANTLING, TRANSPORT, MAINTENANCE, OTHER]
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        breakMinutes:
+          type: integer
+          minimum: 0
+        reason:
+          type: string
+          description: Required when CompanyProfile.requireReasonForTimeEdit is true
+      additionalProperties: false
+    UpdateTimeLogResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Time log updated successfully.'
+            data:
+              $ref: '#/components/schemas/TimeLogDTO'
 
     HealthResponse:
       type: object

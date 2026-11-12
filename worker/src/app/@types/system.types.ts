@@ -26,6 +26,8 @@ export type TEnv = {
   S3_BUCKET_NAME: string;
   S3_PUBLIC_URL: string;
   SERVER_URL: string;
+  TRANSLATION_PROVIDER: string;
+  GOOGLE_TRANSLATION_API_KEY: string;
 };
 
 export type TMailOption = {

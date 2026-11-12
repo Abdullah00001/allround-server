@@ -14,6 +14,7 @@ import { checkInspectionExistenceMiddleware } from '@/app/modules/inspection/ins
 import { checkPhaseExistenceMiddleware } from '@/app/modules/project/project.middlewares';
 import {
   checkCrewTimeProjectExistenceMiddleware,
+  checkEmployeeManualTimeAllowedMiddleware,
   checkInspectionAssignedToSiteManagerMiddleware,
   checkInspectionPendingForSurveyMiddleware,
   checkNoActiveTimerMiddleware,
@@ -29,6 +30,7 @@ import {
   getCrewTimeController,
   getDashboardController,
   getMapController,
+  getMobileConfigController,
   getMobileInspectionByIdController,
   getMyProjectsController,
   getMyTimeLogsController,
@@ -74,6 +76,8 @@ const mobileAuth = [
  */
 const siteManagerAuth = [...mobileAuth, checkSiteManagerRoleMiddleware] as const;
 
+router.route('/mobile/config').get(...mobileAuth, getMobileConfigController);
+
 router.route('/mobile/dashboard').get(...mobileAuth, getDashboardController);
 
 router.route('/mobile/projects').get(...mobileAuth, getMyProjectsController);
@@ -103,6 +107,7 @@ router
   .route('/mobile/timer/manual')
   .post(
     ...mobileAuth,
+    checkEmployeeManualTimeAllowedMiddleware,
     validateReqBody(manualTimeSchema),
     checkPhaseExistenceMiddleware,
     createManualTimeController

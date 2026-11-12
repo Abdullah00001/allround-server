@@ -14,6 +14,7 @@ import {
   getCrewTimeService,
   getDashboardDataService,
   getMapDataService,
+  getMobileConfigService,
   getMobileInspectionByIdService,
   getMyProjectsService,
   getMyTimeLogsService,
@@ -38,6 +39,29 @@ import {
   TSyncTimeLogsPayload,
   TUpdateMobilePhaseStatusPayload,
 } from '@/app/modules/mobile/mobile.types';
+
+/**
+ * Handles `GET /mobile/config`.
+ * Returns company language settings, manual-time policy, and legal contents.
+ *
+ * @param {Request} _req - Express request (auth already validated).
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const getMobileConfigController = asyncHandler(
+  async (_req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const data = await getMobileConfigService();
+
+    res.status(200).json({
+      success: true,
+      message: 'Mobile config fetched successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
 
 /**
  * Handles `GET /mobile/dashboard`.

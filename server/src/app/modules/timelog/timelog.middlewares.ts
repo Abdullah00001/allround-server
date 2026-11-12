@@ -4,7 +4,10 @@ import { getTraceId } from '@/app/configs/requestContext.configs';
 import { asyncHandler } from '@/app/utils/system.utils';
 import prisma from '@/app/configs/db.configs';
 import { AuthErrorType } from '@/const';
-import { TCreateTimeLogPayload } from '@/app/modules/timelog/timelog.types';
+import {
+  TCreateTimeLogPayload,
+  TUpdateTimeLogPayload,
+} from '@/app/modules/timelog/timelog.types';
 
 /**
  * Verifies that a time log exists for `req.params.id`.
@@ -90,6 +93,41 @@ export const checkTimeLogPendingMiddleware = asyncHandler(
       res.status(400).json({
         success: false,
         message: 'Time log is not pending approval',
+        errorType: AuthErrorType.BAD_REQUEST,
+        traceId,
+      });
+      return;
+    }
+
+    next();
+  }
+);
+
+/**
+ * Enforces `CompanyProfile.requireReasonForTimeEdit` on admin time-log edits.
+ * When the setting is enabled, a non-empty `reason` body field is required.
+ * Missing company profile defaults to not requiring a reason.
+ *
+ * @param {Request} req - Express request with validated update body.
+ * @param {Response} res - Express response used for the 400 envelope.
+ * @param {NextFunction} next - Continues when the reason policy is satisfied.
+ * @returns {Promise<void>}
+ */
+export const checkReasonForTimeEditMiddleware = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const traceId = getTraceId();
+    const payload = req.body as TUpdateTimeLogPayload;
+
+    const profile = await prisma.companyProfile.findUnique({
+      where: { id: 'global' },
+      select: { requireReasonForTimeEdit: true },
+    });
+
+    const requiresReason = profile?.requireReasonForTimeEdit ?? false;
+    if (requiresReason && !payload.reason?.trim()) {
+      res.status(400).json({
+        success: false,
+        message: 'A reason is required to edit this time log.',
         errorType: AuthErrorType.BAD_REQUEST,
         traceId,
       });

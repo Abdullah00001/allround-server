@@ -111,9 +111,24 @@ enum LegalContentType {
 }
 
 enum Language {
-  EN
-  DE
-  TR
+  DE // German
+  EN // English (GB)
+  PL // Polish
+  RO // Romanian
+  TR // Turkish
+  BG // Bulgarian
+  HR // Croatian
+  SR // Serbian (RS)
+  UK // Ukrainian (UA)
+  RU // Russian
+  SQ // Albanian (AL)
+  IT // Italian
+  FR // French
+  ES // Spanish
+  PT // Portuguese
+  NL // Dutch
+  EL // Greek (GR)
+  HU // Hungarian
 }
 
 // NEW: For the Notification Bell
@@ -441,8 +456,9 @@ model TimeLog {
   gpsEndLat    Decimal?       @db.Decimal(10, 8)
   gpsEndLng    Decimal?       @db.Decimal(11, 8)
 
-  clientSyncId String?        @unique 
-  
+  clientSyncId String?        @unique
+  editReason   String?
+
   breaks       TimeLogBreak[] 
 
   createdAt    DateTime       @default(now())
@@ -486,15 +502,19 @@ model Absence {
 
 // For the Settings Screen (Image 18)
 model CompanyProfile {
-  id              String   @id @default("global")
-  displayName     String
-  officialName    String
-  taxId           String?
-  headOffice      String?
-  logoUrl         String?
-  siteManagerAccessRule String // "RESTRICT_TO_ASSIGNED" or "GLOBAL_ACCESS"
-  
-  updatedAt       DateTime @updatedAt
+  id                        String     @id @default("global")
+  displayName               String
+  officialName              String
+  taxId                     String?
+  headOffice                String?
+  logoUrl                   String?
+  siteManagerAccessRule     String // "RESTRICT_TO_ASSIGNED" or "GLOBAL_ACCESS"
+  defaultLanguage           Language   @default(DE)
+  enabledLanguages          Language[] @default([DE, EN])
+  allowEmployeeManualTime   Boolean    @default(true)
+  requireReasonForTimeEdit  Boolean    @default(false)
+
+  updatedAt                 DateTime   @updatedAt
 }
 
 model SystemSetting {

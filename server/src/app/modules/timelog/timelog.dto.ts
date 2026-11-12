@@ -83,6 +83,7 @@ export class TimeLogDTO {
    * @param {string | null} endTime - ISO end timestamp or null.
    * @param {boolean} isManual - Whether the log was entered manually by admin.
    * @param {TimeLogStatus} status - Approval status.
+   * @param {string | null} editReason - Last admin edit reason when provided.
    * @param {number} breakMinutes - Total break minutes.
    * @param {number} netHours - Net hours after subtracting breaks.
    * @param {TimeLogUserDTO} user - Nested user.
@@ -99,6 +100,7 @@ export class TimeLogDTO {
     public endTime: string | null,
     public isManual: boolean,
     public status: TimeLogStatus,
+    public editReason: string | null,
     public breakMinutes: number,
     public netHours: number,
     public user: TimeLogUserDTO,
@@ -133,6 +135,7 @@ export class TimeLogDTO {
       timeLog.endTime ? timeLog.endTime.toISOString() : null,
       timeLog.isManual,
       timeLog.status,
+      timeLog.editReason,
       Number(sumBreakMinutes(timeLog.breaks).toFixed(2)),
       calculateNetHours(timeLog),
       TimeLogUserDTO.build(timeLog.user),

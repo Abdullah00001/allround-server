@@ -1,5 +1,6 @@
 import {
   InspectionStatus,
+  Language,
   PhaseStatus,
   PhaseType,
   Prisma,
@@ -15,12 +16,14 @@ import {
 import { calculateNetHours } from '@/app/modules/timelog/timelog.helpers';
 import {
   getProjectDto,
+  MobileConfigDTO,
   MobileCrewBreakdownDTO,
   MobileCrewTimeDTO,
   MobileDashboardDTO,
   MobileDashboardStatsDTO,
   MobileHoursByActivityDTO,
   MobileInspectionDTO,
+  MobileLegalContentDTO,
   MobileManagedPhaseDTO,
   MobileMapPinDTO,
   MobileMapProjectDTO,
@@ -229,6 +232,52 @@ const getLoggedHoursByProjectId = async (
   }
 
   return totals;
+};
+
+/**
+ * Loads mobile app configuration for Settings / Legal screens.
+ * Missing company profile falls back to safe defaults
+ * (`DE`, `[DE, EN]`, manual time allowed).
+ *
+ * @returns {Promise<MobileConfigDTO>} Config payload for the authenticated mobile client.
+ */
+export const getMobileConfigService = async (): Promise<MobileConfigDTO> => {
+  const [profile, legalRows] = await Promise.all([
+    prisma.companyProfile.findUnique({
+      where: { id: 'global' },
+      select: {
+        defaultLanguage: true,
+        enabledLanguages: true,
+        allowEmployeeManualTime: true,
+      },
+    }),
+    prisma.legalContent.findMany({
+      orderBy: { legalContentType: 'asc' },
+      select: {
+        legalContentType: true,
+        content: true,
+        updatedAt: true,
+      },
+    }),
+  ]);
+
+  const legalContents = legalRows.map(
+    (row) =>
+      new MobileLegalContentDTO(
+        row.legalContentType,
+        row.content,
+        row.updatedAt.toISOString()
+      )
+  );
+
+  return new MobileConfigDTO(
+    profile?.defaultLanguage ?? Language.DE,
+    profile?.enabledLanguages?.length
+      ? profile.enabledLanguages
+      : [Language.DE, Language.EN],
+    profile?.allowEmployeeManualTime ?? true,
+    legalContents
+  );
 };
 
 /**

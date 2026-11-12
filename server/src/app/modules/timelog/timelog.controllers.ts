@@ -9,10 +9,12 @@ import {
   deleteTimeLogService,
   listTimeLogsService,
   rejectTimeLogService,
+  updateTimeLogService,
 } from '@/app/modules/timelog/timelog.services';
 import {
   TCreateTimeLogPayload,
   TGetTimeLogsQuery,
+  TUpdateTimeLogPayload,
 } from '@/app/modules/timelog/timelog.types';
 
 /**
@@ -106,6 +108,31 @@ export const rejectTimeLogController = asyncHandler(
     res.status(200).json({
       success: true,
       message: 'Time log rejected successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `PATCH /admin/time-logs/:id`.
+ * Relies on existence + optional reason-policy middlewares.
+ *
+ * @param {Request} req - Express request with trusted `req.timeLog` and body.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const updateTimeLogController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const timeLog = req.timeLog as TimeLog;
+    const payload = req.body as TUpdateTimeLogPayload;
+    const data = await updateTimeLogService({ timeLog, payload });
+
+    res.status(200).json({
+      success: true,
+      message: 'Time log updated successfully.',
       data,
       traceId,
     });

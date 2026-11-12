@@ -11,6 +11,7 @@ import {
 } from '@/app/modules/admin/admin.middlewares';
 import { checkPhaseExistenceMiddleware } from '@/app/modules/project/project.middlewares';
 import {
+  checkReasonForTimeEditMiddleware,
   checkTimeLogExistenceMiddleware,
   checkTimeLogPendingMiddleware,
   checkTimeLogUserExistenceMiddleware,
@@ -21,11 +22,13 @@ import {
   deleteTimeLogController,
   listTimeLogsController,
   rejectTimeLogController,
+  updateTimeLogController,
 } from '@/app/modules/timelog/timelog.controllers';
 import {
   createTimeLogSchema,
   getTimeLogsQuerySchema,
   timeLogIdParamsSchema,
+  updateTimeLogSchema,
 } from '@/app/modules/timelog/timelog.schema';
 
 const router = Router();
@@ -76,6 +79,14 @@ router
 
 router
   .route('/admin/time-logs/:id')
+  .patch(
+    ...adminAuth,
+    validateReqParams(timeLogIdParamsSchema),
+    checkTimeLogExistenceMiddleware,
+    validateReqBody(updateTimeLogSchema),
+    checkReasonForTimeEditMiddleware,
+    updateTimeLogController
+  )
   .delete(
     ...adminAuth,
     validateReqParams(timeLogIdParamsSchema),

@@ -1,0 +1,26 @@
+-- AlterEnum: add remaining Language values (keep existing EN, DE, TR)
+ALTER TYPE "Language" ADD VALUE IF NOT EXISTS 'PL';
+ALTER TYPE "Language" ADD VALUE IF NOT EXISTS 'RO';
+ALTER TYPE "Language" ADD VALUE IF NOT EXISTS 'BG';
+ALTER TYPE "Language" ADD VALUE IF NOT EXISTS 'HR';
+ALTER TYPE "Language" ADD VALUE IF NOT EXISTS 'SR';
+ALTER TYPE "Language" ADD VALUE IF NOT EXISTS 'UK';
+ALTER TYPE "Language" ADD VALUE IF NOT EXISTS 'RU';
+ALTER TYPE "Language" ADD VALUE IF NOT EXISTS 'SQ';
+ALTER TYPE "Language" ADD VALUE IF NOT EXISTS 'IT';
+ALTER TYPE "Language" ADD VALUE IF NOT EXISTS 'FR';
+ALTER TYPE "Language" ADD VALUE IF NOT EXISTS 'ES';
+ALTER TYPE "Language" ADD VALUE IF NOT EXISTS 'PT';
+ALTER TYPE "Language" ADD VALUE IF NOT EXISTS 'NL';
+ALTER TYPE "Language" ADD VALUE IF NOT EXISTS 'EL';
+ALTER TYPE "Language" ADD VALUE IF NOT EXISTS 'HU';
+
+-- AlterTable CompanyProfile settings
+ALTER TABLE "CompanyProfile" ADD COLUMN IF NOT EXISTS "defaultLanguage" "Language" NOT NULL DEFAULT 'DE';
+ALTER TABLE "CompanyProfile" ADD COLUMN IF NOT EXISTS "enabledLanguages" "Language"[] DEFAULT ARRAY['DE', 'EN']::"Language"[];
+ALTER TABLE "CompanyProfile" ALTER COLUMN "enabledLanguages" SET NOT NULL;
+ALTER TABLE "CompanyProfile" ADD COLUMN IF NOT EXISTS "allowEmployeeManualTime" BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE "CompanyProfile" ADD COLUMN IF NOT EXISTS "requireReasonForTimeEdit" BOOLEAN NOT NULL DEFAULT false;
+
+-- AlterTable TimeLog
+ALTER TABLE "TimeLog" ADD COLUMN IF NOT EXISTS "editReason" TEXT;

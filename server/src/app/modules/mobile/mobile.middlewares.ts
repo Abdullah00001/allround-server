@@ -17,6 +17,45 @@ import {
 } from '@/app/modules/mobile/mobile.types';
 
 /**
+ * Blocks employee manual time entries when company settings disable them.
+ * Site managers are never blocked by this toggle. Missing profile defaults to allowed.
+ *
+ * @param {Request} req - Express request with authenticated `req.user`.
+ * @param {Response} res - Express response used for the 403 envelope.
+ * @param {NextFunction} next - Continues when manual time is allowed.
+ * @returns {Promise<void>}
+ */
+export const checkEmployeeManualTimeAllowedMiddleware = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+
+    if (user.role !== Role.EMPLOYEE) {
+      next();
+      return;
+    }
+
+    const profile = await prisma.companyProfile.findUnique({
+      where: { id: 'global' },
+      select: { allowEmployeeManualTime: true },
+    });
+
+    const allowed = profile?.allowEmployeeManualTime ?? true;
+    if (!allowed) {
+      res.status(403).json({
+        success: false,
+        message: 'Manual time entries are disabled by your administrator.',
+        errorType: AuthErrorType.FORBIDDEN,
+        traceId,
+      });
+      return;
+    }
+
+    next();
+  }
+);
+
+/**
  * Blocks starting a new timer when the user already has an open `TimeLog`
  * (`endTime: null`). Responds with 409 `ACTIVE_TIMER_EXISTS`.
  *

@@ -5,6 +5,7 @@ import {
   TCreateTimeLogServiceParams,
   TListTimeLogsServiceParams,
   TTimeLogMutationServiceParams,
+  TUpdateTimeLogServiceParams,
 } from '@/app/modules/timelog/timelog.types';
 
 const timeLogInclude = {
@@ -167,4 +168,61 @@ export const deleteTimeLogService = async ({
     where: { id: timeLog.id },
   });
   return { id: timeLog.id };
+};
+
+/**
+ * Applies an admin partial update to a time log.
+ * When `breakMinutes` is provided, existing breaks are replaced with a single
+ * synthetic break starting at the (possibly updated) start time.
+ * Persists `editReason` when `reason` is supplied (after policy middleware).
+ *
+ * @param {TUpdateTimeLogServiceParams} params - Trusted time log and payload.
+ * @returns {Promise<TimeLogDTO>} Updated time-log DTO.
+ */
+export const updateTimeLogService = async ({
+  timeLog,
+  payload,
+}: TUpdateTimeLogServiceParams): Promise<TimeLogDTO> => {
+  const nextStartTime = payload.startTime ?? timeLog.startTime;
+  const nextEndTime =
+    payload.endTime !== undefined ? payload.endTime : timeLog.endTime;
+
+  const updated = await prisma.$transaction(async (tx) => {
+    if (payload.breakMinutes !== undefined) {
+      await tx.timeLogBreak.deleteMany({ where: { timeLogId: timeLog.id } });
+
+      if (payload.breakMinutes > 0 && nextEndTime) {
+        const breakEnd = new Date(
+          nextStartTime.getTime() + payload.breakMinutes * 60 * 1000
+        );
+        await tx.timeLogBreak.create({
+          data: {
+            timeLogId: timeLog.id,
+            startTime: nextStartTime,
+            endTime: breakEnd,
+            durationMinutes: payload.breakMinutes,
+          },
+        });
+      }
+    }
+
+    return tx.timeLog.update({
+      where: { id: timeLog.id },
+      data: {
+        ...(payload.activityType !== undefined
+          ? { activityType: payload.activityType }
+          : {}),
+        ...(payload.startTime !== undefined
+          ? { startTime: payload.startTime }
+          : {}),
+        ...(payload.endTime !== undefined ? { endTime: payload.endTime } : {}),
+        ...(payload.reason !== undefined
+          ? { editReason: payload.reason }
+          : {}),
+      },
+      include: timeLogInclude,
+    });
+  });
+
+  return TimeLogDTO.build(updated);
 };

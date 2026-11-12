@@ -19,6 +19,8 @@ export type TEnv = {
   JWT_VERIFY_OTP_PAGE_SECRET_KEY: string;
   OTP_HASH_SECRET: string;
   JWT_RESET_PASSWORD_TOKEN_SECRET_KEY: string;
+  TRANSLATION_PROVIDER: string;
+  GOOGLE_TRANSLATION_API_KEY: string;
 };
 
 /**

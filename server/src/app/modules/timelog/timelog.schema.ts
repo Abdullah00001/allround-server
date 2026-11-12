@@ -61,3 +61,30 @@ export const createTimeLogSchema = z
     message: 'endTime must be after startTime',
     path: ['endTime'],
   });
+
+/**
+ * Request body schema for `PATCH /admin/time-logs/:id`.
+ * All fields optional; `reason` is required by middleware when company
+ * setting `requireReasonForTimeEdit` is enabled.
+ */
+export const updateTimeLogSchema = z
+  .object({
+    activityType: z
+      .enum(ActivityType, { message: 'Invalid activity type' })
+      .optional(),
+    startTime: z.coerce.date({ error: 'Invalid start time' }).optional(),
+    endTime: z.coerce.date({ error: 'Invalid end time' }).optional(),
+    breakMinutes: z.number().int().min(0).optional(),
+    reason: z.string().trim().min(1).optional(),
+  })
+  .strict()
+  .refine(
+    (data) =>
+      data.startTime === undefined ||
+      data.endTime === undefined ||
+      data.endTime.getTime() > data.startTime.getTime(),
+    {
+      message: 'endTime must be after startTime',
+      path: ['endTime'],
+    }
+  );

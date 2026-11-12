@@ -2,6 +2,8 @@ import {
   ActivityType,
   Inspection,
   InspectionStatus,
+  Language,
+  LegalContentType,
   PhaseStatus,
   PhaseType,
   Priority,
@@ -586,6 +588,40 @@ export class MobileManagedPhaseDTO {
     public startDate: string | null,
     public endDate: string | null,
     public project: { id: string; name: string; address: string }
+  ) {}
+}
+
+/**
+ * Legal content row for the mobile Legal Information screen.
+ */
+export class MobileLegalContentDTO {
+  /**
+   * @param {LegalContentType} legalContentType - Content category.
+   * @param {string} content - HTML/text body.
+   * @param {string} updatedAt - ISO last-updated timestamp.
+   */
+  constructor(
+    public legalContentType: LegalContentType,
+    public content: string,
+    public updatedAt: string
+  ) {}
+}
+
+/**
+ * Mobile app configuration from company settings + legal content.
+ */
+export class MobileConfigDTO {
+  /**
+   * @param {Language} defaultLanguage - Company default language.
+   * @param {Language[]} enabledLanguages - Languages enabled for the mobile UI.
+   * @param {boolean} allowEmployeeManualTime - Whether employees may submit manual time.
+   * @param {MobileLegalContentDTO[]} legalContents - Published legal documents.
+   */
+  constructor(
+    public defaultLanguage: Language,
+    public enabledLanguages: Language[],
+    public allowEmployeeManualTime: boolean,
+    public legalContents: MobileLegalContentDTO[]
   ) {}
 }
 

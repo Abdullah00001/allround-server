@@ -1,4 +1,3 @@
-
 import { TEnv } from '@/app/@types/system.types';
 import { getEnv } from '@/app/utils/env.utils';
 
@@ -8,4 +7,6 @@ export const env: TEnv = {
   REDIS_HOST: getEnv('REDIS_HOST'),
   REDIS_PASSWORD: getEnv('REDIS_PASSWORD'),
   REDIS_PORT: Number(getEnv('REDIS_PORT')),
+  TRANSLATION_PROVIDER: getEnv('TRANSLATION_PROVIDER'),
+  GOOGLE_TRANSLATION_API_KEY: getEnv('GOOGLE_TRANSLATION_API_KEY'),
 };
