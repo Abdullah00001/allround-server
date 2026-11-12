@@ -1,8 +1,11 @@
 import { z } from 'zod';
-import { Inspection, ProjectPhase, TimeLog, User } from '@prisma/client';
+import { Inspection, Project, ProjectPhase, TimeLog, User } from '@prisma/client';
 import {
   completeInspectionSchema,
+  getCrewTimeQuerySchema,
+  getMapQuerySchema,
   getMyTimeLogsQuerySchema,
+  getScheduleQuerySchema,
   manualTimeSchema,
   startTimerSchema,
   stopTimerSchema,
@@ -43,6 +46,21 @@ export type TSyncTimeLogsPayload = z.infer<typeof syncTimeLogsSchema>;
  * Validated my-time-logs query.
  */
 export type TGetMyTimeLogsQuery = z.infer<typeof getMyTimeLogsQuerySchema>;
+
+/**
+ * Validated schedule calendar query.
+ */
+export type TGetScheduleQuery = z.infer<typeof getScheduleQuerySchema>;
+
+/**
+ * Validated map query.
+ */
+export type TGetMapQuery = z.infer<typeof getMapQuerySchema>;
+
+/**
+ * Validated project crew-time query.
+ */
+export type TGetCrewTimeQuery = z.infer<typeof getCrewTimeQuerySchema>;
 
 /**
  * Service params for starting a timer.
@@ -89,13 +107,35 @@ export type TGetMyTimeLogsServiceParams = {
 };
 
 /**
- * Service params for site-manager crew time view.
+ * Service params for site-manager project crew-time aggregation.
  */
 export type TGetCrewTimeServiceParams = {
   /** Authenticated site manager. */
   user: User;
-  /** Trusted phase from existence middleware. */
-  phase: ProjectPhase;
+  /** Trusted project from existence + access middlewares. */
+  project: Project;
+  /** Validated query (optional UTC date filter). */
+  query: TGetCrewTimeQuery;
+};
+
+/**
+ * Service params for the Site Manager schedule calendar.
+ */
+export type TGetScheduleServiceParams = {
+  /** Authenticated site manager. */
+  user: User;
+  /** Validated inclusive date window. */
+  query: TGetScheduleQuery;
+};
+
+/**
+ * Service params for the Site Manager map tab.
+ */
+export type TGetMapServiceParams = {
+  /** Authenticated site manager. */
+  user: User;
+  /** Validated optional phase-type filter. */
+  query: TGetMapQuery;
 };
 
 /**

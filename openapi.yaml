@@ -5576,7 +5576,7 @@ paths:
     post:
       tags: [MobileTimeTracking]
       summary: Start mobile timer
-      description: Starts an active TimeLog for the authenticated user. Rejects with 409 when an open timer already exists.
+      description: Starts an active TimeLog and returns `{ timeLog, project }` (role-aware project via getProjectDto). Rejects with 409 when an open timer already exists.
       operationId: startMobileTimer
       security: [{bearerAuth: []}]
       requestBody:
@@ -5591,7 +5591,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MobileTimeLogMutationResponse'
+                $ref: '#/components/schemas/StartMobileTimerResponse'
         '400':
           description: Invalid JSON payload
           content:
@@ -5847,28 +5847,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemErrorResponse'
-  /api/v1/mobile/crew-time/{phaseId}:
+  /api/v1/mobile/schedule:
     get:
-      tags: [MobileTimeTracking]
-      summary: Get crew time for phase
-      description: Site Manager only. Returns all time logs for a phase on a project the manager is assigned to.
-      operationId: getMobileCrewTime
+      tags: [MobileDashboard]
+      summary: Get site-manager schedule
+      description: Site Manager only. Returns ProjectPhases overlapping the query window, grouped by UTC date. Respects CompanyProfile.siteManagerAccessRule. Excludes phases with null startDate/endDate.
+      operationId: getMobileSchedule
       security: [{bearerAuth: []}]
       parameters:
-        - in: path
-          name: phaseId
+        - in: query
+          name: startDate
           required: true
           schema:
             type: string
-            format: uuid
+            format: date-time
+        - in: query
+          name: endDate
+          required: true
+          schema:
+            type: string
+            format: date-time
       responses:
         '200':
-          description: Crew time logs fetched successfully
+          description: Schedule fetched successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GetMobileCrewTimeResponse'
-
+                $ref: '#/components/schemas/GetMobileScheduleResponse'
         '401':
           description: Authentication or device session failed
           content:
@@ -5881,30 +5886,148 @@ paths:
                 errorType: 'TOKEN_INVALID'
                 traceId: '123e4567-e89b-12d3-a456-426614174000'
         '403':
-          description: Forbidden or inactive account
+          description: Forbidden (not site manager / not assigned)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthErrorResponse'
               example:
                 success: false
-                message: 'Only site managers can access crew time logs'
+                message: 'Only site managers can access this resource'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '422':
+          description: Request query validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/mobile/map:
+    get:
+      tags: [MobileDashboard]
+      summary: Get site-manager map pins
+      description: Site Manager only. Returns distinct projects with lat/lng and an active phase type. Respects siteManagerAccessRule. Optional type filter.
+      operationId: getMobileMap
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: query
+          name: type
+          required: false
+          schema:
+            type: string
+            enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
+      responses:
+        '200':
+          description: Map data fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMobileMapResponse'
+        '401':
+          description: Authentication or device session failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Token not found'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Forbidden (not site manager / not assigned)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Only site managers can access this resource'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '422':
+          description: Request query validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/mobile/crew-time:
+    get:
+      tags: [MobileTimeTracking]
+      summary: Get project crew time
+      description: Site Manager only. Aggregates TimeLogs for a project (optional UTC date filter). Returns totalProjectHours, hoursByActivity, crewBreakdown, and log details.
+      operationId: getMobileCrewTime
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: query
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: date
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Crew time fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMobileCrewTimeResponse'
+        '401':
+          description: Authentication or device session failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Token not found'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Forbidden (not site manager / not assigned)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Only site managers can access this resource'
                 errorType: 'FORBIDDEN'
                 traceId: '123e4567-e89b-12d3-a456-426614174000'
 
         '404':
-          description: Phase not found
+          description: Project not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthErrorResponse'
               example:
                 success: false
-                message: 'Phase not found'
-                errorType: 'PHASE_NOT_FOUND'
+                message: 'Project not found'
+                errorType: 'PROJECT_NOT_FOUND'
                 traceId: '123e4567-e89b-12d3-a456-426614174000'
         '422':
-          description: Request params validation failed
+          description: Request query validation failed
           content:
             application/json:
               schema:
@@ -8884,6 +9007,7 @@ components:
     MobileProjectDTO:
       type: object
       required: [id, name, address, customer, phases]
+      description: Financial fields are included only for SITE_MANAGER responses.
       properties:
         id:
           type: string
@@ -8905,6 +9029,15 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MobileProjectPhaseDTO'
+        budgetedHours:
+          type: number
+          description: Present for SITE_MANAGER only
+        totalLoggedHours:
+          type: number
+          description: Present for SITE_MANAGER only
+        isProfitable:
+          type: boolean
+          description: Present for SITE_MANAGER only
     MobileProfileDTO:
       type: object
       required: [id, firstName, lastName, role, email, phone, avatarUrl, weeklyHoursTarget, hoursThisWeek, assignedProjectsCount, completedProjectsCount]
@@ -9137,6 +9270,159 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/MobileTimeLogDTO'
+    MobileSchedulePhaseDTO:
+      type: object
+      required: [id, type, status, priority, startDate, endDate, project]
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
+        status:
+          type: string
+          enum: [ENQUIRY, QUOTATION, ORDER_CONFIRMED, IN_PROGRESS, COMPLETED, POSTPONED]
+        priority:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+        project:
+          type: object
+          required: [id, name, address]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            address:
+              type: string
+    MobileScheduleDayDTO:
+      type: object
+      required: [date, phases]
+      properties:
+        date:
+          type: string
+          example: '2026-11-12'
+        phases:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileSchedulePhaseDTO'
+    MobileMapProjectDTO:
+      type: object
+      required: [id, name, latitude, longitude, activePhaseType]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        latitude:
+          type: number
+          nullable: true
+        longitude:
+          type: number
+          nullable: true
+        activePhaseType:
+          type: string
+          enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
+    MobileHoursByActivityDTO:
+      type: object
+      required: [activityType, hours]
+      properties:
+        activityType:
+          type: string
+          enum: [ERECTION, DISMANTLING, TRANSPORT, MAINTENANCE, OTHER]
+        hours:
+          type: number
+    MobileCrewBreakdownDTO:
+      type: object
+      required: [user, totalHours, synced]
+      properties:
+        user:
+          type: object
+          required: [id, firstName, lastName]
+          properties:
+            id:
+              type: string
+              format: uuid
+            firstName:
+              type: string
+            lastName:
+              type: string
+        totalHours:
+          type: number
+        synced:
+          type: boolean
+    MobileCrewTimeDTO:
+      type: object
+      required: [totalProjectHours, hoursByActivity, crewBreakdown, logs]
+      properties:
+        totalProjectHours:
+          type: number
+        hoursByActivity:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileHoursByActivityDTO'
+        crewBreakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileCrewBreakdownDTO'
+        logs:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileTimeLogDTO'
+    MobileStartTimerDTO:
+      type: object
+      required: [timeLog, project]
+      properties:
+        timeLog:
+          $ref: '#/components/schemas/MobileTimeLogDTO'
+        project:
+          $ref: '#/components/schemas/MobileProjectDTO'
+    GetMobileScheduleResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Schedule fetched successfully.'
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/MobileScheduleDayDTO'
+    GetMobileMapResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Map data fetched successfully.'
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/MobileMapProjectDTO'
+    StartMobileTimerResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Timer started successfully.'
+            data:
+              $ref: '#/components/schemas/MobileStartTimerDTO'
     GetMobileCrewTimeResponse:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
@@ -9145,11 +9431,9 @@ components:
           properties:
             message:
               type: string
-              example: 'Crew time logs fetched successfully.'
+              example: 'Crew time fetched successfully.'
             data:
-              type: array
-              items:
-                $ref: '#/components/schemas/MobileTimeLogDTO'
+              $ref: '#/components/schemas/MobileCrewTimeDTO'
     SyncMobileTimeLogsResponse:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'

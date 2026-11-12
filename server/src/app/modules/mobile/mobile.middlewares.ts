@@ -1,10 +1,20 @@
 import { NextFunction, Request, Response } from 'express';
-import { Inspection, InspectionStatus, Role, TimeLog, User } from '@prisma/client';
+import {
+  Inspection,
+  InspectionStatus,
+  Project,
+  Role,
+  TimeLog,
+  User,
+} from '@prisma/client';
 import { getTraceId } from '@/app/configs/requestContext.configs';
 import { asyncHandler } from '@/app/utils/system.utils';
 import prisma from '@/app/configs/db.configs';
 import { AuthErrorType } from '@/const';
-import { TStopTimerPayload } from '@/app/modules/mobile/mobile.types';
+import {
+  TGetCrewTimeQuery,
+  TStopTimerPayload,
+} from '@/app/modules/mobile/mobile.types';
 
 /**
  * Blocks starting a new timer when the user already has an open `TimeLog`
@@ -186,12 +196,12 @@ export const checkOwnedActiveTimeLogMiddleware = asyncHandler(
 );
 
 /**
- * Ensures the authenticated site manager is assigned to the phase's project.
- * Must run after `checkPhaseExistenceMiddleware`.
+ * Ensures the authenticated site manager is assigned to the phase's project,
+ * or has company-wide `GLOBAL_ACCESS`. Must run after `checkPhaseExistenceMiddleware`.
  *
  * @param {Request} req - Express request with trusted `req.user` and `req.phase`.
  * @param {Response} res - Express response used for the 403 envelope.
- * @param {NextFunction} next - Continues when the manager is assigned.
+ * @param {NextFunction} next - Continues when the manager may access the phase.
  * @returns {Promise<void>}
  */
 export const checkSiteManagerPhaseAccessMiddleware = asyncHandler(
@@ -210,10 +220,113 @@ export const checkSiteManagerPhaseAccessMiddleware = asyncHandler(
       return;
     }
 
+    const profile = await prisma.companyProfile.findUnique({
+      where: { id: 'global' },
+      select: { siteManagerAccessRule: true },
+    });
+
+    if (profile?.siteManagerAccessRule === 'GLOBAL_ACCESS') {
+      next();
+      return;
+    }
+
     const assignment = await prisma.projectManagerAssignment.findUnique({
       where: {
         projectId_userId: {
           projectId: phase.projectId,
+          userId: user.id,
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!assignment) {
+      res.status(403).json({
+        success: false,
+        message: 'You are not assigned to this project',
+        errorType: AuthErrorType.FORBIDDEN,
+        traceId,
+      });
+      return;
+    }
+
+    next();
+  }
+);
+
+/**
+ * Loads a non-deleted project from validated `projectId` query for crew-time.
+ * Attaches the Prisma `Project` to `req.project` on success.
+ *
+ * @param {Request} req - Express request with `validatedQuery.projectId`.
+ * @param {Response} res - Express response used for the 404 envelope.
+ * @param {NextFunction} next - Continues when the project exists.
+ * @returns {Promise<void>}
+ */
+export const checkCrewTimeProjectExistenceMiddleware = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const traceId = getTraceId();
+    const query = req.validatedQuery as TGetCrewTimeQuery;
+
+    const project = await prisma.project.findFirst({
+      where: { id: query.projectId, deletedAt: null },
+    });
+
+    if (!project) {
+      res.status(404).json({
+        success: false,
+        message: 'Project not found',
+        errorType: AuthErrorType.PROJECT_NOT_FOUND,
+        traceId,
+      });
+      return;
+    }
+
+    req.project = project as Project;
+    next();
+  }
+);
+
+/**
+ * Ensures the authenticated site manager may view crew time for `req.project`.
+ * Allows access when `siteManagerAccessRule` is `GLOBAL_ACCESS` or when the
+ * user has a `ProjectManagerAssignment` on the project.
+ *
+ * @param {Request} req - Express request with trusted `req.user` and `req.project`.
+ * @param {Response} res - Express response used for the 403 envelope.
+ * @param {NextFunction} next - Continues when access is allowed.
+ * @returns {Promise<void>}
+ */
+export const checkSiteManagerProjectAccessMiddleware = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const project = req.project;
+
+    if (!project) {
+      res.status(404).json({
+        success: false,
+        message: 'Project not found',
+        errorType: AuthErrorType.PROJECT_NOT_FOUND,
+        traceId,
+      });
+      return;
+    }
+
+    const profile = await prisma.companyProfile.findUnique({
+      where: { id: 'global' },
+      select: { siteManagerAccessRule: true },
+    });
+
+    if (profile?.siteManagerAccessRule === 'GLOBAL_ACCESS') {
+      next();
+      return;
+    }
+
+    const assignment = await prisma.projectManagerAssignment.findUnique({
+      where: {
+        projectId_userId: {
+          projectId: project.id,
           userId: user.id,
         },
       },

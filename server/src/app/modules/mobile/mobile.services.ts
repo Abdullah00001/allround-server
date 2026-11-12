@@ -8,16 +8,27 @@ import {
   User,
 } from '@prisma/client';
 import prisma from '@/app/configs/db.configs';
+import {
+  aggregateLoggedHours,
+  TTimeLogWithBreaks,
+} from '@/app/modules/project/project.helpers';
 import { calculateNetHours } from '@/app/modules/timelog/timelog.helpers';
 import {
+  getProjectDto,
+  MobileCrewBreakdownDTO,
+  MobileCrewTimeDTO,
   MobileDashboardDTO,
   MobileDashboardStatsDTO,
+  MobileHoursByActivityDTO,
   MobileInspectionDTO,
   MobileManagedPhaseDTO,
   MobileMapPinDTO,
+  MobileMapProjectDTO,
   MobileProjectDTO,
-  MobileProjectPhaseDTO,
   MobileProfileDTO,
+  MobileScheduleDayDTO,
+  MobileSchedulePhaseDTO,
+  MobileStartTimerDTO,
   MobileSyncResultDTO,
   MobileTimeLogDTO,
   MobileUpcomingTaskDTO,
@@ -25,14 +36,18 @@ import {
 } from '@/app/modules/mobile/mobile.dto';
 import {
   getPeriodRange,
+  getUtcDayEndExclusive,
+  getUtcDayStart,
   getUtcWeekEndExclusive,
   getUtcWeekStart,
 } from '@/app/modules/mobile/mobile.helpers';
 import {
   TCompleteInspectionServiceParams,
   TGetCrewTimeServiceParams,
+  TGetMapServiceParams,
   TGetMobileInspectionServiceParams,
   TGetMyTimeLogsServiceParams,
+  TGetScheduleServiceParams,
   TListMobileInspectionsServiceParams,
   TListMobilePhasesServiceParams,
   TManualTimeServiceParams,
@@ -167,6 +182,56 @@ const countActiveProjects = async (): Promise<number> => {
 };
 
 /**
+ * Formats a Date as a UTC calendar day key `YYYY-MM-DD`.
+ *
+ * @param {Date} value - Instant to format.
+ * @returns {string} UTC date key.
+ */
+const toUtcDateKey = (value: Date): string => {
+  return value.toISOString().slice(0, 10);
+};
+
+/**
+ * Loads approved closed time logs for the given projects and returns a map of
+ * projectId → total net logged hours.
+ *
+ * @param {string[]} projectIds - Project UUIDs to aggregate.
+ * @returns {Promise<Map<string, number>>} Per-project logged hour totals.
+ */
+const getLoggedHoursByProjectId = async (
+  projectIds: string[]
+): Promise<Map<string, number>> => {
+  const totals = new Map<string, number>();
+  if (projectIds.length === 0) return totals;
+
+  const timeLogs = await prisma.timeLog.findMany({
+    where: {
+      status: TimeLogStatus.APPROVED,
+      endTime: { not: null },
+      phase: { projectId: { in: projectIds } },
+    },
+    include: {
+      breaks: true,
+      phase: { select: { projectId: true } },
+    },
+  });
+
+  const byProject = new Map<string, TTimeLogWithBreaks[]>();
+  for (const log of timeLogs) {
+    const projectId = log.phase.projectId;
+    const bucket = byProject.get(projectId) ?? [];
+    bucket.push(log);
+    byProject.set(projectId, bucket);
+  }
+
+  for (const [projectId, logs] of byProject.entries()) {
+    totals.set(projectId, aggregateLoggedHours(logs).totalLoggedHours);
+  }
+
+  return totals;
+};
+
+/**
  * Builds the mobile home dashboard: stats, upcoming tasks, and map pins.
  * Respects `CompanyProfile.siteManagerAccessRule`: SITE_MANAGER + GLOBAL_ACCESS
  * sees all active projects/phases; otherwise scopes to PM/crew assignments.
@@ -259,9 +324,11 @@ export const getDashboardDataService = async ({
  * SITE_MANAGER + `GLOBAL_ACCESS` returns every non-deleted project with all
  * phases. Otherwise returns assignment-scoped projects (PM → all phases on
  * managed projects; crew → only assigned phases).
+ * Project rows are built via `getProjectDto` so site managers receive
+ * budget/logged/profitability fields while employees do not.
  *
  * @param {TMobileUserServiceParams} params - Authenticated user wrapper.
- * @returns {Promise<MobileProjectDTO[]>} Mobile-safe project rows.
+ * @returns {Promise<MobileProjectDTO[]>} Role-aware mobile project rows.
  */
 export const getMyProjectsService = async ({
   user,
@@ -281,25 +348,16 @@ export const getMyProjectsService = async ({
       orderBy: { updatedAt: 'desc' },
     });
 
-    return projects.map(
-      (project) =>
-        new MobileProjectDTO(
-          project.id,
-          project.name,
-          project.address,
-          { id: project.customer.id, name: project.customer.name },
-          project.phases.map(
-            (phase) =>
-              new MobileProjectPhaseDTO(
-                phase.id,
-                phase.type,
-                phase.status,
-                phase.priority,
-                phase.startDate ? phase.startDate.toISOString() : null,
-                phase.endDate ? phase.endDate.toISOString() : null
-              )
-          )
-        )
+    const loggedByProject = await getLoggedHoursByProjectId(
+      projects.map((project) => project.id)
+    );
+
+    return projects.map((project) =>
+      getProjectDto(
+        project,
+        user.role,
+        loggedByProject.get(project.id) ?? 0
+      )
     );
   }
 
@@ -341,33 +399,20 @@ export const getMyProjectsService = async ({
     orderBy: { updatedAt: 'desc' },
   });
 
-  return projects.map((project) => {
-    const phases = project.phases
-      .filter((phase) =>
-        managedProjectIds.has(project.id)
-          ? true
-          : crewPhaseIds.has(phase.id)
-      )
-      .map(
-        (phase) =>
-          new MobileProjectPhaseDTO(
-            phase.id,
-            phase.type,
-            phase.status,
-            phase.priority,
-            phase.startDate ? phase.startDate.toISOString() : null,
-            phase.endDate ? phase.endDate.toISOString() : null
-          )
-      );
+  const scopedProjects = projects.map((project) => ({
+    ...project,
+    phases: managedProjectIds.has(project.id)
+      ? project.phases
+      : project.phases.filter((phase) => crewPhaseIds.has(phase.id)),
+  }));
 
-    return new MobileProjectDTO(
-      project.id,
-      project.name,
-      project.address,
-      { id: project.customer.id, name: project.customer.name },
-      phases
-    );
-  });
+  const loggedByProject = await getLoggedHoursByProjectId(
+    scopedProjects.map((project) => project.id)
+  );
+
+  return scopedProjects.map((project) =>
+    getProjectDto(project, user.role, loggedByProject.get(project.id) ?? 0)
+  );
 };
 
 /**
@@ -456,15 +501,17 @@ export const getProfileStatsService = async ({
 /**
  * Starts an active timer for the authenticated user on a phase.
  * Assumes no-active-timer middleware already gated concurrent sessions.
+ * Returns the open time log plus a role-aware project DTO for navigation
+ * and (for site managers) budget/profitability UI.
  *
  * @param {TStartTimerServiceParams} params - User, phase, and start payload.
- * @returns {Promise<MobileTimeLogDTO>} Created open time log.
+ * @returns {Promise<MobileStartTimerDTO>} Open time log with project context.
  */
 export const startTimerService = async ({
   user,
   phase,
   payload,
-}: TStartTimerServiceParams): Promise<MobileTimeLogDTO> => {
+}: TStartTimerServiceParams): Promise<MobileStartTimerDTO> => {
   const timeLog = await prisma.timeLog.create({
     data: {
       userId: user.id,
@@ -483,7 +530,20 @@ export const startTimerService = async ({
     include: timeLogInclude,
   });
 
-  return MobileTimeLogDTO.build(timeLog);
+  const project = await prisma.project.findUniqueOrThrow({
+    where: { id: phase.projectId },
+    include: {
+      customer: { select: { id: true, name: true } },
+      phases: { orderBy: { createdAt: 'desc' } },
+    },
+  });
+
+  const loggedByProject = await getLoggedHoursByProjectId([project.id]);
+
+  return new MobileStartTimerDTO(
+    MobileTimeLogDTO.build(timeLog),
+    getProjectDto(project, user.role, loggedByProject.get(project.id) ?? 0)
+  );
 };
 
 /**
@@ -589,22 +649,242 @@ export const getMyTimeLogsService = async ({
 };
 
 /**
- * Lists all time logs for a phase for an authorized site manager.
- * Assumes role and project-assignment middlewares already passed.
+ * Aggregates crew time for a managed project (optional UTC calendar-day filter).
+ * Assumes site-manager role + project existence/access middlewares already passed.
+ * Includes per-activity totals, per-user breakdown with sync flags (`!!clientSyncId`),
+ * and the underlying time-log details.
  *
- * @param {TGetCrewTimeServiceParams} params - Site manager and trusted phase.
- * @returns {Promise<MobileTimeLogDTO[]>} Phase time logs with user details.
+ * @param {TGetCrewTimeServiceParams} params - Site manager, project, and query.
+ * @returns {Promise<MobileCrewTimeDTO>} Aggregated crew-time payload.
  */
 export const getCrewTimeService = async ({
-  phase,
-}: TGetCrewTimeServiceParams): Promise<MobileTimeLogDTO[]> => {
+  project,
+  query,
+}: TGetCrewTimeServiceParams): Promise<MobileCrewTimeDTO> => {
+  const dateFilter = query.date
+    ? (() => {
+        const start = getUtcDayStart(query.date);
+        return {
+          startTime: {
+            gte: start,
+            lt: getUtcDayEndExclusive(start),
+          },
+        };
+      })()
+    : {};
+
   const timeLogs = await prisma.timeLog.findMany({
-    where: { phaseId: phase.id },
+    where: {
+      phase: { projectId: project.id },
+      ...dateFilter,
+    },
     include: timeLogWithUserInclude,
     orderBy: { startTime: 'desc' },
   });
 
-  return timeLogs.map(MobileTimeLogDTO.build);
+  const { totalLoggedHours, hoursByActivity } = aggregateLoggedHours(
+    timeLogs as TTimeLogWithBreaks[]
+  );
+
+  const byUser = new Map<
+    string,
+    {
+      user: { id: string; firstName: string; lastName: string };
+      hours: number;
+      logs: typeof timeLogs;
+    }
+  >();
+
+  for (const log of timeLogs) {
+    const existing = byUser.get(log.userId);
+    const hours = calculateNetHours(log);
+    if (existing) {
+      existing.hours += hours;
+      existing.logs.push(log);
+      continue;
+    }
+
+    byUser.set(log.userId, {
+      user: {
+        id: log.user.id,
+        firstName: log.user.firstName,
+        lastName: log.user.lastName,
+      },
+      hours,
+      logs: [log],
+    });
+  }
+
+  const crewBreakdown = [...byUser.values()].map(
+    (row) =>
+      new MobileCrewBreakdownDTO(
+        row.user,
+        Number(row.hours.toFixed(2)),
+        row.logs.length > 0 && row.logs.every((log) => !!log.clientSyncId)
+      )
+  );
+
+  return new MobileCrewTimeDTO(
+    totalLoggedHours,
+    hoursByActivity.map(
+      (row) => new MobileHoursByActivityDTO(row.activityType, row.hours)
+    ),
+    crewBreakdown,
+    timeLogs.map(MobileTimeLogDTO.build)
+  );
+};
+
+/**
+ * Builds the Site Manager calendar schedule: phases overlapping the query
+ * window, grouped by UTC calendar date. Respects `siteManagerAccessRule`
+ * (GLOBAL_ACCESS → all projects; otherwise PM/crew assignments). Phases with
+ * null `startDate` or `endDate` are excluded.
+ *
+ * @param {TGetScheduleServiceParams} params - Site manager and date window.
+ * @returns {Promise<MobileScheduleDayDTO[]>} Date-grouped schedule rows.
+ */
+export const getScheduleService = async ({
+  user,
+  query,
+}: TGetScheduleServiceParams): Promise<MobileScheduleDayDTO[]> => {
+  const globalAccess = await hasSiteManagerGlobalAccess(user);
+  const rangeStart = getUtcDayStart(query.startDate);
+  const rangeEndExclusive = getUtcDayEndExclusive(getUtcDayStart(query.endDate));
+
+  const phases = await prisma.projectPhase.findMany({
+    where: {
+      startDate: { not: null, lte: query.endDate },
+      endDate: { not: null, gte: query.startDate },
+      project: { deletedAt: null },
+      ...(globalAccess
+        ? {}
+        : {
+            OR: [
+              { crewAssignments: { some: { userId: user.id } } },
+              { project: { projectManagers: { some: { userId: user.id } } } },
+            ],
+          }),
+    },
+    include: {
+      project: {
+        select: { id: true, name: true, address: true },
+      },
+    },
+    orderBy: [{ startDate: 'asc' }, { priority: 'asc' }],
+  });
+
+  const byDate = new Map<string, MobileSchedulePhaseDTO[]>();
+
+  for (const phase of phases) {
+    if (!phase.startDate || !phase.endDate) continue;
+
+    const overlapStart = new Date(
+      Math.max(getUtcDayStart(phase.startDate).getTime(), rangeStart.getTime())
+    );
+    const overlapEnd = new Date(
+      Math.min(
+        getUtcDayStart(phase.endDate).getTime(),
+        getUtcDayStart(query.endDate).getTime()
+      )
+    );
+
+    for (
+      let cursor = overlapStart.getTime();
+      cursor <= overlapEnd.getTime();
+      cursor += 24 * 60 * 60 * 1000
+    ) {
+      const dateKey = toUtcDateKey(new Date(cursor));
+      const bucket = byDate.get(dateKey) ?? [];
+      bucket.push(
+        new MobileSchedulePhaseDTO(
+          phase.id,
+          phase.type,
+          phase.status,
+          phase.priority,
+          phase.startDate.toISOString(),
+          phase.endDate.toISOString(),
+          {
+            id: phase.project.id,
+            name: phase.project.name,
+            address: phase.project.address,
+          }
+        )
+      );
+      byDate.set(dateKey, bucket);
+    }
+  }
+
+  // Ensure empty day buckets across the requested inclusive window.
+  for (
+    let cursor = rangeStart.getTime();
+    cursor < rangeEndExclusive.getTime();
+    cursor += 24 * 60 * 60 * 1000
+  ) {
+    const dateKey = toUtcDateKey(new Date(cursor));
+    if (!byDate.has(dateKey)) byDate.set(dateKey, []);
+  }
+
+  return [...byDate.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, dayPhases]) => new MobileScheduleDayDTO(date, dayPhases));
+};
+
+/**
+ * Builds Site Manager map pins for projects with active phases.
+ * Respects `siteManagerAccessRule` and optional `?type=` phase-type filter.
+ *
+ * @param {TGetMapServiceParams} params - Site manager and optional type filter.
+ * @returns {Promise<MobileMapProjectDTO[]>} Distinct project map pins.
+ */
+export const getMapDataService = async ({
+  user,
+  query,
+}: TGetMapServiceParams): Promise<MobileMapProjectDTO[]> => {
+  const globalAccess = await hasSiteManagerGlobalAccess(user);
+
+  const phases = await prisma.projectPhase.findMany({
+    where: {
+      status: { in: ACTIVE_PHASE_STATUSES },
+      ...(query.type ? { type: query.type } : {}),
+      project: { deletedAt: null },
+      ...(globalAccess
+        ? {}
+        : {
+            OR: [
+              { crewAssignments: { some: { userId: user.id } } },
+              { project: { projectManagers: { some: { userId: user.id } } } },
+            ],
+          }),
+    },
+    include: {
+      project: {
+        select: {
+          id: true,
+          name: true,
+          latitude: true,
+          longitude: true,
+        },
+      },
+    },
+    orderBy: [{ priority: 'asc' }, { startDate: 'asc' }],
+  });
+
+  const pinByProject = new Map<string, MobileMapProjectDTO>();
+  for (const phase of phases) {
+    if (pinByProject.has(phase.project.id)) continue;
+    pinByProject.set(
+      phase.project.id,
+      new MobileMapProjectDTO(
+        phase.project.id,
+        phase.project.name,
+        decimalToNumber(phase.project.latitude),
+        decimalToNumber(phase.project.longitude),
+        phase.type
+      )
+    );
+  }
+
+  return [...pinByProject.values()];
 };
 
 /**

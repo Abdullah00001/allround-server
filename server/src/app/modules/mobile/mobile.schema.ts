@@ -1,4 +1,4 @@
-import { ActivityType, PhaseStatus } from '@prisma/client';
+import { ActivityType, PhaseStatus, PhaseType } from '@prisma/client';
 import { z } from 'zod';
 
 /**
@@ -81,11 +81,38 @@ export const getMyTimeLogsQuerySchema = z
   .strict();
 
 /**
- * Path params schema for `GET /mobile/crew-time/:phaseId`.
+ * Query schema for `GET /mobile/schedule`.
+ * Inclusive calendar window used to find overlapping scheduled phases.
  */
-export const crewTimePhaseParamsSchema = z
+export const getScheduleQuerySchema = z
   .object({
-    phaseId: z.string().uuid({ error: 'Invalid phase id' }),
+    startDate: z.coerce.date({ error: 'Invalid startDate' }),
+    endDate: z.coerce.date({ error: 'Invalid endDate' }),
+  })
+  .strict()
+  .refine((data) => data.endDate.getTime() >= data.startDate.getTime(), {
+    message: 'endDate must be on or after startDate',
+    path: ['endDate'],
+  });
+
+/**
+ * Query schema for `GET /mobile/map`.
+ * Optional phase-type filter for map pins.
+ */
+export const getMapQuerySchema = z
+  .object({
+    type: z.enum(PhaseType, { message: 'Invalid phase type' }).optional(),
+  })
+  .strict();
+
+/**
+ * Query schema for `GET /mobile/crew-time`.
+ * Project-scoped crew aggregation with optional UTC calendar-day filter.
+ */
+export const getCrewTimeQuerySchema = z
+  .object({
+    projectId: z.string().uuid({ error: 'Invalid project id' }),
+    date: z.coerce.date({ error: 'Invalid date' }).optional(),
   })
   .strict();
 

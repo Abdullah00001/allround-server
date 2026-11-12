@@ -125,7 +125,27 @@ export class MobileProjectPhaseDTO {
 }
 
 /**
- * Mobile projects-tab row (no admin-only fields).
+ * Project shape required by `getProjectDto` (customer + phases + budget).
+ */
+export type TMobileProjectDtoSource = {
+  id: string;
+  name: string;
+  address: string;
+  budgetedHours: Decimal | number;
+  customer: { id: string; name: string };
+  phases: Array<{
+    id: string;
+    type: PhaseType;
+    status: PhaseStatus;
+    priority: Priority;
+    startDate: Date | null;
+    endDate: Date | null;
+  }>;
+};
+
+/**
+ * Mobile projects-tab / timer-navigation project row.
+ * Financial fields are only present for `SITE_MANAGER` via `getProjectDto`.
  */
 export class MobileProjectDTO {
   /**
@@ -133,14 +153,184 @@ export class MobileProjectDTO {
    * @param {string} name - Project name.
    * @param {string} address - Project address.
    * @param {{ id: string; name: string }} customer - Customer id/name only.
-   * @param {MobileProjectPhaseDTO[]} phases - Phases assigned to the user.
+   * @param {MobileProjectPhaseDTO[]} phases - Phases visible to the user.
+   * @param {number} [budgetedHours] - Budget hours (site managers only).
+   * @param {number} [totalLoggedHours] - Approved logged hours (site managers only).
+   * @param {boolean} [isProfitable] - `totalLoggedHours <= budgetedHours` (site managers only).
    */
   constructor(
     public id: string,
     public name: string,
     public address: string,
     public customer: { id: string; name: string },
-    public phases: MobileProjectPhaseDTO[]
+    public phases: MobileProjectPhaseDTO[],
+    public budgetedHours?: number,
+    public totalLoggedHours?: number,
+    public isProfitable?: boolean
+  ) {}
+}
+
+/**
+ * Builds a role-aware mobile project DTO.
+ * Site managers receive budget/logged/profitability fields; employees do not.
+ *
+ * @param {TMobileProjectDtoSource} project - Project with customer, phases, and budget.
+ * @param {Role} userRole - Authenticated user's role.
+ * @param {number} totalLoggedHours - Aggregated approved net hours for the project.
+ * @returns {MobileProjectDTO} Conditional project DTO for mobile clients.
+ */
+export const getProjectDto = (
+  project: TMobileProjectDtoSource,
+  userRole: Role,
+  totalLoggedHours: number
+): MobileProjectDTO => {
+  const phases = project.phases.map(
+    (phase) =>
+      new MobileProjectPhaseDTO(
+        phase.id,
+        phase.type,
+        phase.status,
+        phase.priority,
+        phase.startDate ? phase.startDate.toISOString() : null,
+        phase.endDate ? phase.endDate.toISOString() : null
+      )
+  );
+
+  const dto = new MobileProjectDTO(
+    project.id,
+    project.name,
+    project.address,
+    { id: project.customer.id, name: project.customer.name },
+    phases
+  );
+
+  if (userRole === Role.SITE_MANAGER) {
+    const budgetedHours = Number(project.budgetedHours);
+    dto.budgetedHours = budgetedHours;
+    dto.totalLoggedHours = Number(totalLoggedHours.toFixed(2));
+    dto.isProfitable = dto.totalLoggedHours <= budgetedHours;
+  }
+
+  return dto;
+};
+
+/**
+ * Wrapper returned by `POST /mobile/timer/start`.
+ */
+export class MobileStartTimerDTO {
+  /**
+   * @param {MobileTimeLogDTO} timeLog - Newly opened time log.
+   * @param {MobileProjectDTO} project - Role-aware project for navigation/budget UI.
+   */
+  constructor(
+    public timeLog: MobileTimeLogDTO,
+    public project: MobileProjectDTO
+  ) {}
+}
+
+/**
+ * Phase card nested under a calendar day group.
+ */
+export class MobileSchedulePhaseDTO {
+  /**
+   * @param {string} id - Phase UUID.
+   * @param {PhaseType} type - Phase type.
+   * @param {PhaseStatus} status - Phase status.
+   * @param {Priority} priority - Phase priority.
+   * @param {string} startDate - ISO start date (non-null for calendar rows).
+   * @param {string} endDate - ISO end date (non-null for calendar rows).
+   * @param {{ id: string; name: string; address: string }} project - Parent project summary.
+   */
+  constructor(
+    public id: string,
+    public type: PhaseType,
+    public status: PhaseStatus,
+    public priority: Priority,
+    public startDate: string,
+    public endDate: string,
+    public project: { id: string; name: string; address: string }
+  ) {}
+}
+
+/**
+ * Calendar day bucket for the Site Manager schedule tab.
+ */
+export class MobileScheduleDayDTO {
+  /**
+   * @param {string} date - UTC calendar date `YYYY-MM-DD`.
+   * @param {MobileSchedulePhaseDTO[]} phases - Phases overlapping this date.
+   */
+  constructor(
+    public date: string,
+    public phases: MobileSchedulePhaseDTO[]
+  ) {}
+}
+
+/**
+ * Map-tab pin for a project with an active phase.
+ */
+export class MobileMapProjectDTO {
+  /**
+   * @param {string} id - Project UUID.
+   * @param {string} name - Project name.
+   * @param {number | null} latitude - Project latitude.
+   * @param {number | null} longitude - Project longitude.
+   * @param {PhaseType} activePhaseType - Active phase type badge.
+   */
+  constructor(
+    public id: string,
+    public name: string,
+    public latitude: number | null,
+    public longitude: number | null,
+    public activePhaseType: PhaseType
+  ) {}
+}
+
+/**
+ * Per-activity hour bucket for crew-time aggregates.
+ */
+export class MobileHoursByActivityDTO {
+  /**
+   * @param {ActivityType} activityType - Activity category.
+   * @param {number} hours - Net hours for the activity.
+   */
+  constructor(
+    public activityType: ActivityType,
+    public hours: number
+  ) {}
+}
+
+/**
+ * Per-user crew breakdown row for project crew-time.
+ */
+export class MobileCrewBreakdownDTO {
+  /**
+   * @param {{ id: string; firstName: string; lastName: string }} user - Crew member.
+   * @param {number} totalHours - Net hours for the member in the filtered window.
+   * @param {boolean} synced - `true` when every included log has a `clientSyncId`.
+   */
+  constructor(
+    public user: { id: string; firstName: string; lastName: string },
+    public totalHours: number,
+    public synced: boolean
+  ) {}
+}
+
+/**
+ * Aggregated project crew-time payload for Site Managers.
+ */
+export class MobileCrewTimeDTO {
+  /**
+   * @param {number} totalProjectHours - Sum of net hours in the filtered window.
+   * @param {MobileHoursByActivityDTO[]} hoursByActivity - Hours grouped by activity type.
+   * @param {MobileCrewBreakdownDTO[]} crewBreakdown - Per-user totals and sync flags.
+   * @param {MobileTimeLogDTO[]} logs - Detailed time logs included in the aggregate.
+   */
+  constructor(
+    public totalProjectHours: number,
+    public hoursByActivity: MobileHoursByActivityDTO[],
+    public crewBreakdown: MobileCrewBreakdownDTO[],
+    public logs: MobileTimeLogDTO[]
   ) {}
 }
 

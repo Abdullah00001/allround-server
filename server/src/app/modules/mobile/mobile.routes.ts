@@ -13,11 +13,13 @@ import {
 import { checkInspectionExistenceMiddleware } from '@/app/modules/inspection/inspection.middlewares';
 import { checkPhaseExistenceMiddleware } from '@/app/modules/project/project.middlewares';
 import {
+  checkCrewTimeProjectExistenceMiddleware,
   checkInspectionAssignedToSiteManagerMiddleware,
   checkInspectionPendingForSurveyMiddleware,
   checkNoActiveTimerMiddleware,
   checkOwnedActiveTimeLogMiddleware,
   checkSiteManagerPhaseAccessMiddleware,
+  checkSiteManagerProjectAccessMiddleware,
   checkSiteManagerRoleMiddleware,
   mapPhaseIdFromParamsMiddleware,
 } from '@/app/modules/mobile/mobile.middlewares';
@@ -26,10 +28,12 @@ import {
   createManualTimeController,
   getCrewTimeController,
   getDashboardController,
+  getMapController,
   getMobileInspectionByIdController,
   getMyProjectsController,
   getMyTimeLogsController,
   getProfileController,
+  getScheduleController,
   listMobileInspectionsController,
   listMobilePhasesController,
   startTimerController,
@@ -39,8 +43,10 @@ import {
 } from '@/app/modules/mobile/mobile.controllers';
 import {
   completeInspectionSchema,
-  crewTimePhaseParamsSchema,
+  getCrewTimeQuerySchema,
+  getMapQuerySchema,
   getMyTimeLogsQuerySchema,
+  getScheduleQuerySchema,
   manualTimeSchema,
   mobileInspectionIdParamsSchema,
   mobilePhaseIdParamsSchema,
@@ -111,13 +117,28 @@ router
   );
 
 router
-  .route('/mobile/crew-time/:phaseId')
+  .route('/mobile/schedule')
   .get(
-    ...mobileAuth,
-    checkSiteManagerRoleMiddleware,
-    validateReqParams(crewTimePhaseParamsSchema),
-    checkPhaseExistenceMiddleware,
-    checkSiteManagerPhaseAccessMiddleware,
+    ...siteManagerAuth,
+    validateReqQuery(getScheduleQuerySchema),
+    getScheduleController
+  );
+
+router
+  .route('/mobile/map')
+  .get(
+    ...siteManagerAuth,
+    validateReqQuery(getMapQuerySchema),
+    getMapController
+  );
+
+router
+  .route('/mobile/crew-time')
+  .get(
+    ...siteManagerAuth,
+    validateReqQuery(getCrewTimeQuerySchema),
+    checkCrewTimeProjectExistenceMiddleware,
+    checkSiteManagerProjectAccessMiddleware,
     getCrewTimeController
   );
 

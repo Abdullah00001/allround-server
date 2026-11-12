@@ -1,5 +1,11 @@
 import { Request, Response } from 'express';
-import { Inspection, ProjectPhase, TimeLog, User } from '@prisma/client';
+import {
+  Inspection,
+  Project,
+  ProjectPhase,
+  TimeLog,
+  User,
+} from '@prisma/client';
 import { getTraceId } from '@/app/configs/requestContext.configs';
 import { asyncHandler } from '@/app/utils/system.utils';
 import {
@@ -7,10 +13,12 @@ import {
   createManualTimeService,
   getCrewTimeService,
   getDashboardDataService,
+  getMapDataService,
   getMobileInspectionByIdService,
   getMyProjectsService,
   getMyTimeLogsService,
   getProfileStatsService,
+  getScheduleService,
   listMobileInspectionsService,
   listMobilePhasesService,
   startTimerService,
@@ -20,7 +28,10 @@ import {
 } from '@/app/modules/mobile/mobile.services';
 import {
   TCompleteInspectionPayload,
+  TGetCrewTimeQuery,
+  TGetMapQuery,
   TGetMyTimeLogsQuery,
+  TGetScheduleQuery,
   TManualTimePayload,
   TStartTimerPayload,
   TStopTimerPayload,
@@ -203,10 +214,10 @@ export const getMyTimeLogsController = asyncHandler(
 );
 
 /**
- * Handles `GET /mobile/crew-time/:phaseId`.
- * Site-manager-only crew time view for a managed project phase.
+ * Handles `GET /mobile/crew-time`.
+ * Site-manager-only aggregated crew time for a managed project.
  *
- * @param {Request} req - Express request with trusted user/phase.
+ * @param {Request} req - Express request with trusted user/project and query.
  * @param {Response} res - Express response.
  * @returns {Promise<void>}
  */
@@ -214,12 +225,63 @@ export const getCrewTimeController = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const traceId = getTraceId();
     const user = req.user as User;
-    const phase = req.phase as ProjectPhase;
-    const data = await getCrewTimeService({ user, phase });
+    const project = req.project as Project;
+    const query = req.validatedQuery as TGetCrewTimeQuery;
+    const data = await getCrewTimeService({ user, project, query });
 
     res.status(200).json({
       success: true,
-      message: 'Crew time logs fetched successfully.',
+      message: 'Crew time fetched successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `GET /mobile/schedule`.
+ * Site-manager calendar: phases grouped by UTC date within the query window.
+ *
+ * @param {Request} req - Express request with trusted user and date query.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const getScheduleController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const query = req.validatedQuery as TGetScheduleQuery;
+    const data = await getScheduleService({ user, query });
+
+    res.status(200).json({
+      success: true,
+      message: 'Schedule fetched successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `GET /mobile/map`.
+ * Site-manager map pins for projects with active phases.
+ *
+ * @param {Request} req - Express request with trusted user and optional type filter.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const getMapController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const query = req.validatedQuery as TGetMapQuery;
+    const data = await getMapDataService({ user, query });
+
+    res.status(200).json({
+      success: true,
+      message: 'Map data fetched successfully.',
       data,
       traceId,
     });
