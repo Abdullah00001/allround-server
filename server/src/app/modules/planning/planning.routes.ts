@@ -13,8 +13,8 @@ import {
   checkOptionalPhaseQueryMiddleware,
   checkPlanningUserExistenceMiddleware,
   checkVehicleAvailableForDateMiddleware,
-  checkVehicleExistenceMiddleware,
 } from '@/app/modules/planning/planning.middlewares';
+import { checkVehicleExistenceMiddleware } from '@/app/modules/vehicle/vehicle.middlewares';
 import {
   assignCrewController,
   assignVehicleController,

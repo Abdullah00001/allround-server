@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
-import { User, Vehicle } from '@prisma/client';
+import { User } from '@prisma/client';
 import { getTraceId } from '@/app/configs/requestContext.configs';
 import { asyncHandler } from '@/app/utils/system.utils';
 import prisma from '@/app/configs/db.configs';
@@ -40,39 +40,6 @@ export const checkPlanningUserExistenceMiddleware = asyncHandler(
     }
 
     req.planningUser = user as User;
-    next();
-  }
-);
-
-/**
- * Verifies that `req.body.vehicleId` references a non-deleted vehicle.
- * Attaches the vehicle to `req.vehicle` on success.
- *
- * @param {Request} req - Express request with validated body `vehicleId`.
- * @param {Response} res - Express response used for the 404 envelope.
- * @param {NextFunction} next - Continues when the vehicle exists.
- * @returns {Promise<void>}
- */
-export const checkVehicleExistenceMiddleware = asyncHandler(
-  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const traceId = getTraceId();
-    const { vehicleId } = req.body as TAssignVehiclePayload;
-
-    const vehicle = await prisma.vehicle.findFirst({
-      where: { id: vehicleId, deletedAt: null },
-    });
-
-    if (!vehicle) {
-      res.status(404).json({
-        success: false,
-        message: 'Vehicle not found',
-        errorType: AuthErrorType.VEHICLE_NOT_FOUND,
-        traceId,
-      });
-      return;
-    }
-
-    req.vehicle = vehicle as Vehicle;
     next();
   }
 );

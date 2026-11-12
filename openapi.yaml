@@ -32,6 +32,8 @@ tags:
     description: Admin workforce absence management endpoints
   - name: UserManagement
     description: Admin workforce user management endpoints
+  - name: Vehicle
+    description: Admin fleet vehicle management endpoints
 
 paths:
   /health:
@@ -5098,6 +5100,310 @@ paths:
               schema:
                 $ref: '#/components/schemas/SystemErrorResponse'
 
+  /api/v1/admin/vehicles:
+    post:
+      tags: [Vehicle]
+      summary: Create vehicle
+      description: Creates a fleet vehicle. Plate uniqueness enforced by middleware (409 PLATE_NUMBER_ALREADY_EXISTS).
+      operationId: createVehicle
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateVehicleRequest'
+      responses:
+        '201':
+          description: Vehicle created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateVehicleResponse'
+        '400':
+          description: Invalid JSON payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Access token not found in cookies'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Invalid CSRF token'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '409':
+          description: Plate number already exists (checkPlateNumberNotExistsMiddleware)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Vehicle with this plate number already exists'
+                errorType: 'PLATE_NUMBER_ALREADY_EXISTS'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+    get:
+      tags: [Vehicle]
+      summary: List vehicles
+      description: Returns paginated non-deleted vehicles. Optional case-insensitive search on name or plateNumber.
+      operationId: listVehicles
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema: {type: string}
+        - in: query
+          name: page
+          schema: {type: integer, minimum: 1, default: 1}
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 100, default: 10}
+        - in: query
+          name: search
+          schema: {type: string}
+      responses:
+        '200':
+          description: Vehicles fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListVehiclesResponse'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Access token not found in cookies'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Invalid CSRF token'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '422':
+          description: Request query validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/vehicles/{id}:
+    patch:
+      tags: [Vehicle]
+      summary: Update vehicle
+      description: Updates vehicle name, plateNumber, and/or imageUrl. Soft-deleted vehicles cannot be updated.
+      operationId: updateVehicle
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema: {type: string}
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateVehicleRequest'
+      responses:
+        '200':
+          description: Vehicle updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateVehicleResponse'
+        '400':
+          description: Invalid JSON payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Access token not found in cookies'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Invalid CSRF token'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: Vehicle not found (checkVehicleExistenceMiddleware)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Vehicle not found'
+                errorType: 'VEHICLE_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '409':
+          description: Plate number already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Vehicle with this plate number already exists'
+                errorType: 'PLATE_NUMBER_ALREADY_EXISTS'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+    delete:
+      tags: [Vehicle]
+      summary: Soft delete vehicle
+      description: Sets deletedAt on the vehicle. Relies on checkVehicleExistenceMiddleware for 404.
+      operationId: deleteVehicle
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema: {type: string}
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Vehicle deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteVehicleResponse'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Access token not found in cookies'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Invalid CSRF token'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: Vehicle not found (checkVehicleExistenceMiddleware)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Vehicle not found'
+                errorType: 'VEHICLE_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request params validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
 components:
   securitySchemes:
     adminAuth:
@@ -7496,6 +7802,107 @@ components:
                   type: string
                   format: uuid
 
+
+    CreateVehicleRequest:
+      type: object
+      required: [name, plateNumber]
+      properties:
+        name:
+          type: string
+          example: 'Truck A'
+        plateNumber:
+          type: string
+          example: 'B-AB 1234'
+        imageUrl:
+          type: string
+          format: uri
+          example: 'https://cdn.example.com/vehicles/truck-a.jpg'
+    UpdateVehicleRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        plateNumber:
+          type: string
+        imageUrl:
+          type: string
+          format: uri
+          nullable: true
+      description: At least one field is required.
+    VehicleDTO:
+      type: object
+      required: [id, name, plateNumber, imageUrl, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        plateNumber:
+          type: string
+        imageUrl:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CreateVehicleResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Vehicle created successfully.'
+            data:
+              $ref: '#/components/schemas/VehicleDTO'
+    ListVehiclesResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data, meta]
+          properties:
+            message:
+              type: string
+              example: 'Vehicles fetched successfully.'
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/VehicleDTO'
+    UpdateVehicleResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Vehicle updated successfully.'
+            data:
+              $ref: '#/components/schemas/VehicleDTO'
+    DeleteVehicleResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Vehicle deleted successfully.'
+            data:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: string
+                  format: uuid
+
     HealthResponse:
       type: object
       properties:
@@ -7585,6 +7992,7 @@ components:
                 - PHASE_NOT_FOUND
                 - VEHICLE_NOT_FOUND
                 - VEHICLE_ALREADY_ASSIGNED
+                - PLATE_NUMBER_ALREADY_EXISTS
                 - TIMELOG_NOT_FOUND
                 - ABSENCE_NOT_FOUND
                 - INVALID_DEVICE_CONTEXT
