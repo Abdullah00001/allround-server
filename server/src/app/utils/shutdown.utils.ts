@@ -3,6 +3,7 @@ import { Server } from 'node:http';
 import { disconnectDatabase } from '@/app/configs/db.configs';
 import logger from '@/app/configs/logger.configs';
 import { disconnectRedis } from '@/app/configs/redis.configs';
+import { disconnectSocketRedisClients } from '@/app/configs/socketRedis.configs';
 
 type TShutdown = {
   reason: string;
@@ -12,6 +13,12 @@ type TShutdown = {
 
 let isShuttingDown = false;
 
+/**
+ * Gracefully stops HTTP, Socket.IO Redis clients, app Redis, and Prisma.
+ *
+ * @param {TShutdown} args - Shutdown reason, HTTP server, and optional error.
+ * @returns {Promise<void>}
+ */
 export const shutdown = async ({
   reason,
   server,
@@ -44,7 +51,7 @@ export const shutdown = async ({
         resolve();
       });
     });
-    // Close DB, Redis, queues here
+    await disconnectSocketRedisClients();
     await disconnectRedis();
     await disconnectDatabase();
   } catch (err) {

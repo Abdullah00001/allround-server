@@ -2,6 +2,7 @@ import {
   Absence,
   Customer,
   Inspection,
+  Notification,
   Profile,
   Project,
   ProjectPhase,
@@ -40,6 +41,7 @@ declare global {
       managedUser?: User;
       timeLog?: TimeLog;
       absence?: Absence;
+      notification?: Notification;
       serviceCharge: ServiceCharge;
       validatedQuery?: unknown;
       connectCallbackUserId: string;

@@ -1,6 +1,15 @@
 import Stripe from 'stripe';
 
-import { env } from '@/env';
+/**
+ * Optional Stripe secret for future billing/Connect work.
+ * Not required for the current Allround CRM / mobile slice.
+ */
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim() || '';
 
-/** Shared server-side Stripe client for approved Connect operations. */
-export const stripe = new Stripe(env.STRIPE_SECRET_KEY);
+/**
+ * Shared Stripe client. Remains `null` when `STRIPE_SECRET_KEY` is unset
+ * so TypeScript and runtime both stay green without Stripe as a core dependency.
+ */
+export const stripe: Stripe | null = stripeSecretKey
+  ? new Stripe(stripeSecretKey)
+  : null;

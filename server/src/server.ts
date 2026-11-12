@@ -16,7 +16,7 @@ const server: Server = createServer(app);
 async function main(): Promise<void> {
   await connectRedis();
   await connectDatabase();
-  initializeSocket(server); 
+  await initializeSocket(server);
   server.listen(port, '0.0.0.0', () => {
     console.log(`🧰 Worker status: ready`);
     console.log(`🌾 Corn status: ready`);

@@ -9,6 +9,22 @@ export const companyInformation = {
   copyright: `© ${new Date().getFullYear()} Allround. All rights reserved.`,
 };
 
+/**
+ * API path prefixes shared with the HTTP server (Socket.IO namespaces).
+ */
+export const baseUrl = {
+  v1: '/api/v1',
+  v2: '/api/v2',
+} as const;
+
+/**
+ * Socket.IO event names used when emitting from BullMQ workers.
+ */
+export const SOCKET_EVENTS = {
+  NOTIFICATION_NEW: 'notification:new',
+  NOTIFICATION_COUNT_RESPONSE: 'notification:count-response',
+} as const;
+
 export const emailInformation = {
   fromName: 'Allround',
   fromEmail: 'no-reply@allround.com',

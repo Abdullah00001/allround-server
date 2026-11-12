@@ -6,6 +6,10 @@ import logger from '@/app/configs/logger.configs';
 import { connectDatabase, disconnectDatabase } from '@/app/configs/db.configs';
 import { connectRedis, disconnectRedis } from '@/app/configs/redis.configs';
 import { initializeFirebase } from '@/app/configs/firebase.configs';
+import {
+  connectSocketEmitter,
+  disconnectSocketEmitter,
+} from '@/app/configs/socketEmitter.configs';
 
 import { loadAllWorkers } from '@/app/queues';
 
@@ -39,6 +43,9 @@ const shutdown = async (signal: string): Promise<void> => {
     // Close all workers (waits for active jobs to finish)
     await Promise.all(allWorkers.map((w) => w.close()));
     logger.info(`${TAG} All workers drained`);
+
+    await disconnectSocketEmitter();
+    logger.info(`${TAG} Socket emitter disconnected`);
 
     await disconnectRedis();
     logger.info(`${TAG} Redis disconnected`);
@@ -76,6 +83,7 @@ const start = async (): Promise<void> => {
   // Connect to both Redis and the database before workers start polling
   await connectRedis();
   await connectDatabase();
+  await connectSocketEmitter();
   initializeFirebase();
   allWorkers = loadAllWorkers();
   logger.info(

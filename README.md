@@ -276,3 +276,66 @@ Need to do something? Go directly to the source:
 - **I need to release vX.Y.Z** → Read [Release Management](docs/release-management.md) or Section 5 above.
 - **Production is broken!** → Read [Troubleshooting](docs/troubleshooting.md) → Check Observability → Rollback if necessary.
 - **I want AI to modify code** → Read [.agent/rules.md](.agent/rules.md) and instruct the AI strictly.
+
+---
+
+## Backend API Summary
+
+Base URL (local Docker): `http://localhost:5008/api/v1`  
+Interactive docs: `http://localhost:5008/api-docs`  
+Health: `http://localhost:5008/health`
+
+### Seed credentials
+
+Run `npm run prisma:seed` (or `npx prisma db seed`) against a migrated database, then log in with:
+
+| Role | Email | Password |
+| --- | --- | --- |
+| Admin | `admin@allround.com` | `Admin123!` |
+| Site Manager | `manager@allround.com` | `Manager123!` |
+| Employee | `employee@allround.com` | `Employee123!` |
+
+Seeded demo data also includes customers (`Bayer AG`, `Stadt Köln`), projects (`Golsteins.Complex`, `Rheinpark Tower`), phases, one pending inspection, and manager/crew assignments.
+
+### Auth
+
+- Mobile signup / OTP verify / login / logout / refresh (Bearer JWT + device session).
+- Admin login / refresh / logout (HTTP-only cookies + CSRF double-submit).
+- Password recover flows under `/api/v1/recover/*`.
+
+### Admin (cookie + `X-CSRF-Token`)
+
+CRM and workforce modules under `/api/v1/admin/*`:
+
+- Customers & contacts
+- Inspections (+ convert to project)
+- Projects / Kanban phases
+- Planning (crew & vehicle assignments)
+- Time logs (list / approve / reject / edit)
+- Absences
+- Users
+- Vehicles
+- Notifications (`GET /admin/notifications`, `PATCH .../read`, `PATCH .../read-all`)
+
+### Mobile (Bearer JWT + device session)
+
+Under `/api/v1/mobile/*`:
+
+- Dashboard, projects, project detail, profile
+- Timer / manual time / offline sync / crew-time
+- Schedule & map
+- Inspections & phase board (site manager)
+- Config / settings enforcement
+- Notifications (`GET /mobile/notifications`, `PATCH .../read`, `PATCH .../read-all`)
+
+### Notifications (REST)
+
+Both mobile and admin notification lists return paginated `items` plus `unreadCount`. Mark-read is ownership-scoped to the authenticated user.
+
+### Socket.IO (realtime)
+
+- Namespace: `/api/v1/notification`
+- Auth: mobile Bearer token **or** admin `access_token` cookie
+- On connect, clients join room `user:{userId}`
+- Key events: `notification:new`, `notification:count-response`, `notification:mark-read`, `notification:mark-all-read`
+- API server uses `@socket.io/redis-adapter`; BullMQ worker emits via `@socket.io/redis-emitter` after persisting notification rows (and FCM push)

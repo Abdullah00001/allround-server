@@ -1,14 +1,63 @@
 import { Job } from 'bullmq';
-import { DeviceStatus, RevokeReason } from '@prisma/client';
+import { DeviceStatus, Notification, RevokeReason } from '@prisma/client';
 import { IJobHandler } from '@/app/@types/queue.types';
 import { ISendPushNotification } from '@/app/queues/notification/notification.types';
-import { QUEUE_JOBS } from '@/const';
+import { QUEUE_JOBS, SOCKET_EVENTS } from '@/const';
 import prisma from '@/app/configs/db.configs';
 import logger from '@/app/configs/logger.configs';
 import { getFirebaseMessaging } from '@/app/configs/firebase.configs';
+import { emitToUserNotificationRoom } from '@/app/configs/socketEmitter.configs';
 
 /**
- * Persists in-app notifications and delivers FCM multicast pushes.
+ * Builds the real-time payload emitted to connected Socket.IO clients.
+ *
+ * @param {Notification} notification - Persisted notification row.
+ * @returns {object} Client-facing notification payload.
+ */
+const buildNotificationSocketPayload = (notification: Notification) => ({
+  id: notification.id,
+  type: notification.type,
+  title: notification.title,
+  message: notification.message,
+  link: notification.link,
+  isRead: notification.isRead,
+  createdAt: notification.createdAt,
+});
+
+/**
+ * Emits `notification:new` and an updated unread count to a user's room.
+ *
+ * @param {Notification} notification - Persisted notification row.
+ * @returns {Promise<void>}
+ */
+const emitRealtimeNotification = async (
+  notification: Notification
+): Promise<void> => {
+  try {
+    const unreadCount = await prisma.notification.count({
+      where: { userId: notification.userId, isRead: false },
+    });
+
+    emitToUserNotificationRoom(
+      notification.userId,
+      SOCKET_EVENTS.NOTIFICATION_NEW,
+      buildNotificationSocketPayload(notification)
+    );
+    emitToUserNotificationRoom(
+      notification.userId,
+      SOCKET_EVENTS.NOTIFICATION_COUNT_RESPONSE,
+      { count: unreadCount }
+    );
+  } catch (error) {
+    logger.error(
+      `[sendPushNotification] Failed to emit socket event for user ${notification.userId}`,
+      { error }
+    );
+  }
+};
+
+/**
+ * Persists in-app notifications, emits Socket.IO events via Redis, and delivers FCM.
  * Revokes device rows whose FCM tokens are invalid/unregistered.
  */
 const handler: IJobHandler<ISendPushNotification> = {
@@ -21,15 +70,25 @@ const handler: IJobHandler<ISendPushNotification> = {
     }
 
     try {
-      await prisma.notification.createMany({
-        data: userIds.map((userId) => ({
-          userId,
-          type,
-          title,
-          message: body,
-          isRead: false,
-        })),
-      });
+      const notifications = await prisma.$transaction(
+        userIds.map((userId) =>
+          prisma.notification.create({
+            data: {
+              userId,
+              type,
+              title,
+              message: body,
+              isRead: false,
+            },
+          })
+        )
+      );
+
+      await Promise.all(
+        notifications.map((notification) =>
+          emitRealtimeNotification(notification)
+        )
+      );
 
       const devices = await prisma.device.findMany({
         where: {

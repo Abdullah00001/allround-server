@@ -17,6 +17,7 @@ import { parse as parseYAML } from 'yaml';
 import corsConfiguration from '@/app/configs/cors.configs';
 import { getTraceId } from '@/app/configs/requestContext.configs';
 import { traceMiddleware } from '@/app/middlewares/trace.middlewares';
+import { localeMiddleware } from '@/app/middlewares/locale.middlewares';
 import { baseUrl } from '@/const';
 import { globalErrorMiddleware } from '@/app/middlewares/globalError.middlewares';
 import {
@@ -43,6 +44,7 @@ app.use((req, res, next) => {
 app.use(urlencoded({ extended: true }));
 app.set('trust proxy', 1);
 app.use(cookieParser());
+app.use(localeMiddleware);
 app.use(cors(corsConfiguration));
 app.use(
   morgan(morganMessageFormat, {

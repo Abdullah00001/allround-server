@@ -44,6 +44,8 @@ tags:
     description: Mobile site-manager phase board endpoints
   - name: MobileConfig
     description: Mobile app configuration, languages, and legal content
+  - name: Notification
+    description: In-app notification list and read-state endpoints for Mobile and Admin
 
 paths:
   /health:
@@ -5498,6 +5500,284 @@ paths:
               schema:
                 $ref: '#/components/schemas/SystemErrorResponse'
 
+  /api/v1/mobile/notifications:
+    get:
+      tags: [Notification]
+      summary: List mobile notifications
+      description: Returns a paginated list of the authenticated mobile user's notifications plus the current unreadCount.
+      operationId: getMobileNotifications
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Notifications retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetNotificationsResponse'
+        '401':
+          description: Authentication or device session failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Query validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
+  /api/v1/mobile/notifications/read-all:
+    patch:
+      tags: [Notification]
+      summary: Mark all mobile notifications as read
+      description: Marks every unread notification for the authenticated mobile user as read.
+      operationId: markAllMobileNotificationsRead
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: All notifications marked as read
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarkAllNotificationsReadResponse'
+        '401':
+          description: Authentication or device session failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
+  /api/v1/mobile/notifications/{id}/read:
+    patch:
+      tags: [Notification]
+      summary: Mark one mobile notification as read
+      description: Marks a single notification owned by the authenticated mobile user as read.
+      operationId: markMobileNotificationRead
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Notification marked as read
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarkNotificationReadResponse'
+        '401':
+          description: Authentication or device session failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Notification not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Path params validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
+  /api/v1/admin/notifications:
+    get:
+      tags: [Notification]
+      summary: List admin notifications
+      description: Returns a paginated list of the authenticated admin user's notifications plus the current unreadCount. Requires CSRF + admin cookie auth.
+      operationId: getAdminNotifications
+      security: [{adminAuth: []}]
+      parameters:
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Notifications retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetNotificationsResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF or admin privilege check failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Query validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
+  /api/v1/admin/notifications/read-all:
+    patch:
+      tags: [Notification]
+      summary: Mark all admin notifications as read
+      description: Marks every unread notification for the authenticated admin user as read. Requires CSRF + admin cookie auth.
+      operationId: markAllAdminNotificationsRead
+      security: [{adminAuth: []}]
+      parameters:
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: All notifications marked as read
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarkAllNotificationsReadResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF or admin privilege check failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
+  /api/v1/admin/notifications/{id}/read:
+    patch:
+      tags: [Notification]
+      summary: Mark one admin notification as read
+      description: Marks a single notification owned by the authenticated admin user as read. Requires CSRF + admin cookie auth.
+      operationId: markAdminNotificationRead
+      security: [{adminAuth: []}]
+      parameters:
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Notification marked as read
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarkNotificationReadResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF or admin privilege check failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Notification not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Path params validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
   /api/v1/mobile/config:
     get:
       tags: [MobileConfig]
@@ -6917,6 +7197,96 @@ components:
         - success
         - message
         - traceId
+
+    NotificationDTO:
+      type: object
+      required: [id, type, title, message, isRead, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum:
+            - PROJECT_ASSIGNED
+            - TIME_LOG_APPROVED
+            - TIME_LOG_REJECTED
+            - INSPECTION_SCHEDULED
+            - SYSTEM_ALERT
+        title:
+          type: string
+        message:
+          type: string
+        link:
+          type: string
+          nullable: true
+        isRead:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    GetNotificationsResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [meta, data]
+          properties:
+            message:
+              type: string
+              example: Notifications retrieved successfully
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
+            data:
+              type: object
+              required: [items, unreadCount]
+              properties:
+                items:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/NotificationDTO'
+                unreadCount:
+                  type: integer
+                  minimum: 0
+                  example: 3
+
+    MarkNotificationReadResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: Notification marked as read
+            data:
+              type: object
+              required: [id, isRead]
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                isRead:
+                  type: boolean
+                  example: true
+
+    MarkAllNotificationsReadResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: All notifications marked as read
+            data:
+              type: object
+              required: [updatedCount]
+              properties:
+                updatedCount:
+                  type: integer
+                  minimum: 0
+                  example: 5
 
     PaginationMeta:
       type: object

@@ -1,3 +1,5 @@
+import { getLocale } from '@/app/configs/requestContext.configs';
+
 /**
  * Alua-style static i18n dictionaries for system emails and push notifications.
  * Unsupported locales fall back to English.
@@ -65,10 +67,11 @@ export type TranslationKey = keyof (typeof i18nDictionaries)['en'];
 
 /**
  * Resolves a localized string from the static dictionaries.
+ * Locale resolution: explicit `locale` → AsyncLocalStorage `getLocale()` → `en`.
  * Falls back to English when the locale or key is missing.
  *
  * @param {TranslationKey} key - Dictionary key.
- * @param {string} [locale] - Preferred locale (e.g. `DE`, `en`).
+ * @param {string} [locale] - Preferred locale (e.g. `DE`, `en`); optional when ALS is set.
  * @param {Record<string, string | number>} [params] - `{token}` interpolations.
  * @returns {string} Localized message.
  */
@@ -77,7 +80,7 @@ export const t = (
   locale?: string,
   params?: Record<string, string | number>
 ): string => {
-  const activeLocale = (locale || 'en').toLowerCase().slice(0, 2);
+  const activeLocale = (locale || getLocale() || 'en').toLowerCase().slice(0, 2);
   const dict =
     activeLocale === 'de' ? i18nDictionaries.de : i18nDictionaries.en;
 
