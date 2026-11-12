@@ -281,9 +281,9 @@ Need to do something? Go directly to the source:
 
 ## Backend API Summary
 
-Base URL (local Docker): `http://localhost:5008/api/v1`  
-Interactive docs: `http://localhost:5008/api-docs`  
-Health: `http://localhost:5008/health`
+Base URL: `https://allround.localbox.online/api/v1`  
+Interactive docs: `https://allround.localbox.online/api-docs`  
+Health: `https://allround.localbox.online/health`
 
 ### Seed credentials
 
