@@ -30,6 +30,8 @@ tags:
     description: Admin time tracking and approval endpoints
   - name: Absence
     description: Admin workforce absence management endpoints
+  - name: UserManagement
+    description: Admin workforce user management endpoints
 
 paths:
   /health:
@@ -4713,6 +4715,389 @@ paths:
               schema:
                 $ref: '#/components/schemas/SystemErrorResponse'
 
+  /api/v1/admin/users:
+    post:
+      tags: [UserManagement]
+      summary: Create managed user
+      description: Admin creates an EMPLOYEE or SITE_MANAGER with hashed password, status ACTIVE, and default UserPreference. Email uniqueness enforced by middleware (409 EMAIL_ALREADY_EXISTS).
+      operationId: createManagedUser
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateManagedUserRequest'
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateManagedUserResponse'
+        '400':
+          description: Invalid JSON payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Access token not found in cookies'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Invalid CSRF token'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '409':
+          description: Email already exists (checkEmailNotExistsMiddleware)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'User with this email already exists'
+                errorType: 'EMAIL_ALREADY_EXISTS'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+    get:
+      tags: [UserManagement]
+      summary: List managed users
+      description: Returns paginated non-deleted users with projectManagements and crewAssignments counts. Filter by role, status, and search (name/email).
+      operationId: listManagedUsers
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema: {type: string}
+        - in: query
+          name: page
+          schema: {type: integer, minimum: 1, default: 1}
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 100, default: 10}
+        - in: query
+          name: search
+          schema: {type: string}
+        - in: query
+          name: role
+          schema:
+            type: string
+            enum: [ADMIN, SITE_MANAGER, EMPLOYEE]
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [ACTIVE, INACTIVE, SUSPENDED]
+      responses:
+        '200':
+          description: Users fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListManagedUsersResponse'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Access token not found in cookies'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Invalid CSRF token'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '422':
+          description: Request query validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/users/{id}:
+    get:
+      tags: [UserManagement]
+      summary: Get managed user by id
+      description: Returns user details including assigned projects and latest 5 time logs. Relies on checkUserExistenceMiddleware (deletedAt null).
+      operationId: getManagedUserById
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema: {type: string}
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: User fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetManagedUserResponse'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Access token not found in cookies'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Invalid CSRF token'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: User not found (checkUserExistenceMiddleware)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'User not found'
+                errorType: 'USER_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request params validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+    patch:
+      tags: [UserManagement]
+      summary: Update managed user
+      description: Updates profile, role, weeklyHoursTarget, status, or password (hashed). Email uniqueness enforced when email changes.
+      operationId: updateManagedUser
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema: {type: string}
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateManagedUserRequest'
+      responses:
+        '200':
+          description: User updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateManagedUserResponse'
+        '400':
+          description: Invalid JSON payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Access token not found in cookies'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Invalid CSRF token'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: User not found (checkUserExistenceMiddleware)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'User not found'
+                errorType: 'USER_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '409':
+          description: Email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'User with this email already exists'
+                errorType: 'EMAIL_ALREADY_EXISTS'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+    delete:
+      tags: [UserManagement]
+      summary: Soft delete managed user
+      description: Sets deletedAt and status INACTIVE, and revokes active/inactive device sessions with ADMIN_KICK.
+      operationId: deleteManagedUser
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema: {type: string}
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: User deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteManagedUserResponse'
+
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Access token not found in cookies'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Invalid CSRF token'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: User not found (checkUserExistenceMiddleware)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'User not found'
+                errorType: 'USER_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request params validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
 components:
   securitySchemes:
     adminAuth:
@@ -6863,6 +7248,254 @@ components:
                   type: string
                   format: uuid
 
+
+    CreateManagedUserRequest:
+      type: object
+      required: [firstName, lastName, email, password, role]
+      properties:
+        firstName:
+          type: string
+          example: 'Max'
+        lastName:
+          type: string
+          example: 'Mustermann'
+        email:
+          type: string
+          format: email
+          example: 'max@example.com'
+        password:
+          type: string
+          format: password
+          minLength: 8
+        role:
+          type: string
+          enum: [EMPLOYEE, SITE_MANAGER]
+        phone:
+          type: string
+          example: '+491234567890'
+        weeklyHoursTarget:
+          type: number
+          default: 40
+          example: 40
+    UpdateManagedUserRequest:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 8
+        role:
+          type: string
+          enum: [EMPLOYEE, SITE_MANAGER]
+        phone:
+          type: string
+          nullable: true
+        weeklyHoursTarget:
+          type: number
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE, SUSPENDED]
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+      description: At least one field is required.
+    ManagedUserSummaryDTO:
+      type: object
+      required: [id, firstName, lastName, email, role, status, phone, avatarUrl, weeklyHoursTarget, isProfileSetup, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [ADMIN, SITE_MANAGER, EMPLOYEE]
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE, SUSPENDED]
+        phone:
+          type: string
+          nullable: true
+        avatarUrl:
+          type: string
+          nullable: true
+        weeklyHoursTarget:
+          type: number
+        isProfileSetup:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ManagedUserListItemDTO:
+      type: object
+      required: [id, firstName, lastName, email, role, status, phone, avatarUrl, weeklyHoursTarget, projectManagementsCount, crewAssignmentsCount, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [ADMIN, SITE_MANAGER, EMPLOYEE]
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE, SUSPENDED]
+        phone:
+          type: string
+          nullable: true
+        avatarUrl:
+          type: string
+          nullable: true
+        weeklyHoursTarget:
+          type: number
+        projectManagementsCount:
+          type: integer
+        crewAssignmentsCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ManagedUserProjectDTO:
+      type: object
+      required: [id, name, assignedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        assignedAt:
+          type: string
+          format: date-time
+    ManagedUserTimeLogDTO:
+      type: object
+      required: [id, activityType, startTime, endTime, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        activityType:
+          type: string
+          enum: [ERECTION, DISMANTLING, TRANSPORT, MAINTENANCE, OTHER]
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+          enum: [PENDING_APPROVAL, APPROVED, REJECTED]
+    ManagedUserDetailDTO:
+      allOf:
+        - $ref: '#/components/schemas/ManagedUserSummaryDTO'
+        - type: object
+          required: [lastLoginAt, assignedProjects, recentTimeLogs]
+          properties:
+            lastLoginAt:
+              type: string
+              format: date-time
+              nullable: true
+            assignedProjects:
+              type: array
+              items:
+                $ref: '#/components/schemas/ManagedUserProjectDTO'
+            recentTimeLogs:
+              type: array
+              items:
+                $ref: '#/components/schemas/ManagedUserTimeLogDTO'
+    CreateManagedUserResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'User created successfully.'
+            data:
+              $ref: '#/components/schemas/ManagedUserSummaryDTO'
+    ListManagedUsersResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data, meta]
+          properties:
+            message:
+              type: string
+              example: 'Users fetched successfully.'
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/ManagedUserListItemDTO'
+    GetManagedUserResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'User fetched successfully.'
+            data:
+              $ref: '#/components/schemas/ManagedUserDetailDTO'
+    UpdateManagedUserResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'User updated successfully.'
+            data:
+              $ref: '#/components/schemas/ManagedUserSummaryDTO'
+    DeleteManagedUserResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'User deleted successfully.'
+            data:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: string
+                  format: uuid
+
     HealthResponse:
       type: object
       properties:
@@ -6944,6 +7577,7 @@ components:
                 - INVALID_OTP
                 - ACCESS_DENIED
                 - USER_NOT_FOUND
+                - EMAIL_ALREADY_EXISTS
                 - CUSTOMER_NOT_FOUND
                 - INSPECTION_NOT_FOUND
                 - INSPECTION_ALREADY_CONVERTED

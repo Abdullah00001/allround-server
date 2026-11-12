@@ -37,6 +37,7 @@ declare global {
       vehicle?: Vehicle;
       planningUser?: User;
       targetUser?: User;
+      managedUser?: User;
       timeLog?: TimeLog;
       absence?: Absence;
       serviceCharge: ServiceCharge;

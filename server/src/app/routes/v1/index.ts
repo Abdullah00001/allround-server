@@ -9,8 +9,12 @@ import projectRoutes from '@/app/modules/project/project.routes';
 import planningRoutes from '@/app/modules/planning/planning.routes';
 import timelogRoutes from '@/app/modules/timelog/timelog.routes';
 import absenceRoutes from '@/app/modules/absence/absence.routes';
+import userRoutes from '@/app/modules/user/user.routes';
+import vehicleRoutes from '@/app/modules/vehicle/vehicle.routes';
 
 const routes: Router[] = [
+  vehicleRoutes,
+  userRoutes,
   absenceRoutes,
   timelogRoutes,
   planningRoutes,
