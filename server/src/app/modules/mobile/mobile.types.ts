@@ -1,11 +1,13 @@
 import { z } from 'zod';
-import { ProjectPhase, TimeLog, User } from '@prisma/client';
+import { Inspection, ProjectPhase, TimeLog, User } from '@prisma/client';
 import {
+  completeInspectionSchema,
   getMyTimeLogsQuerySchema,
   manualTimeSchema,
   startTimerSchema,
   stopTimerSchema,
   syncTimeLogsSchema,
+  updatePhaseStatusSchema,
 } from '@/app/modules/mobile/mobile.schema';
 
 /**
@@ -104,4 +106,62 @@ export type TSyncTimeLogsServiceParams = {
   user: User;
   /** Validated sync payload. */
   payload: TSyncTimeLogsPayload;
+};
+
+/**
+ * Validated complete-inspection request body.
+ */
+export type TCompleteInspectionPayload = z.infer<typeof completeInspectionSchema>;
+
+/**
+ * Validated mobile phase-status update request body.
+ */
+export type TUpdateMobilePhaseStatusPayload = z.infer<
+  typeof updatePhaseStatusSchema
+>;
+
+/**
+ * Service params for listing inspections assigned to a site manager.
+ */
+export type TListMobileInspectionsServiceParams = {
+  /** Authenticated site manager. */
+  user: User;
+};
+
+/**
+ * Service params for fetching one assigned inspection.
+ */
+export type TGetMobileInspectionServiceParams = {
+  /** Trusted inspection already verified as assigned. */
+  inspection: Inspection;
+};
+
+/**
+ * Service params for completing an inspection survey.
+ */
+export type TCompleteInspectionServiceParams = {
+  /** Trusted pending inspection assigned to the user. */
+  inspection: Inspection;
+  /** Validated scaffold survey payload. */
+  payload: TCompleteInspectionPayload;
+};
+
+/**
+ * Service params for listing phases managed by a site manager.
+ */
+export type TListMobilePhasesServiceParams = {
+  /** Authenticated site manager. */
+  user: User;
+};
+
+/**
+ * Service params for updating a managed phase status from mobile.
+ */
+export type TUpdateMobilePhaseStatusServiceParams = {
+  /** Authenticated site manager (audit actor). */
+  user: User;
+  /** Trusted phase on a managed project. */
+  phase: ProjectPhase;
+  /** Validated status payload. */
+  payload: TUpdateMobilePhaseStatusPayload;
 };

@@ -38,6 +38,10 @@ tags:
     description: Mobile app dashboard, projects, and profile endpoints
   - name: MobileTimeTracking
     description: Mobile timer, crew time, and offline sync endpoints
+  - name: MobileInspection
+    description: Mobile site-manager inspection survey endpoints
+  - name: MobilePhase
+    description: Mobile site-manager phase board endpoints
 
 paths:
   /health:
@@ -5968,6 +5972,316 @@ paths:
               schema:
                 $ref: '#/components/schemas/SystemErrorResponse'
 
+  /api/v1/mobile/inspections:
+    get:
+      tags: [MobileInspection]
+      summary: List my inspections
+      description: Site Manager only. Returns PENDING and SURVEY_DONE inspections assigned via siteManagerId.
+      operationId: listMobileInspections
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: Inspections fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListMobileInspectionsResponse'
+
+        '401':
+          description: Authentication or device session failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Token not found'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Forbidden (not site manager / not assigned)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Only site managers can access this resource'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/mobile/inspections/{id}:
+    get:
+      tags: [MobileInspection]
+      summary: Get inspection details
+      description: Site Manager only. Returns survey-form details for an assigned inspection. Uses checkInspectionExistenceMiddleware and assignment guard.
+      operationId: getMobileInspectionById
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Inspection fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMobileInspectionResponse'
+
+        '401':
+          description: Authentication or device session failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Token not found'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Forbidden (not site manager / not assigned)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Only site managers can access this resource'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: Inspection not found (checkInspectionExistenceMiddleware)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Inspection not found'
+                errorType: 'INSPECTION_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request params validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/mobile/inspections/{id}/complete:
+    patch:
+      tags: [MobileInspection]
+      summary: Complete inspection survey
+      description: Saves scaffold specs and sets status SURVEY_DONE. Only PENDING inspections assigned to the site manager are allowed.
+      operationId: completeMobileInspection
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteMobileInspectionRequest'
+      responses:
+        '200':
+          description: Inspection survey completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompleteMobileInspectionResponse'
+        '400':
+          description: Inspection is not pending survey completion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Inspection is not pending survey completion'
+                errorType: 'BAD_REQUEST'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '401':
+          description: Authentication or device session failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Token not found'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Forbidden (not site manager / not assigned)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Only site managers can access this resource'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: Inspection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Inspection not found'
+                errorType: 'INSPECTION_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/mobile/phases:
+    get:
+      tags: [MobilePhase]
+      summary: List managed phases
+      description: Site Manager only. Returns ProjectPhases for projects where the user has a ProjectManagerAssignment.
+      operationId: listMobilePhases
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: Phases fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListMobilePhasesResponse'
+
+        '401':
+          description: Authentication or device session failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Token not found'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Forbidden (not site manager / not assigned)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Only site managers can access this resource'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/mobile/phases/{id}/status:
+    patch:
+      tags: [MobilePhase]
+      summary: Update managed phase status
+      description: Site Manager only. Updates phase status on a managed project, sets endDate when COMPLETED, and writes AuditLog MOBILE_PHASE_STATUS_UPDATED.
+      operationId: updateMobilePhaseStatus
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMobilePhaseStatusRequest'
+      responses:
+        '200':
+          description: Phase status updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateMobilePhaseStatusResponse'
+
+        '401':
+          description: Authentication or device session failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Token not found'
+                errorType: 'TOKEN_INVALID'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Forbidden (not site manager / not assigned)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Only site managers can access this resource'
+                errorType: 'FORBIDDEN'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '404':
+          description: Phase not found (checkPhaseExistenceMiddleware)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Phase not found'
+                errorType: 'PHASE_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
 components:
   securitySchemes:
     adminAuth:
@@ -8847,6 +9161,170 @@ components:
               example: 'Time logs synced successfully.'
             data:
               $ref: '#/components/schemas/MobileSyncResultDTO'
+
+
+    CompleteMobileInspectionRequest:
+      type: object
+      required: [scaffoldArea, scaffoldHeight, scaffoldType]
+      properties:
+        scaffoldArea:
+          type: number
+          example: 120.5
+        scaffoldHeight:
+          type: number
+          example: 8.2
+        scaffoldType:
+          type: string
+          example: 'Fassade'
+    UpdateMobilePhaseStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [IN_PROGRESS, COMPLETED, POSTPONED]
+          example: 'COMPLETED'
+    MobileInspectionDTO:
+      type: object
+      required: [id, siteTitle, address, postalCode, city, appointmentDate, scaffoldArea, scaffoldHeight, scaffoldType, status, customer, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        siteTitle:
+          type: string
+        address:
+          type: string
+        postalCode:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        appointmentDate:
+          type: string
+          format: date-time
+        scaffoldArea:
+          type: number
+          nullable: true
+        scaffoldHeight:
+          type: number
+          nullable: true
+        scaffoldType:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [PENDING, SURVEY_DONE, CONVERTED]
+        customer:
+          type: object
+          required: [id, name]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    MobileManagedPhaseDTO:
+      type: object
+      required: [id, type, status, priority, startDate, endDate, project]
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
+        status:
+          type: string
+          enum: [ENQUIRY, QUOTATION, ORDER_CONFIRMED, IN_PROGRESS, COMPLETED, POSTPONED]
+        priority:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+        startDate:
+          type: string
+          format: date-time
+          nullable: true
+        endDate:
+          type: string
+          format: date-time
+          nullable: true
+        project:
+          type: object
+          required: [id, name, address]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            address:
+              type: string
+    ListMobileInspectionsResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Inspections fetched successfully.'
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/MobileInspectionDTO'
+    GetMobileInspectionResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Inspection fetched successfully.'
+            data:
+              $ref: '#/components/schemas/MobileInspectionDTO'
+    CompleteMobileInspectionResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Inspection survey completed successfully.'
+            data:
+              $ref: '#/components/schemas/MobileInspectionDTO'
+    ListMobilePhasesResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Phases fetched successfully.'
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/MobileManagedPhaseDTO'
+    UpdateMobilePhaseStatusResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Phase status updated successfully.'
+            data:
+              $ref: '#/components/schemas/MobileManagedPhaseDTO'
 
     HealthResponse:
       type: object

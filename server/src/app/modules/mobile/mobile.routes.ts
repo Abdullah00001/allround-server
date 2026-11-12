@@ -10,31 +10,44 @@ import {
   checkUserAccessTokenMiddleware,
   checkUserExistenceMiddleware,
 } from '@/app/modules/auth/auth.middlewares';
+import { checkInspectionExistenceMiddleware } from '@/app/modules/inspection/inspection.middlewares';
 import { checkPhaseExistenceMiddleware } from '@/app/modules/project/project.middlewares';
 import {
+  checkInspectionAssignedToSiteManagerMiddleware,
+  checkInspectionPendingForSurveyMiddleware,
   checkNoActiveTimerMiddleware,
   checkOwnedActiveTimeLogMiddleware,
   checkSiteManagerPhaseAccessMiddleware,
   checkSiteManagerRoleMiddleware,
+  mapPhaseIdFromParamsMiddleware,
 } from '@/app/modules/mobile/mobile.middlewares';
 import {
+  completeMobileInspectionController,
   createManualTimeController,
   getCrewTimeController,
   getDashboardController,
+  getMobileInspectionByIdController,
   getMyProjectsController,
   getMyTimeLogsController,
   getProfileController,
+  listMobileInspectionsController,
+  listMobilePhasesController,
   startTimerController,
   stopTimerController,
   syncTimeLogsController,
+  updateMobilePhaseStatusController,
 } from '@/app/modules/mobile/mobile.controllers';
 import {
+  completeInspectionSchema,
   crewTimePhaseParamsSchema,
   getMyTimeLogsQuerySchema,
   manualTimeSchema,
+  mobileInspectionIdParamsSchema,
+  mobilePhaseIdParamsSchema,
   startTimerSchema,
   stopTimerSchema,
   syncTimeLogsSchema,
+  updatePhaseStatusSchema,
 } from '@/app/modules/mobile/mobile.schema';
 
 const router = Router();
@@ -49,6 +62,11 @@ const mobileAuth = [
   checkAccountStatus,
   checkDeviceSessionMiddleware,
 ] as const;
+
+/**
+ * Mobile site-manager auth chain for inspection and phase-board routes.
+ */
+const siteManagerAuth = [...mobileAuth, checkSiteManagerRoleMiddleware] as const;
 
 router.route('/mobile/dashboard').get(...mobileAuth, getDashboardController);
 
@@ -109,6 +127,48 @@ router
     ...mobileAuth,
     validateReqBody(syncTimeLogsSchema),
     syncTimeLogsController
+  );
+
+router
+  .route('/mobile/inspections')
+  .get(...siteManagerAuth, listMobileInspectionsController);
+
+router
+  .route('/mobile/inspections/:id')
+  .get(
+    ...siteManagerAuth,
+    validateReqParams(mobileInspectionIdParamsSchema),
+    checkInspectionExistenceMiddleware,
+    checkInspectionAssignedToSiteManagerMiddleware,
+    getMobileInspectionByIdController
+  );
+
+router
+  .route('/mobile/inspections/:id/complete')
+  .patch(
+    ...siteManagerAuth,
+    validateReqParams(mobileInspectionIdParamsSchema),
+    checkInspectionExistenceMiddleware,
+    checkInspectionAssignedToSiteManagerMiddleware,
+    checkInspectionPendingForSurveyMiddleware,
+    validateReqBody(completeInspectionSchema),
+    completeMobileInspectionController
+  );
+
+router
+  .route('/mobile/phases')
+  .get(...siteManagerAuth, listMobilePhasesController);
+
+router
+  .route('/mobile/phases/:id/status')
+  .patch(
+    ...siteManagerAuth,
+    validateReqParams(mobilePhaseIdParamsSchema),
+    mapPhaseIdFromParamsMiddleware,
+    checkPhaseExistenceMiddleware,
+    checkSiteManagerPhaseAccessMiddleware,
+    validateReqBody(updatePhaseStatusSchema),
+    updateMobilePhaseStatusController
   );
 
 export default router;

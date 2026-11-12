@@ -1,4 +1,4 @@
-import { ActivityType } from '@prisma/client';
+import { ActivityType, PhaseStatus } from '@prisma/client';
 import { z } from 'zod';
 
 /**
@@ -86,5 +86,50 @@ export const getMyTimeLogsQuerySchema = z
 export const crewTimePhaseParamsSchema = z
   .object({
     phaseId: z.string().uuid({ error: 'Invalid phase id' }),
+  })
+  .strict();
+
+/**
+ * Path params schema for mobile inspection `/:id` routes.
+ */
+export const mobileInspectionIdParamsSchema = z
+  .object({
+    id: z.string().uuid({ error: 'Invalid inspection id' }),
+  })
+  .strict();
+
+/**
+ * Path params schema for `PATCH /mobile/phases/:id/status`.
+ */
+export const mobilePhaseIdParamsSchema = z
+  .object({
+    id: z.string().uuid({ error: 'Invalid phase id' }),
+  })
+  .strict();
+
+/**
+ * Request body schema for `PATCH /mobile/inspections/:id/complete`.
+ * Saves survey scaffold specs and marks the inspection `SURVEY_DONE`.
+ */
+export const completeInspectionSchema = z
+  .object({
+    scaffoldArea: z.number().positive({ message: 'Scaffold area must be positive' }),
+    scaffoldHeight: z
+      .number()
+      .positive({ message: 'Scaffold height must be positive' }),
+    scaffoldType: z.string().trim().min(1, { message: 'Scaffold type is required' }),
+  })
+  .strict();
+
+/**
+ * Request body schema for `PATCH /mobile/phases/:id/status`.
+ * Restricted to mobile board transitions.
+ */
+export const updatePhaseStatusSchema = z
+  .object({
+    status: z.enum(
+      [PhaseStatus.IN_PROGRESS, PhaseStatus.COMPLETED, PhaseStatus.POSTPONED],
+      { message: 'Invalid phase status' }
+    ),
   })
   .strict();

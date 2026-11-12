@@ -1,24 +1,31 @@
 import { Request, Response } from 'express';
-import { ProjectPhase, TimeLog, User } from '@prisma/client';
+import { Inspection, ProjectPhase, TimeLog, User } from '@prisma/client';
 import { getTraceId } from '@/app/configs/requestContext.configs';
 import { asyncHandler } from '@/app/utils/system.utils';
 import {
+  completeMobileInspectionService,
   createManualTimeService,
   getCrewTimeService,
   getDashboardDataService,
+  getMobileInspectionByIdService,
   getMyProjectsService,
   getMyTimeLogsService,
   getProfileStatsService,
+  listMobileInspectionsService,
+  listMobilePhasesService,
   startTimerService,
   stopTimerService,
   syncTimeLogsService,
+  updateMobilePhaseStatusService,
 } from '@/app/modules/mobile/mobile.services';
 import {
+  TCompleteInspectionPayload,
   TGetMyTimeLogsQuery,
   TManualTimePayload,
   TStartTimerPayload,
   TStopTimerPayload,
   TSyncTimeLogsPayload,
+  TUpdateMobilePhaseStatusPayload,
 } from '@/app/modules/mobile/mobile.types';
 
 /**
@@ -238,6 +245,136 @@ export const syncTimeLogsController = asyncHandler(
     res.status(200).json({
       success: true,
       message: 'Time logs synced successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `GET /mobile/inspections`.
+ * Site-manager-only list of assigned PENDING/SURVEY_DONE inspections.
+ *
+ * @param {Request} req - Express request with trusted `req.user`.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const listMobileInspectionsController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const data = await listMobileInspectionsService({ user });
+
+    res.status(200).json({
+      success: true,
+      message: 'Inspections fetched successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `GET /mobile/inspections/:id`.
+ * Relies on existence + assignment middlewares.
+ *
+ * @param {Request} req - Express request with trusted `req.inspection`.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const getMobileInspectionByIdController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const inspection = req.inspection as Inspection;
+    const data = await getMobileInspectionByIdService({ inspection });
+
+    res.status(200).json({
+      success: true,
+      message: 'Inspection fetched successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `PATCH /mobile/inspections/:id/complete`.
+ * Saves survey specs and marks the inspection SURVEY_DONE.
+ *
+ * @param {Request} req - Express request with trusted inspection and body.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const completeMobileInspectionController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const inspection = req.inspection as Inspection;
+    const payload = req.body as TCompleteInspectionPayload;
+    const data = await completeMobileInspectionService({
+      inspection,
+      payload,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Inspection survey completed successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `GET /mobile/phases`.
+ * Site-manager-only list of phases on managed projects.
+ *
+ * @param {Request} req - Express request with trusted `req.user`.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const listMobilePhasesController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const data = await listMobilePhasesService({ user });
+
+    res.status(200).json({
+      success: true,
+      message: 'Phases fetched successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `PATCH /mobile/phases/:id/status`.
+ * Updates managed phase status and writes a mobile audit log entry.
+ *
+ * @param {Request} req - Express request with trusted user/phase and body.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const updateMobilePhaseStatusController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const phase = req.phase as ProjectPhase;
+    const payload = req.body as TUpdateMobilePhaseStatusPayload;
+    const data = await updateMobilePhaseStatusService({
+      user,
+      phase,
+      payload,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Phase status updated successfully.',
       data,
       traceId,
     });

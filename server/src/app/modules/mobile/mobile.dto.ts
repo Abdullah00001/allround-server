@@ -1,5 +1,7 @@
 import {
   ActivityType,
+  Inspection,
+  InspectionStatus,
   PhaseStatus,
   PhaseType,
   Priority,
@@ -308,6 +310,92 @@ export class MobileSyncResultDTO {
     public created: number,
     public skipped: number,
     public logs: MobileTimeLogDTO[]
+  ) {}
+}
+
+/**
+ * Mobile inspection DTO for Site Manager survey flows (no admin-only extras).
+ */
+export class MobileInspectionDTO {
+  /**
+   * @param {string} id - Inspection UUID.
+   * @param {string} siteTitle - Site title.
+   * @param {string} address - Site address.
+   * @param {string | null} postalCode - Optional postal code.
+   * @param {string | null} city - Optional city.
+   * @param {string} appointmentDate - ISO appointment timestamp.
+   * @param {number | null} scaffoldArea - Scaffold area.
+   * @param {number | null} scaffoldHeight - Scaffold height.
+   * @param {string | null} scaffoldType - Scaffold type.
+   * @param {InspectionStatus} status - Inspection status.
+   * @param {{ id: string; name: string }} customer - Customer id/name.
+   * @param {string} createdAt - ISO creation timestamp.
+   * @param {string} updatedAt - ISO update timestamp.
+   */
+  constructor(
+    public id: string,
+    public siteTitle: string,
+    public address: string,
+    public postalCode: string | null,
+    public city: string | null,
+    public appointmentDate: string,
+    public scaffoldArea: number | null,
+    public scaffoldHeight: number | null,
+    public scaffoldType: string | null,
+    public status: InspectionStatus,
+    public customer: { id: string; name: string },
+    public createdAt: string,
+    public updatedAt: string
+  ) {}
+
+  /**
+   * Builds a mobile inspection DTO.
+   *
+   * @param {Inspection & { customer: { id: string; name: string } }} inspection - Inspection with customer.
+   * @returns {MobileInspectionDTO} API-safe inspection object.
+   */
+  static build(
+    inspection: Inspection & { customer: { id: string; name: string } }
+  ) {
+    return new MobileInspectionDTO(
+      inspection.id,
+      inspection.siteTitle,
+      inspection.address,
+      inspection.postalCode,
+      inspection.city,
+      inspection.appointmentDate.toISOString(),
+      decimalToNumber(inspection.scaffoldArea),
+      decimalToNumber(inspection.scaffoldHeight),
+      inspection.scaffoldType,
+      inspection.status,
+      { id: inspection.customer.id, name: inspection.customer.name },
+      inspection.createdAt.toISOString(),
+      inspection.updatedAt.toISOString()
+    );
+  }
+}
+
+/**
+ * Mobile phase-board row for Site Managers.
+ */
+export class MobileManagedPhaseDTO {
+  /**
+   * @param {string} id - Phase UUID.
+   * @param {PhaseType} type - Phase type.
+   * @param {PhaseStatus} status - Phase status.
+   * @param {Priority} priority - Phase priority.
+   * @param {string | null} startDate - ISO start date.
+   * @param {string | null} endDate - ISO end date.
+   * @param {{ id: string; name: string; address: string }} project - Parent project summary.
+   */
+  constructor(
+    public id: string,
+    public type: PhaseType,
+    public status: PhaseStatus,
+    public priority: Priority,
+    public startDate: string | null,
+    public endDate: string | null,
+    public project: { id: string; name: string; address: string }
   ) {}
 }
 

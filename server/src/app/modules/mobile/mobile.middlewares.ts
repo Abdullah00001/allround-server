@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
-import { Role, TimeLog, User } from '@prisma/client';
+import { Inspection, InspectionStatus, Role, TimeLog, User } from '@prisma/client';
 import { getTraceId } from '@/app/configs/requestContext.configs';
 import { asyncHandler } from '@/app/utils/system.utils';
 import prisma from '@/app/configs/db.configs';
@@ -44,7 +44,7 @@ export const checkNoActiveTimerMiddleware = asyncHandler(
 
 /**
  * Restricts access to Site Managers only.
- * Used by crew-time endpoints.
+ * Used by crew-time, inspection, and mobile phase-board endpoints.
  *
  * @param {Request} req - Express request with authenticated `req.user`.
  * @param {Response} res - Express response used for the 403 envelope.
@@ -59,8 +59,85 @@ export const checkSiteManagerRoleMiddleware = asyncHandler(
     if (user.role !== Role.SITE_MANAGER) {
       res.status(403).json({
         success: false,
-        message: 'Only site managers can access crew time logs',
+        message: 'Only site managers can access this resource',
         errorType: AuthErrorType.FORBIDDEN,
+        traceId,
+      });
+      return;
+    }
+
+    next();
+  }
+);
+
+/**
+ * Maps `req.params.id` onto `req.params.phaseId` so shared phase middleware can be reused
+ * on routes that use `/:id` instead of `/:phaseId`.
+ *
+ * @param {Request} req - Express request with validated `params.id`.
+ * @param {Response} _res - Express response (unused).
+ * @param {NextFunction} next - Continues after mapping.
+ * @returns {void}
+ */
+export const mapPhaseIdFromParamsMiddleware = (
+  req: Request,
+  _res: Response,
+  next: NextFunction
+): void => {
+  if (typeof req.params.id === 'string' && req.params.id.length > 0) {
+    req.params.phaseId = req.params.id;
+  }
+  next();
+};
+
+/**
+ * Ensures the authenticated site manager is the assigned `siteManagerId`
+ * on `req.inspection`. Must run after `checkInspectionExistenceMiddleware`.
+ *
+ * @param {Request} req - Express request with trusted inspection and user.
+ * @param {Response} res - Express response used for the 403 envelope.
+ * @param {NextFunction} next - Continues when the inspection is assigned to the user.
+ * @returns {Promise<void>}
+ */
+export const checkInspectionAssignedToSiteManagerMiddleware = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const inspection = req.inspection as Inspection | undefined;
+
+    if (!inspection || inspection.siteManagerId !== user.id) {
+      res.status(403).json({
+        success: false,
+        message: 'You are not assigned to this inspection',
+        errorType: AuthErrorType.FORBIDDEN,
+        traceId,
+      });
+      return;
+    }
+
+    next();
+  }
+);
+
+/**
+ * Ensures the assigned inspection is still `PENDING` before survey completion.
+ * Must run after assignment middleware.
+ *
+ * @param {Request} req - Express request with trusted `req.inspection`.
+ * @param {Response} res - Express response used for the 400 envelope.
+ * @param {NextFunction} next - Continues when status is PENDING.
+ * @returns {Promise<void>}
+ */
+export const checkInspectionPendingForSurveyMiddleware = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const traceId = getTraceId();
+    const inspection = req.inspection as Inspection;
+
+    if (inspection.status !== InspectionStatus.PENDING) {
+      res.status(400).json({
+        success: false,
+        message: 'Inspection is not pending survey completion',
+        errorType: AuthErrorType.BAD_REQUEST,
         traceId,
       });
       return;
