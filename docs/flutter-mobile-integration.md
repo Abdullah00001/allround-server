@@ -1,6 +1,6 @@
 # Flutter Mobile Integration Guide
 
-Integration contract for the **Flutter iOS/Android app** (Site Managers & Employees) against the Allround backend.
+Integration contract for the **Flutter iOS/Android app** against the Allround backend.
 
 | Item | Value |
 | --- | --- |
@@ -16,9 +16,14 @@ Integration contract for the **Flutter iOS/Android app** (Site Managers & Employ
 | Site Manager | `manager@allround.com` | `Manager123!` |
 | Employee | `employee@allround.com` | `Employee123!` |
 
+> **How to use this doc:**  
+> Sections **1–2** are shared (auth + envelopes).  
+> Then jump to **§3 Employee** or **§4 Site Manager** for role-specific screens and APIs.  
+> Sections **5–7** (offline sync, notifications/Socket/FCM, localization) apply to **both** roles.
+
 ---
 
-## 1. Authentication Flow (Bearer JWT)
+## 1. Shared Authentication (Bearer JWT)
 
 Mobile auth is **stateless Bearer**, not cookies. There is **no mobile refresh endpoint**. When the access JWT or device session expires, the user must **login again**.
 
@@ -58,6 +63,8 @@ POST /api/v1/auth/signup
 }
 ```
 
+Use `"role": "SITE_MANAGER"` for site-manager signup.
+
 Then:
 
 ```http
@@ -73,16 +80,16 @@ Authorization: Bearer <otpPageToken>
 }
 ```
 
-### Login
+### Login (must send the correct `role`)
 
 ```http
 POST /api/v1/auth/login
 {
-  "email": "manager@allround.com",
-  "password": "Manager123!",
-  "role": "SITE_MANAGER",
+  "email": "employee@allround.com",
+  "password": "Employee123!",
+  "role": "EMPLOYEE",
   "deviceIdentifier": "<stable-uuid>",
-  "platform": "IOS",
+  "platform": "ANDROID",
   "lat": 50.92,
   "lng": 6.95,
   "fcmToken": "<fcm>",
@@ -90,11 +97,13 @@ POST /api/v1/auth/login
 }
 ```
 
+Site manager login uses the same shape with `"role": "SITE_MANAGER"`.
+
 `rememberMe: true` → longer JWT/session (~30d). `false` → ~7d.
 
-### Session heartbeat
+Store `data.user.role` from the login response and route the user into the **Employee** or **Site Manager** navigation shell.
 
-Call periodically (app resume / location tick):
+### Session heartbeat
 
 ```http
 POST /api/v1/auth/check
@@ -108,8 +117,6 @@ Authorization: Bearer <accessJwt>
 }
 ```
 
-Use this to refresh GPS/`lastSeenAt` and rotate FCM on the device row.
-
 ### Logout
 
 ```http
@@ -119,7 +126,7 @@ Authorization: Bearer <accessJwt>
 
 JWT is blacklisted; FCM cleared; device marked logged out. Clear secure storage + disconnect sockets.
 
-### Dio interceptor example
+### Dio interceptor (shared)
 
 ```dart
 import 'package:dio/dio.dart';
@@ -140,12 +147,7 @@ dio.interceptors.add(InterceptorsWrapper(
     handler.next(options);
   },
   onError: (error, handler) async {
-    final status = error.response?.statusCode;
-    final errorType = error.response?.data is Map
-        ? error.response?.data['errorType']
-        : null;
-
-    if (status == 401) {
+    if (error.response?.statusCode == 401) {
       // TOKEN_*, SESSION_*, DEVICE_* → force re-login (no refresh API)
       await storage.delete(key: 'access_token');
     }
@@ -154,37 +156,236 @@ dio.interceptors.add(InterceptorsWrapper(
 ));
 ```
 
-**Critical:** After login/verify, immediately save the JWT **and** register/refresh FCM via the same login/verify/`/auth/check` payloads.
+**Critical:** After login/verify, save the JWT **and** register/refresh FCM via login/verify/`/auth/check`.
 
 ---
 
-## 2. Role-Based Rules (RBAC)
+## 2. Shared Response Envelopes
 
-The backend enforces role gates. Do not rely on UI hiding alone.
+- Success: `{ success, message, data?, meta?, traceId }`
+- Errors: `{ success: false, message, errorType?, errors?, traceId }`
 
-| Capability | `EMPLOYEE` | `SITE_MANAGER` |
+Common mobile `errorType`s: `ACTIVE_TIMER_EXISTS`, `TIMELOG_NOT_FOUND`, `SESSION_EXPIRED`, `SESSION_REVOKED`, `DEVICE_NOT_FOUND`, `DEVICE_NOT_OWNED`, `ACCESS_DENIED`, `FORBIDDEN`, `BAD_REQUEST`.
+
+All `/mobile/*` routes require:
+
+```text
+Authorization: Bearer <accessJwt>
+(+ ACTIVE user + valid device session)
+```
+
+---
+
+## 3. EMPLOYEE Role — Full Flow & APIs
+
+Use this section when `user.role === "EMPLOYEE"`.
+
+### 3.1 What an Employee can do
+
+1. Boot config / legal / languages  
+2. See personal dashboard, own projects, profile  
+3. Start / stop timer, optional manual time, view own time logs  
+4. Offline sync of own time segments  
+5. Notifications inbox + Socket.IO / FCM  
+
+### 3.2 What an Employee must NOT call
+
+These routes return **403** for employees (`checkSiteManagerRoleMiddleware`):
+
+| Path | Why blocked |
+| --- | --- |
+| `GET /mobile/schedule` | Site Manager only |
+| `GET /mobile/map` | Site Manager only |
+| `GET /mobile/crew-time` | Site Manager only |
+| `GET /mobile/inspections` | Site Manager only |
+| `GET /mobile/inspections/:id` | Site Manager only |
+| `PATCH /mobile/inspections/:id/complete` | Site Manager only |
+| `GET /mobile/phases` | Site Manager only |
+| `PATCH /mobile/phases/:id/status` | Site Manager only |
+
+**Do not render** Schedule, Map, Crew Time, Inspections, or Phase Board tabs for employees.
+
+### 3.3 Employee screen flow
+
+```text
+Login (role=EMPLOYEE)
+  → GET /mobile/config
+  → GET /mobile/dashboard
+  → GET /mobile/projects  (pick a phase / job)
+  → POST /mobile/timer/start
+  → POST /mobile/timer/stop
+  → GET /mobile/time-logs?period=TODAY
+  → (offline) queue locally → POST /mobile/sync
+  → GET /mobile/profile
+  → GET /mobile/notifications
+```
+
+### 3.4 Employee API reference
+
+#### Bootstrap
+
+| Method | Path | Notes |
 | --- | --- | --- |
-| Dashboard / projects / profile / config | Yes | Yes |
-| Own timer start/stop/manual*/time-logs/sync | Yes | Yes |
-| Schedule / map / crew-time | **403** | Yes |
-| Inspections / phase board | **403** | Yes |
+| `GET` | `/mobile/config` | `defaultLanguage`, `enabledLanguages`, `allowEmployeeManualTime`, `legalContents[]` |
 
-\*Manual time (`POST /mobile/timer/manual`) is blocked for employees when `CompanyProfile.allowEmployeeManualTime === false` (read this from `GET /mobile/config`).
+If `allowEmployeeManualTime === false`, hide the “Add manual time” UI.
 
-### Project visibility for site managers
+#### Home / work
 
-`CompanyProfile.siteManagerAccessRule`:
+| Method | Path | Notes |
+| --- | --- | --- |
+| `GET` | `/mobile/dashboard` | `stats`, `upcomingTasks[]`, `mapPins[]` (employee-scoped) |
+| `GET` | `/mobile/projects` | Projects where the employee has crew assignments / visibility |
+| `GET` | `/mobile/profile` | `weeklyHoursTarget`, `hoursThisWeek`, project counts |
 
-- `RESTRICT_TO_ASSIGNED` (seed default): only projects with a `ProjectManagerAssignment` for that user (plus related schedule/map/dashboard scoping).
-- `GLOBAL_ACCESS`: site managers can see all non-deleted projects on dashboard/projects/schedule/map; write/crew-time still checks assignment **or** global rule in middleware.
+Employee project DTOs **do not** expose site-manager financial fields (`budgetedHours` / profitability). Those appear only for site managers.
 
-**Inspections are always assigned** via `siteManagerId`—global access does not expand the inspection inbox.
+#### Time tracking (own logs only)
 
-Employees never receive site-manager-only routes.
+| Method | Path | Body / query |
+| --- | --- | --- |
+| `POST` | `/mobile/timer/start` | `phaseId`, `activityType`, optional `gpsStartLat` / `gpsStartLng` |
+| `POST` | `/mobile/timer/stop` | `timeLogId`, optional GPS end |
+| `POST` | `/mobile/timer/manual` | `phaseId`, `activityType`, `startTime`, `endTime`, `breakMinutes` → status **`PENDING_APPROVAL`** |
+| `GET` | `/mobile/time-logs` | `?period=TODAY` \| `WEEK` \| `MONTH` |
+| `POST` | `/mobile/sync` | Offline batch — see **§5** |
+
+`activityType`: `ERECTION` \| `DISMANTLING` \| `TRANSPORT` \| `MAINTENANCE` \| `OTHER`.
+
+Start while another timer is open → **409** `ACTIVE_TIMER_EXISTS`.
+
+#### Notifications (employee)
+
+| Method | Path |
+| --- | --- |
+| `GET` | `/mobile/notifications?page&limit` → `{ items, unreadCount }` |
+| `PATCH` | `/mobile/notifications/read-all` |
+| `PATCH` | `/mobile/notifications/:id/read` |
+
+### 3.5 Employee checklist
+
+1. Login with `"role": "EMPLOYEE"`.  
+2. Build **Employee** navigation only (no SM tabs).  
+3. Load `/mobile/config` and respect `allowEmployeeManualTime`.  
+4. Implement timer + offline sync with stable `clientSyncId`.  
+5. Connect Socket.IO + FCM for notifications.  
+6. Treat 403 on SM routes as a programming error (wrong role shell).
 
 ---
 
-## 3. Offline Sync (`POST /mobile/sync`) — CRITICAL
+## 4. SITE MANAGER Role — Full Flow & APIs
+
+Use this section when `user.role === "SITE_MANAGER"`.
+
+### 4.1 What a Site Manager can do
+
+Everything an employee can do for **their own** time tracking, **plus**:
+
+1. Schedule calendar  
+2. Map of projects / active phases  
+3. Crew-time overview per project  
+4. Inspection survey inbox + complete survey  
+5. Phase board (status updates)  
+6. Richer project DTO (budget / hours / profitability fields)
+
+### 4.2 Access rule (`siteManagerAccessRule`)
+
+Stored on `CompanyProfile` (`id: "global"`):
+
+| Value | Effect |
+| --- | --- |
+| `RESTRICT_TO_ASSIGNED` (seed default) | Dashboard / projects / schedule / map limited to projects with a `ProjectManagerAssignment` for this SM |
+| `GLOBAL_ACCESS` | SM can **see** all non-deleted projects on dashboard/projects/schedule/map |
+
+**Important nuances:**
+
+- Inspections are **always** filtered by `siteManagerId` (assignment), even under `GLOBAL_ACCESS`.  
+- `GET /mobile/phases` lists phases on projects where the SM has a **ProjectManagerAssignment** (assignment-based list).  
+- Crew-time / phase status writes allow `GLOBAL_ACCESS` **or** project/phase assignment via middleware.
+
+### 4.3 Site Manager screen flow
+
+```text
+Login (role=SITE_MANAGER)
+  → GET /mobile/config
+  → GET /mobile/dashboard          (stats include pendingInspections for this SM)
+  → GET /mobile/schedule           (week view)
+  → GET /mobile/map                (project pins)
+  → GET /mobile/projects           (open project)
+       → GET /mobile/crew-time?projectId=...
+       → GET /mobile/phases
+       → PATCH /mobile/phases/:id/status
+  → GET /mobile/inspections
+       → GET /mobile/inspections/:id
+       → PATCH /mobile/inspections/:id/complete
+  → Own timer / time-logs / sync   (same as employee)
+  → GET /mobile/notifications
+```
+
+### 4.4 Shared APIs Site Managers also use
+
+Same as employee — call these freely:
+
+| Method | Path |
+| --- | --- |
+| `GET` | `/mobile/config` |
+| `GET` | `/mobile/dashboard` |
+| `GET` | `/mobile/projects` |
+| `GET` | `/mobile/profile` |
+| `POST` | `/mobile/timer/start` |
+| `POST` | `/mobile/timer/stop` |
+| `POST` | `/mobile/timer/manual` |
+| `GET` | `/mobile/time-logs` |
+| `POST` | `/mobile/sync` |
+| `GET` / `PATCH` | `/mobile/notifications...` |
+
+Site managers are **not** blocked by `allowEmployeeManualTime` for manual entries.
+
+Project list for SM may include `budgetedHours`, `totalLoggedHours`, `isProfitable`.
+
+### 4.5 Site Manager–only API reference
+
+#### Schedule & map
+
+| Method | Path | Query |
+| --- | --- | --- |
+| `GET` | `/mobile/schedule` | **required** `startDate`, `endDate` (date-time) → days with phases |
+| `GET` | `/mobile/map` | optional `type` = `ERECTION` \| `DISMANTLING` \| `STANDING` \| `MAINTENANCE` |
+
+#### Crew time
+
+| Method | Path | Query |
+| --- | --- | --- |
+| `GET` | `/mobile/crew-time` | **required** `projectId`, optional `date` |
+
+Returns `totalProjectHours`, `hoursByActivity[]`, `crewBreakdown[]`, `logs[]`.
+
+#### Inspections (assigned to this SM)
+
+| Method | Path | Body |
+| --- | --- | --- |
+| `GET` | `/mobile/inspections` | List `PENDING` + `SURVEY_DONE` for `siteManagerId = me` |
+| `GET` | `/mobile/inspections/:id` | Detail (must be assigned) |
+| `PATCH` | `/mobile/inspections/:id/complete` | `scaffoldArea`, `scaffoldHeight`, `scaffoldType` (`PENDING` → `SURVEY_DONE`) |
+
+#### Phase board
+
+| Method | Path | Body |
+| --- | --- | --- |
+| `GET` | `/mobile/phases` | Managed phases |
+| `PATCH` | `/mobile/phases/:id/status` | `status`: `IN_PROGRESS` \| `COMPLETED` \| `POSTPONED` |
+
+### 4.6 Site Manager checklist
+
+1. Login with `"role": "SITE_MANAGER"`.  
+2. Build **Site Manager** navigation (Schedule, Map, Crew Time, Inspections, Phases + own Timer).  
+3. Handle 403 if assignment/global rule denies a project.  
+4. Complete inspections only when status is `PENDING`.  
+5. Use same offline sync + Socket/FCM stack as employees.  
+
+---
+
+## 5. Offline Sync (`POST /mobile/sync`) — Both Roles
 
 When the device is offline, queue completed timer segments locally. On reconnect:
 
@@ -209,9 +410,9 @@ Content-Type: application/json
 
 ### Idempotency rule
 
-- Generate a **stable UUID `clientSyncId` per offline log** when the log is first created on device.
-- Persist it locally until the server acknowledges creation **or** skip.
-- Resubmitting the same `clientSyncId` is **safe**: the server **skips** duplicates (`clientSyncId` is unique in DB).
+- Generate a **stable UUID `clientSyncId` per offline log** when the log is first created on device.  
+- Persist it until the server acknowledges creation **or** skip.  
+- Resubmitting the same `clientSyncId` is **safe** — duplicates are skipped (`clientSyncId` is unique).
 
 ### Response `data`
 
@@ -223,73 +424,15 @@ Content-Type: application/json
 }
 ```
 
-Synced rows are stored as `isManual: false`, `status: APPROVED` (server behavior). Remove local queued items that appear in `created` or were counted in `skipped`.
+Synced rows are stored as `isManual: false`, `status: APPROVED`.
 
-**Critical:** Never regenerate `clientSyncId` on retry—that creates duplicate payroll hours.
+**Critical:** Never regenerate `clientSyncId` on retry — that creates duplicate payroll hours.
 
 ---
 
-## 4. Core Flow & API Reference
+## 6. Notifications, Socket.IO & FCM — Both Roles
 
-All `/mobile/*` routes require:
-
-```text
-Authorization: Bearer <accessJwt>
-(+ ACTIVE user + valid device session)
-```
-
-### 4.1 Config & localization bootstrap
-
-Call after login:
-
-```http
-GET /api/v1/mobile/config
-```
-
-`data` includes:
-
-- `defaultLanguage`, `enabledLanguages[]`
-- `allowEmployeeManualTime`
-- `legalContents[]` (`legalContentType`, `content`, `updatedAt`) for Privacy / Terms screens
-
-Drive language pickers and legal screens from this payload—not hard-coded lists.
-
-### 4.2 Dashboard, projects, profile
-
-| Method | Path | Notes |
-| --- | --- | --- |
-| `GET` | `/mobile/dashboard` | `stats`, `upcomingTasks[]`, `mapPins[]` |
-| `GET` | `/mobile/projects` | Assigned/visible projects; SM may receive budget fields |
-| `GET` | `/mobile/profile` | Hours targets/this week + project counts |
-
-### 4.3 Time tracking
-
-| Method | Path | Body |
-| --- | --- | --- |
-| `POST` | `/mobile/timer/start` | `phaseId`, `activityType`, optional GPS start |
-| `POST` | `/mobile/timer/stop` | `timeLogId`, optional GPS end |
-| `POST` | `/mobile/timer/manual` | `phaseId`, `activityType`, `startTime`, `endTime`, `breakMinutes` → **PENDING_APPROVAL** |
-| `GET` | `/mobile/time-logs?period=TODAY\|WEEK\|MONTH` | Own logs |
-| `POST` | `/mobile/sync` | Offline batch (see §3) |
-
-`activityType`: `ERECTION` \| `DISMANTLING` \| `TRANSPORT` \| `MAINTENANCE` \| `OTHER`.
-
-Start while another timer is open → **409** `ACTIVE_TIMER_EXISTS`.
-
-### 4.4 Site Manager–only surfaces
-
-| Method | Path | Query / body |
-| --- | --- | --- |
-| `GET` | `/mobile/schedule` | `startDate`, `endDate` (date-time) |
-| `GET` | `/mobile/map` | optional `type` phase filter |
-| `GET` | `/mobile/crew-time` | **required** `projectId`, optional `date` |
-| `GET` | `/mobile/inspections` | Assigned pending/survey-done |
-| `GET` | `/mobile/inspections/:id` | Must be assigned SM |
-| `PATCH` | `/mobile/inspections/:id/complete` | `scaffoldArea`, `scaffoldHeight`, `scaffoldType` (`PENDING` → `SURVEY_DONE`) |
-| `GET` | `/mobile/phases` | Managed phase board |
-| `PATCH` | `/mobile/phases/:id/status` | `status`: `IN_PROGRESS` \| `COMPLETED` \| `POSTPONED` |
-
-### 4.5 Notifications REST
+### REST
 
 | Method | Path |
 | --- | --- |
@@ -297,16 +440,12 @@ Start while another timer is open → **409** `ACTIVE_TIMER_EXISTS`.
 | `PATCH` | `/mobile/notifications/read-all` |
 | `PATCH` | `/mobile/notifications/:id/read` |
 
----
-
-## 5. Socket.IO & FCM
-
-### Socket.IO (foreground realtime)
+### Socket.IO (foreground)
 
 | Item | Value |
 | --- | --- |
 | Namespace | `/api/v1/notification` |
-| Auth | `auth: { token: <accessJwt> }` (or `Authorization` header) |
+| Auth | `auth: { token: <accessJwt> }` |
 | Room | Auto `user:{userId}` |
 
 ```dart
@@ -334,7 +473,6 @@ Future<void> connectNotificationSocket(String accessToken) async {
 
   socket.on('notification:new', (data) {
     // { id, type, title, message, link, isRead, createdAt }
-    // Update inbox + local badge
   });
 
   socket.on('notification:read', (data) {});
@@ -343,53 +481,61 @@ Future<void> connectNotificationSocket(String accessToken) async {
 }
 ```
 
-Client → server helpers: `notification:mark-read` with `{ notificationId }`, `notification:mark-all-read`.
-
-**Note:** Socket auth checks JWT + ACTIVE user; it does **not** re-run device-session middleware. Still logout/disconnect when REST session dies.
+Client → server: `notification:mark-read` `{ notificationId }`, `notification:mark-all-read`.
 
 ### FCM (background / killed)
 
-The worker persists an in-app `Notification` row, emits Socket.IO `notification:new`, **and** sends FCM multicast to ACTIVE devices with tokens.
+1. **Foreground:** Prefer Socket.IO; optional local notification from FCM.  
+2. **Background / terminated:** `firebase_messaging` handlers; on tap open notifications + `GET /mobile/notifications`.  
+3. **Token refresh:** send via `POST /auth/check` or next login.  
+4. **Logout:** server clears FCM; delete token locally too.
 
-Recommended handling:
-
-1. **Foreground:** Prefer Socket.IO for instant UI; optionally still show a local notification from FCM data.
-2. **Background / terminated:** Use `firebase_messaging` handlers; on tap, open the notifications screen and call `GET /mobile/notifications`.
-3. **Token refresh:** Write the new token via `POST /auth/check` (or next login).
-4. **Logout:** Server clears FCM; also delete the token locally.
-
-Typical FCM data keys from the worker include `title`, `body`/`message`, `type`, `click_action: FLUTTER_NOTIFICATION_CLICK`.
+Worker data keys typically include `title`, `body`/`message`, `type`, `click_action: FLUTTER_NOTIFICATION_CLICK`.
 
 ---
 
-## 6. Localization
+## 7. Localization — Both Roles
 
-1. After auth, call **`GET /mobile/config`**.
-2. Build language settings from `enabledLanguages` / `defaultLanguage`.
-3. Render Privacy / Terms from `legalContents` (`PRIVACY_AND_POLICY`, `TERMS_AND_CONDITION`, etc.).
-4. Optionally send `x-locale` / `Accept-Language` so server ALS locale aligns with the UI (emails/push already cohort by user preference language).
-
-User preference language is stored server-side on `UserPreference` (seeded `DE` for demo users).
+1. After auth, call **`GET /mobile/config`**.  
+2. Build language settings from `enabledLanguages` / `defaultLanguage`.  
+3. Render Privacy / Terms from `legalContents` (`PRIVACY_AND_POLICY`, `TERMS_AND_CONDITION`, …).  
+4. Optionally send `x-locale` / `Accept-Language` for server ALS locale.
 
 ---
 
-## Response envelopes (mobile)
+## Quick comparison (cheat sheet)
 
-Same as admin:
-
-- Success: `{ success, message, data?, meta?, traceId }`
-- Errors: `{ success: false, message, errorType?, errors?, traceId }`
-
-Watch for mobile-specific `errorType`s: `ACTIVE_TIMER_EXISTS`, `TIMELOG_NOT_FOUND`, `SESSION_EXPIRED`, `SESSION_REVOKED`, `DEVICE_NOT_FOUND`, `DEVICE_NOT_OWNED`, `ACCESS_DENIED`, `FORBIDDEN`, `BAD_REQUEST`.
+| Feature | Employee | Site Manager |
+| --- | --- | --- |
+| Login `role` | `EMPLOYEE` | `SITE_MANAGER` |
+| `/mobile/config` | ✅ | ✅ |
+| `/mobile/dashboard` | ✅ | ✅ (+ pending inspections count for SM) |
+| `/mobile/projects` | ✅ | ✅ (+ budget fields) |
+| `/mobile/profile` | ✅ | ✅ |
+| Timer start/stop/manual/logs/sync | ✅ | ✅ |
+| `/mobile/schedule` | ❌ 403 | ✅ |
+| `/mobile/map` | ❌ 403 | ✅ |
+| `/mobile/crew-time` | ❌ 403 | ✅ |
+| `/mobile/inspections*` | ❌ 403 | ✅ |
+| `/mobile/phases*` | ❌ 403 | ✅ |
+| Notifications + Socket + FCM | ✅ | ✅ |
 
 ---
 
 ## Quick start checklist
 
-1. Persist install `deviceIdentifier` + JWT in secure storage.
-2. Login/verify with FCM token; heartbeat via `/auth/check`.
-3. Load `/mobile/config` before settings/legal screens.
-4. Gate SM-only screens client-side **and** handle 403.
-5. Implement offline queue with immutable `clientSyncId` → `/mobile/sync`.
-6. Connect Socket.IO `/api/v1/notification` with Bearer token; handle FCM for background.
-7. On any session 401, clear tokens and return to login (no refresh API).
+### Shared
+1. Persist install `deviceIdentifier` + JWT in secure storage.  
+2. Login/verify with FCM; heartbeat via `/auth/check`.  
+3. Branch UI on `user.role`.  
+4. Offline queue with immutable `clientSyncId` → `/mobile/sync`.  
+5. Connect Socket.IO `/api/v1/notification`; handle FCM in background.  
+6. On any session 401 → clear tokens and re-login (no refresh API).
+
+### Employee shell
+- Screens: Dashboard, Projects, Timer, Time Logs, Profile, Notifications, Settings/Legal.  
+- Never call SM-only endpoints.
+
+### Site Manager shell
+- All employee screens **plus** Schedule, Map, Crew Time, Inspections, Phase Board.  
+- Respect assignment / `GLOBAL_ACCESS` behavior and 403s.
