@@ -11,8 +11,10 @@ import timelogRoutes from '@/app/modules/timelog/timelog.routes';
 import absenceRoutes from '@/app/modules/absence/absence.routes';
 import userRoutes from '@/app/modules/user/user.routes';
 import vehicleRoutes from '@/app/modules/vehicle/vehicle.routes';
+import mobileRoutes from '@/app/modules/mobile/mobile.routes';
 
 const routes: Router[] = [
+  mobileRoutes,
   vehicleRoutes,
   userRoutes,
   absenceRoutes,

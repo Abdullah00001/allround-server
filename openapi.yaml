@@ -34,6 +34,8 @@ tags:
     description: Admin workforce user management endpoints
   - name: Vehicle
     description: Admin fleet vehicle management endpoints
+  - name: MobileDashboard
+    description: Mobile app dashboard, projects, and profile endpoints
 
 paths:
   /health:
@@ -5404,6 +5406,166 @@ paths:
               schema:
                 $ref: '#/components/schemas/SystemErrorResponse'
 
+  /api/v1/mobile/dashboard:
+    get:
+      tags: [MobileDashboard]
+      summary: Get mobile dashboard
+      description: Returns home-screen stats (pending inspections, assigned projects), upcoming active phases for the authenticated user, and map pins for projects with active phases.
+      operationId: getMobileDashboard
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Dashboard fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMobileDashboardResponse'
+
+        '401':
+          description: Authentication or device session failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                tokenInvalid:
+                  value:
+                    success: false
+                    message: 'Token not found'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                sessionRevoked:
+                  value:
+                    success: false
+                    message: 'Your session has ended. Please log in again.'
+                    errorType: 'SESSION_REVOKED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Account inactive or suspended
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Your account is not active. Please verify your email or contact support.'
+                errorType: 'ACCOUNT_INACTIVE'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/mobile/projects:
+    get:
+      tags: [MobileDashboard]
+      summary: List my projects
+      description: Returns distinct projects assigned to the authenticated user via ProjectManagerAssignment or CrewAssignment, with customer name and user-relevant phases only.
+      operationId: getMobileProjects
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Projects fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMobileProjectsResponse'
+
+        '401':
+          description: Authentication or device session failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                tokenInvalid:
+                  value:
+                    success: false
+                    message: 'Token not found'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                sessionRevoked:
+                  value:
+                    success: false
+                    message: 'Your session has ended. Please log in again.'
+                    errorType: 'SESSION_REVOKED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Account inactive or suspended
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Your account is not active. Please verify your email or contact support.'
+                errorType: 'ACCOUNT_INACTIVE'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/mobile/profile:
+    get:
+      tags: [MobileDashboard]
+      summary: Get mobile profile stats
+      description: Returns profile fields plus hoursThisWeek (UTC ISO week, APPROVED net hours), assignedProjectsCount, and completedProjectsCount (all phases COMPLETED).
+      operationId: getMobileProfile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Profile fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMobileProfileResponse'
+
+        '401':
+          description: Authentication or device session failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                tokenInvalid:
+                  value:
+                    success: false
+                    message: 'Token not found'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                sessionRevoked:
+                  value:
+                    success: false
+                    message: 'Your session has ended. Please log in again.'
+                    errorType: 'SESSION_REVOKED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Account inactive or suspended
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Your account is not active. Please verify your email or contact support.'
+                errorType: 'ACCOUNT_INACTIVE'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
 components:
   securitySchemes:
     adminAuth:
@@ -7902,6 +8064,198 @@ components:
                 id:
                   type: string
                   format: uuid
+
+
+    MobileUpcomingTaskDTO:
+      type: object
+      required: [phaseId, type, status, priority, startDate, endDate, project]
+      properties:
+        phaseId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
+        status:
+          type: string
+          enum: [ENQUIRY, QUOTATION, ORDER_CONFIRMED, IN_PROGRESS, COMPLETED, POSTPONED]
+        priority:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+        startDate:
+          type: string
+          format: date-time
+          nullable: true
+        endDate:
+          type: string
+          format: date-time
+          nullable: true
+        project:
+          type: object
+          required: [id, name, address]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            address:
+              type: string
+    MobileDashboardStatsDTO:
+      type: object
+      required: [pendingInspections, assignedProjects]
+      properties:
+        pendingInspections:
+          type: integer
+        assignedProjects:
+          type: integer
+    MobileMapPinDTO:
+      type: object
+      required: [id, name, latitude, longitude, activePhaseType]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        latitude:
+          type: number
+          nullable: true
+        longitude:
+          type: number
+          nullable: true
+        activePhaseType:
+          type: string
+          enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
+    MobileDashboardDTO:
+      type: object
+      required: [stats, upcomingTasks, mapPins]
+      properties:
+        stats:
+          $ref: '#/components/schemas/MobileDashboardStatsDTO'
+        upcomingTasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileUpcomingTaskDTO'
+        mapPins:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileMapPinDTO'
+    MobileProjectPhaseDTO:
+      type: object
+      required: [id, type, status, priority, startDate, endDate]
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
+        status:
+          type: string
+          enum: [ENQUIRY, QUOTATION, ORDER_CONFIRMED, IN_PROGRESS, COMPLETED, POSTPONED]
+        priority:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+        startDate:
+          type: string
+          format: date-time
+          nullable: true
+        endDate:
+          type: string
+          format: date-time
+          nullable: true
+    MobileProjectDTO:
+      type: object
+      required: [id, name, address, customer, phases]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        address:
+          type: string
+        customer:
+          type: object
+          required: [id, name]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+        phases:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileProjectPhaseDTO'
+    MobileProfileDTO:
+      type: object
+      required: [id, firstName, lastName, role, email, phone, avatarUrl, weeklyHoursTarget, hoursThisWeek, assignedProjectsCount, completedProjectsCount]
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        role:
+          type: string
+          enum: [ADMIN, SITE_MANAGER, EMPLOYEE]
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          nullable: true
+        avatarUrl:
+          type: string
+          nullable: true
+        weeklyHoursTarget:
+          type: number
+        hoursThisWeek:
+          type: number
+          example: 32.5
+        assignedProjectsCount:
+          type: integer
+        completedProjectsCount:
+          type: integer
+    GetMobileDashboardResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Dashboard fetched successfully.'
+            data:
+              $ref: '#/components/schemas/MobileDashboardDTO'
+    GetMobileProjectsResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Projects fetched successfully.'
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/MobileProjectDTO'
+    GetMobileProfileResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Profile fetched successfully.'
+            data:
+              $ref: '#/components/schemas/MobileProfileDTO'
 
     HealthResponse:
       type: object
