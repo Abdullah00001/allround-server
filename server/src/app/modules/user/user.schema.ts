@@ -21,7 +21,7 @@ export const createUserSchema = z
       .string()
       .min(8, { message: 'Password must be at least 8 characters' }),
     role: workforceRoleSchema,
-    phone: z.string().trim().min(1).optional(),
+    phone: z.string().trim().optional(),
     weeklyHoursTarget: z.number().positive().max(168).optional().default(40),
   })
   .strict();
@@ -40,7 +40,7 @@ export const updateUserSchema = z
       .min(8, { message: 'Password must be at least 8 characters' })
       .optional(),
     role: workforceRoleSchema.optional(),
-    phone: z.string().trim().min(1).nullable().optional(),
+    phone: z.string().trim().nullable().optional(),
     weeklyHoursTarget: z.number().positive().max(168).optional(),
     status: z.enum(UserStatus, { message: 'Invalid status' }).optional(),
     avatarUrl: z.string().url().nullable().optional(),

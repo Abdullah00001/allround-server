@@ -323,6 +323,130 @@ Admin Projects reuses the same Prisma graph and mobile services for detail hub +
 
 Child list/create bodies match mobile (`docs/flutter-mobile-integration.md` project hub). Upload files via `POST /media` then register with attachment `url`.
 
+#### Create project — EXISTING vs NEW customer
+
+`POST /admin/projects` uses the same `customer` discriminated union as mobile. Differences vs mobile: cookie + CSRF auth, and **`siteManagerId` is required** (admin is not a site manager).
+
+`contact` is **always required** (both modes).  
+`status` must be a real `PhaseStatus` (`ENQUIRY` …) — no `PLANNED` / `NOT_STARTED` (UI “Planned” → `ENQUIRY`).
+
+**Existing customer**
+
+```http
+POST /api/v1/admin/projects
+Cookie: access_token=...
+x-csrf-token: ...
+Content-Type: application/json
+
+{
+  "name": "Goltstein Complex",
+  "coordinates": { "lat": 50.9082, "lng": 6.9723 },
+  "placeLabel": "Goltsteinstraße 12, Köln",
+  "scaffoldSpecification": { "area": 450, "height": 15, "type": "Modular scaffold" },
+  "priority": "MEDIUM",
+  "phaseType": "ERECTION",
+  "status": "ENQUIRY",
+  "siteManagerId": "<site-manager-user-uuid>",
+  "customer": {
+    "mode": "EXISTING",
+    "customerId": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+  },
+  "contact": {
+    "name": "Andreas Weber",
+    "phone": "+49654515151",
+    "email": "abc@yopmail.com",
+    "role": "Project lead"
+  },
+  "scheduleData": [
+    {
+      "type": "erection",
+      "startDate": "2026-11-14T18:00:00.000Z",
+      "endDate": "2026-11-18T08:30:00.000Z",
+      "durationDays": 3
+    },
+    {
+      "type": "dismantling",
+      "startDate": "2026-11-29T08:30:00.000Z",
+      "endDate": "2026-12-02T08:30:00.000Z",
+      "durationDays": 3
+    }
+  ]
+}
+```
+
+- Links project to `customerId`
+- Upserts a new primary `CustomerContact` from `contact`
+- Do **not** send `customer.name` / `customer.category`
+
+**New customer**
+
+```http
+POST /api/v1/admin/projects
+Cookie: access_token=...
+x-csrf-token: ...
+Content-Type: application/json
+
+{
+  "name": "Goltstein Complex",
+  "coordinates": { "lat": 50.9082, "lng": 6.9723 },
+  "placeLabel": "Goltsteinstraße 12, Köln",
+  "scaffoldSpecification": { "area": 450, "height": 15, "type": "Modular scaffold" },
+  "priority": "MEDIUM",
+  "phaseType": "ERECTION",
+  "status": "ENQUIRY",
+  "siteManagerId": "<site-manager-user-uuid>",
+  "customer": {
+    "mode": "NEW",
+    "name": "Hochtief AG",
+    "category": "COMMERCIAL"
+  },
+  "contact": {
+    "name": "Andreas Weber",
+    "phone": "+49654515151",
+    "email": "abc@yopmail.com",
+    "role": "Project lead"
+  },
+  "scheduleData": [
+    {
+      "type": "erection",
+      "startDate": "2026-11-14T18:00:00.000Z",
+      "endDate": "2026-11-18T08:30:00.000Z",
+      "durationDays": 3
+    }
+  ]
+}
+```
+
+- Creates `Customer` (`name` required; `category` optional, default `COMMERCIAL`)
+- Creates primary contact from `contact`
+- Customer geo/address from project `coordinates` / `placeLabel`
+- Do **not** send `customerId`
+
+| | EXISTING | NEW |
+| --- | --- | --- |
+| `customer.mode` | `"EXISTING"` | `"NEW"` |
+| Required | `customerId` | `name` |
+| Optional | — | `category` |
+| Do **not** send | `name` / `category` | `customerId` |
+| Always | `siteManagerId`, `contact` | `siteManagerId`, `contact` |
+
+#### Enums for admin dropdowns (same as mobile)
+
+Use these exact strings (also in OpenAPI `MobileEnumsDTO` / `CreateMobileProjectRequest`):
+
+| Field | Values |
+| --- | --- |
+| `status` / phase status | `ENQUIRY`, `QUOTATION`, `ORDER_CONFIRMED`, `IN_PROGRESS`, `COMPLETED`, `POSTPONED` |
+| `phaseType` | `ERECTION`, `DISMANTLING`, `STANDING`, `MAINTENANCE` |
+| `priority` | `HIGH`, `MEDIUM`, `LOW` |
+| `customer.category` | `COMMERCIAL`, `MUNICIPALITY`, `ARCHITECT`, `PRIVATE` |
+| `scheduleData[].type` | `erection`, `dismantling`, `standing`, `other` (lowercase) |
+| Note `category` | `SITE_ACCESS`, `CUSTOMER_REQUEST`, `OPEN_POINTS`, `AGREEMENTS`, `SPECIAL_REQUIREMENTS`, `LOCAL_CONTACT`, `GENERAL`, `SAFETY`, `INTERNAL` |
+| Attachment `category` | `PHOTO`, `PDF_PLAN`, `OTHER` |
+| Measurement `unit` | `M`, `M2`, `PCS` |
+
+OpenAPI: `POST /api/v1/admin/projects` requestBody examples `existingCustomer` / `newCustomer`.
+
 ### 3.3 Daily Planning (crew & vehicles)
 
 | Method | Path | Body / query |

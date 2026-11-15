@@ -49,7 +49,7 @@ export const startTimerSchema = z
 
 /**
  * Request body schema for `POST /mobile/timer/stop`.
- */
+ */ 
 export const stopTimerSchema = z
   .object({
     timeLogId: z.string().uuid({ error: 'Invalid time log id' }),
@@ -630,7 +630,7 @@ export const createMobileProjectSchema = z
     contact: z
       .object({
         name: z.string().trim().min(1, { message: 'Contact name is required' }),
-        phone: z.string().trim().min(1).optional(),
+        phone: z.string().trim().optional(),
         email: z
           .string()
           .trim()

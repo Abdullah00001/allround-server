@@ -246,9 +246,29 @@ Login (role=EMPLOYEE)
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| `GET` | `/mobile/config` | `defaultLanguage`, `enabledLanguages`, `allowEmployeeManualTime`, `legalContents[]` |
+| `GET` | `/mobile/config` | `defaultLanguage`, `enabledLanguages`, `allowEmployeeManualTime`, `legalContents[]`, **`enums`** (all API enum catalogs) |
 
 If `allowEmployeeManualTime === false`, hide the “Add manual time” UI.
+
+**`data.enums` (source of truth for dropdowns):** bind forms to these arrays — do **not** invent values (e.g. `PLANNED` / `NOT_STARTED` are invalid).
+
+| Key | Values |
+| --- | --- |
+| `phaseStatus` | `ENQUIRY`, `QUOTATION`, `ORDER_CONFIRMED`, `IN_PROGRESS`, `COMPLETED`, `POSTPONED` |
+| `phaseType` | `ERECTION`, `DISMANTLING`, `STANDING`, `MAINTENANCE` |
+| `priority` | `HIGH`, `MEDIUM`, `LOW` |
+| `activityType` | `ERECTION`, `DISMANTLING`, `TRANSPORT`, `MAINTENANCE`, `OTHER` |
+| `customerCategory` | `COMMERCIAL`, `MUNICIPALITY`, `ARCHITECT`, `PRIVATE` |
+| `inspectionStatus` | `PENDING`, `SURVEY_DONE`, `CONVERTED` |
+| `timeLogStatus` | `PENDING_APPROVAL`, `APPROVED`, `REJECTED` |
+| `projectNoteCategory` | `SITE_ACCESS`, `CUSTOMER_REQUEST`, `OPEN_POINTS`, `AGREEMENTS`, `SPECIAL_REQUIREMENTS`, `LOCAL_CONTACT`, `GENERAL`, `SAFETY`, `INTERNAL` |
+| `attachmentCategory` | `PHOTO`, `PDF_PLAN`, `OTHER` |
+| `measurementUnit` | `M`, `M2`, `PCS` |
+| `scheduleDataType` | `erection`, `dismantling`, `standing`, `other` (lowercase — for `scheduleData[].type`) |
+| `role` | `ADMIN`, `SITE_MANAGER`, `EMPLOYEE` |
+| `language` | `DE`, `EN`, … |
+
+UI label **“Not Started” / “Planned”** → send `status: "ENQUIRY"` (or omit `status`; create defaults to `ENQUIRY`).
 
 #### Home / work
 
@@ -460,7 +480,7 @@ Content-Type: application/json
   "scaffoldSpecification": { "area": 450, "height": 8.2, "type": "Fassadengerüst" },
   "priority": "HIGH",
   "phaseType": "ERECTION",
-  "status": "IN_PROGRESS",
+  "status": "ENQUIRY",
   "customer": { "mode": "EXISTING", "customerId": "<uuid>" },
   "contact": {
     "name": "Tim Muller",
@@ -927,6 +947,7 @@ Worker data keys typically include `title`, `body`/`message`, `type`, `click_act
 
 1. After auth, call **`GET /mobile/config`**.  
 2. Build language settings from `enabledLanguages` / `defaultLanguage`.  
+3. Cache **`data.enums`** and validate every create/update dropdown against those lists (never hardcode invented statuses like `PLANNED`).  
 3. Render Privacy / Terms from `legalContents` (`PRIVACY_AND_POLICY`, `TERMS_AND_CONDITION`, …).  
 4. Optionally send `x-locale` / `Accept-Language` for server ALS locale.
 

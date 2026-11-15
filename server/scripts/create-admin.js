@@ -72,10 +72,6 @@ const isValidEmail = (email) => {
   return emailRegex.test(email);
 };
 
-const isValidPhone = (phone) => {
-  const phoneRegex = /^\+?[1-9]\d{1,14}$/;
-  return phoneRegex.test(phone.trim());
-};
 
 const createAdmin = async () => {
   try {
@@ -116,19 +112,9 @@ const createAdmin = async () => {
       }
     }
 
-    // --- Phone ---
-    let phone = '';
-    while (!phone || !isValidPhone(phone)) {
-      phone = await question('Phone (e.g. +1234567890): ');
-      if (!phone) {
-        console.log('⚠ Phone cannot be empty!');
-      } else if (!isValidPhone(phone)) {
-        console.log(
-          '⚠ Please enter a valid phone number (E.164 format, e.g. +1234567890)!'
-        );
-        phone = '';
-      }
-    }
+    // --- Phone (optional; no format validation) ---
+    let phone = await question('Phone (optional): ');
+    phone = phone ? phone.trim() : null;
 
     // --- Password ---
     let password = '';
@@ -161,7 +147,7 @@ const createAdmin = async () => {
         data: {
           fullName: fullName.trim(),
           email: email.toLowerCase().trim(),
-          phone: phone.trim(),
+          phone: phone,
           password: hashedPassword,
           role: 'ADMIN',
           status: 'ACTIVE',

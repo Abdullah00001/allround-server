@@ -24,7 +24,7 @@ const inspectionPhotoSchema = z
 const inspectionContactSchema = z
   .object({
     name: z.string().trim().min(1, { message: 'Contact name is required' }),
-    phone: z.string().trim().min(1).optional(),
+    phone: z.string().trim().optional(),
     email: z.string().trim().email({ message: 'Invalid contact email' }).optional(),
     role: z.string().trim().min(1).optional().default('Project lead'),
   })

@@ -3549,10 +3549,23 @@ paths:
     post:
       tags: [Project]
       summary: Create project
-      description: >
-        Creates a project using the same payload and service as mobile
-        `POST /mobile/projects`. Admin must supply `siteManagerId` (assignee PM).
-        Customer mode EXISTING|NEW, scheduleData, optional note/photos supported.
+      description: |
+        Same body schema as mobile `POST /mobile/projects` (`CreateMobileProjectRequest`),
+        except **`siteManagerId` is required** (assignee PM).
+
+        **Customer (`customer.mode` discriminator):**
+        - `EXISTING` — `{ "mode": "EXISTING", "customerId": "<uuid>" }`. Do **not** send
+          `name` / `category`. Links project to that customer; upserts primary contact
+          from top-level `contact`.
+        - `NEW` — `{ "mode": "NEW", "name": "...", "category?": "COMMERCIAL" }`. Do **not**
+          send `customerId`. Creates customer + primary contact. Category defaults to
+          `COMMERCIAL` (`COMMERCIAL` | `MUNICIPALITY` | `ARCHITECT` | `PRIVATE`).
+
+        **`contact` is always required** for both modes.
+
+        **`status`:** `PhaseStatus` only (`ENQUIRY`, `QUOTATION`, `ORDER_CONFIRMED`,
+        `IN_PROGRESS`, `COMPLETED`, `POSTPONED`). No `PLANNED` / `NOT_STARTED` —
+        map UI “Planned” → `ENQUIRY`.
       operationId: createAdminProject
       security:
         - adminAuth: []
@@ -3568,6 +3581,64 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/CreateMobileProjectRequest'
+            examples:
+              existingCustomer:
+                summary: Existing customer (+ required siteManagerId)
+                description: >
+                  mode=EXISTING requires customerId only. contact + siteManagerId required.
+                value:
+                  name: Goltstein Complex
+                  coordinates: { lat: 50.9082, lng: 6.9723 }
+                  placeLabel: Goltsteinstraße 12, Köln
+                  scaffoldSpecification: { area: 450, height: 15, type: Modular scaffold }
+                  priority: MEDIUM
+                  phaseType: ERECTION
+                  status: ENQUIRY
+                  siteManagerId: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  customer:
+                    mode: EXISTING
+                    customerId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  contact:
+                    name: Andreas Weber
+                    phone: '+49654515151'
+                    email: abc@yopmail.com
+                    role: Project lead
+                  scheduleData:
+                    - type: erection
+                      startDate: '2026-11-14T18:00:00.000Z'
+                      endDate: '2026-11-18T08:30:00.000Z'
+                      durationDays: 3
+                    - type: dismantling
+                      startDate: '2026-11-29T08:30:00.000Z'
+                      endDate: '2026-12-02T08:30:00.000Z'
+                      durationDays: 3
+              newCustomer:
+                summary: New customer (+ required siteManagerId)
+                description: >
+                  mode=NEW requires name (+ optional category). Do not send customerId.
+                value:
+                  name: Goltstein Complex
+                  coordinates: { lat: 50.9082, lng: 6.9723 }
+                  placeLabel: Goltsteinstraße 12, Köln
+                  scaffoldSpecification: { area: 450, height: 15, type: Modular scaffold }
+                  priority: MEDIUM
+                  phaseType: ERECTION
+                  status: ENQUIRY
+                  siteManagerId: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  customer:
+                    mode: NEW
+                    name: Hochtief AG
+                    category: COMMERCIAL
+                  contact:
+                    name: Andreas Weber
+                    phone: '+49654515151'
+                    email: abc@yopmail.com
+                    role: Project lead
+                  scheduleData:
+                    - type: erection
+                      startDate: '2026-11-14T18:00:00.000Z'
+                      endDate: '2026-11-18T08:30:00.000Z'
+                      durationDays: 3
       responses:
         '201':
           description: Project created successfully
@@ -6297,11 +6368,26 @@ paths:
     post:
       tags: [MobileProjectManagement]
       summary: Create project (Site Manager)
-      description: >
-        Creates a project from the Create New Project form. Location is required
-        as map `coordinates` (`lat`/`lng`). Optional `placeLabel` is stored as
-        DB address; otherwise `"lat, lng"` is used. Supports EXISTING or NEW
-        customer, primary contact, erection/dismantling schedules, note, and photos.
+      description: |
+        Creates a project from the Create New Project form.
+
+        **Location:** required map `coordinates` (`lat`/`lng`). Optional `placeLabel`
+        is stored as DB address; otherwise `"lat, lng"` is used.
+
+        **Customer (`customer.mode` discriminator):**
+        - `EXISTING` — send `{ "mode": "EXISTING", "customerId": "<uuid>" }`. Do **not**
+          send `name` / `category`. Links the project to that customer and upserts a
+          new primary `CustomerContact` from `contact`.
+        - `NEW` — send `{ "mode": "NEW", "name": "...", "category?": "COMMERCIAL" }`.
+          Do **not** send `customerId`. Creates a customer (+ primary contact). Category
+          defaults to `COMMERCIAL` (`COMMERCIAL` | `MUNICIPALITY` | `ARCHITECT` | `PRIVATE`).
+
+        **`contact` is always required** for both modes.
+
+        **`status`:** use `PhaseStatus` values only (`ENQUIRY`, `QUOTATION`,
+        `ORDER_CONFIRMED`, `IN_PROGRESS`, `COMPLETED`, `POSTPONED`). There is no
+        `PLANNED` / `NOT_STARTED` — map UI “Planned” → `ENQUIRY` (or omit; default `ENQUIRY`).
+        Full catalogs: `GET /mobile/config` → `data.enums`.
       operationId: createMobileProject
       security: [{bearerAuth: []}]
       requestBody:
@@ -6310,6 +6396,58 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/CreateMobileProjectRequest'
+            examples:
+              existingCustomer:
+                summary: Existing customer
+                value:
+                  name: Goltstein Complex
+                  coordinates: { lat: 50.9082, lng: 6.9723 }
+                  placeLabel: Goltsteinstraße 12, Köln
+                  scaffoldSpecification: { area: 450, height: 15, type: Modular scaffold }
+                  priority: MEDIUM
+                  phaseType: ERECTION
+                  status: ENQUIRY
+                  customer:
+                    mode: EXISTING
+                    customerId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  contact:
+                    name: Andreas Weber
+                    phone: '+49654515151'
+                    email: abc@yopmail.com
+                    role: Project lead
+                  scheduleData:
+                    - type: erection
+                      startDate: '2026-11-14T18:00:00.000Z'
+                      endDate: '2026-11-18T08:30:00.000Z'
+                      durationDays: 3
+                    - type: dismantling
+                      startDate: '2026-11-29T08:30:00.000Z'
+                      endDate: '2026-12-02T08:30:00.000Z'
+                      durationDays: 3
+              newCustomer:
+                summary: New customer
+                value:
+                  name: Goltstein Complex
+                  coordinates: { lat: 50.9082, lng: 6.9723 }
+                  placeLabel: Goltsteinstraße 12, Köln
+                  scaffoldSpecification: { area: 450, height: 15, type: Modular scaffold }
+                  priority: MEDIUM
+                  phaseType: ERECTION
+                  status: ENQUIRY
+                  customer:
+                    mode: NEW
+                    name: Hochtief AG
+                    category: COMMERCIAL
+                  contact:
+                    name: Andreas Weber
+                    phone: '+49654515151'
+                    email: abc@yopmail.com
+                    role: Project lead
+                  scheduleData:
+                    - type: erection
+                      startDate: '2026-11-14T18:00:00.000Z'
+                      endDate: '2026-11-18T08:30:00.000Z'
+                      durationDays: 3
       responses:
         '201':
           description: Project created successfully
@@ -8476,9 +8614,8 @@ components:
           description: Valid and unique email address
         phone:
           type: string
-          pattern: '^[0-9]{10}$'
-          example: '1234567890'
-          description: Optional 10-digit phone number
+          example: '+49654515151'
+          description: Optional phone / mobile number (no format validation)
         role:
           type: string
           enum:
@@ -11813,20 +11950,68 @@ components:
             data:
               $ref: '#/components/schemas/MobileProjectNoteDTO'
 
+    CreateMobileProjectCustomerExisting:
+      type: object
+      description: >
+        Link project to an existing customer. Upserts a new primary contact from
+        the top-level `contact` object. Do not send `name` or `category`.
+      required: [mode, customerId]
+      additionalProperties: false
+      properties:
+        mode:
+          type: string
+          enum: [EXISTING]
+          example: EXISTING
+        customerId:
+          type: string
+          format: uuid
+          description: Existing Customer.id
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+    CreateMobileProjectCustomerNew:
+      type: object
+      description: >
+        Create a new customer for this project. Do not send `customerId`.
+        Customer geo/address is taken from project `coordinates` / `placeLabel`.
+      required: [mode, name]
+      additionalProperties: false
+      properties:
+        mode:
+          type: string
+          enum: [NEW]
+          example: NEW
+        name:
+          type: string
+          description: New customer company name
+          example: Hochtief AG
+        category:
+          type: string
+          enum: [COMMERCIAL, MUNICIPALITY, ARCHITECT, PRIVATE]
+          default: COMMERCIAL
+          description: Optional; defaults to COMMERCIAL
+          example: COMMERCIAL
     CreateMobileProjectRequest:
       type: object
       required: [name, coordinates, customer, contact]
+      description: |
+        Site Manager create-project body.
+
+        `customer` is a discriminated union on `mode`:
+        - EXISTING → `{ mode, customerId }` only
+        - NEW → `{ mode, name, category? }` only
+
+        `contact` is always required (both modes).
       properties:
-        name: {type: string}
+        name: {type: string, example: Goltstein Complex}
         coordinates:
           type: object
           required: [lat, lng]
           properties:
-            lat: {type: number}
-            lng: {type: number}
+            lat: {type: number, example: 50.9082}
+            lng: {type: number, example: 6.9723}
         placeLabel:
           type: string
           description: Optional map place label stored as Project.address
+          example: Goltsteinstraße 12, Köln
         scaffoldSpecification:
           type: object
           required: [area]
@@ -11834,38 +12019,46 @@ components:
             Scaffold spec returned on project detail. area → Project.scaffoldArea;
             height/type seed an initial measurement for detail aggregation.
           properties:
-            area: {type: number}
-            height: {type: number}
-            type: {type: string}
+            area: {type: number, example: 450}
+            height: {type: number, example: 15}
+            type: {type: string, example: Modular scaffold}
         scaffoldArea:
           type: number
           deprecated: true
           description: Prefer scaffoldSpecification.area
-        priority: {type: string, enum: [HIGH, MEDIUM, LOW], default: MEDIUM}
-        phaseType: {type: string, enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE], default: ERECTION}
-        status: {type: string, enum: [ENQUIRY, QUOTATION, ORDER_CONFIRMED, IN_PROGRESS, COMPLETED, POSTPONED], default: ENQUIRY}
-        siteManagerId: {type: string, format: uuid, description: Defaults to authenticated site manager}
+        priority: {type: string, enum: [HIGH, MEDIUM, LOW], default: MEDIUM, example: MEDIUM}
+        phaseType: {type: string, enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE], default: ERECTION, example: ERECTION}
+        status:
+          type: string
+          enum: [ENQUIRY, QUOTATION, ORDER_CONFIRMED, IN_PROGRESS, COMPLETED, POSTPONED]
+          default: ENQUIRY
+          example: ENQUIRY
+          description: >
+            PhaseStatus only. No PLANNED/NOT_STARTED — map UI Planned → ENQUIRY.
+            See GET /mobile/config → enums.phaseStatus.
+        siteManagerId:
+          type: string
+          format: uuid
+          description: Defaults to authenticated site manager (required for admin create)
         customer:
+          description: Discriminated by `mode` — EXISTING (customerId) or NEW (name + optional category)
+          discriminator:
+            propertyName: mode
+            mapping:
+              EXISTING: '#/components/schemas/CreateMobileProjectCustomerExisting'
+              NEW: '#/components/schemas/CreateMobileProjectCustomerNew'
           oneOf:
-            - type: object
-              required: [mode, customerId]
-              properties:
-                mode: {type: string, enum: [EXISTING]}
-                customerId: {type: string, format: uuid}
-            - type: object
-              required: [mode, name]
-              properties:
-                mode: {type: string, enum: [NEW]}
-                name: {type: string}
-                category: {type: string, enum: [COMMERCIAL, MUNICIPALITY, ARCHITECT, PRIVATE], default: COMMERCIAL}
+            - $ref: '#/components/schemas/CreateMobileProjectCustomerExisting'
+            - $ref: '#/components/schemas/CreateMobileProjectCustomerNew'
         contact:
           type: object
           required: [name]
+          description: Always required. Becomes the primary CustomerContact (both EXISTING and NEW).
           properties:
-            name: {type: string}
-            phone: {type: string}
-            email: {type: string, format: email}
-            role: {type: string, default: Project lead}
+            name: {type: string, example: Andreas Weber}
+            phone: {type: string, example: '+49654515151'}
+            email: {type: string, format: email, example: abc@yopmail.com}
+            role: {type: string, default: Project lead, example: Project lead}
         scheduleData:
           type: array
           minItems: 1
@@ -12691,9 +12884,93 @@ components:
         updatedAt:
           type: string
           format: date-time
+    MobileEnumsDTO:
+      type: object
+      required:
+        - phaseStatus
+        - phaseType
+        - priority
+        - activityType
+        - customerCategory
+        - inspectionStatus
+        - timeLogStatus
+        - projectNoteCategory
+        - attachmentCategory
+        - measurementUnit
+        - scheduleDataType
+        - role
+        - language
+      properties:
+        phaseStatus:
+          type: array
+          items:
+            type: string
+            enum: [ENQUIRY, QUOTATION, ORDER_CONFIRMED, IN_PROGRESS, COMPLETED, POSTPONED]
+          description: 'Use for create/update `status`. There is no PLANNED or NOT_STARTED — map UI "Not Started" / "Planned" → ENQUIRY.'
+        phaseType:
+          type: array
+          items:
+            type: string
+            enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
+        priority:
+          type: array
+          items:
+            type: string
+            enum: [HIGH, MEDIUM, LOW]
+        activityType:
+          type: array
+          items:
+            type: string
+            enum: [ERECTION, DISMANTLING, TRANSPORT, MAINTENANCE, OTHER]
+        customerCategory:
+          type: array
+          items:
+            type: string
+            enum: [COMMERCIAL, MUNICIPALITY, ARCHITECT, PRIVATE]
+        inspectionStatus:
+          type: array
+          items:
+            type: string
+            enum: [PENDING, SURVEY_DONE, CONVERTED]
+        timeLogStatus:
+          type: array
+          items:
+            type: string
+            enum: [PENDING_APPROVAL, APPROVED, REJECTED]
+        projectNoteCategory:
+          type: array
+          items:
+            type: string
+            enum: [SITE_ACCESS, CUSTOMER_REQUEST, OPEN_POINTS, AGREEMENTS, SPECIAL_REQUIREMENTS, LOCAL_CONTACT, GENERAL, SAFETY, INTERNAL]
+        attachmentCategory:
+          type: array
+          items:
+            type: string
+            enum: [PHOTO, PDF_PLAN, OTHER]
+        measurementUnit:
+          type: array
+          items:
+            type: string
+            enum: [M, M2, PCS]
+        scheduleDataType:
+          type: array
+          items:
+            type: string
+            enum: [erection, dismantling, standing, other]
+          description: Lowercase keys for `scheduleData[].type` (not PhaseType SCREAMING_SNAKE).
+        role:
+          type: array
+          items:
+            type: string
+            enum: [ADMIN, SITE_MANAGER, EMPLOYEE]
+        language:
+          type: array
+          items:
+            type: string
+            enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU]
     MobileConfigDTO:
       type: object
-      required: [defaultLanguage, enabledLanguages, allowEmployeeManualTime, legalContents]
+      required: [defaultLanguage, enabledLanguages, allowEmployeeManualTime, legalContents, enums]
       properties:
         defaultLanguage:
           type: string
@@ -12709,6 +12986,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MobileLegalContentDTO'
+        enums:
+          $ref: '#/components/schemas/MobileEnumsDTO'
     GetMobileConfigResponse:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'

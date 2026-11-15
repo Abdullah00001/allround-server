@@ -1,8 +1,10 @@
 import {
+  ActivityType,
   AttachmentCategory,
   CustomerCategory,
   InspectionStatus,
   Language,
+  MeasurementUnit,
   PhaseStatus,
   PhaseType,
   Priority,
@@ -26,6 +28,7 @@ import {
   MobileCrewTimeDTO,
   MobileDashboardDTO,
   MobileDashboardStatsDTO,
+  MobileEnumsDTO,
   MobileHoursByActivityDTO,
   MobileInspectionDTO,
   MobileLegalContentDTO,
@@ -313,13 +316,30 @@ export const getMobileConfigService = async (): Promise<MobileConfigDTO> => {
       )
   );
 
+  const enums = new MobileEnumsDTO(
+    Object.values(PhaseStatus),
+    Object.values(PhaseType),
+    Object.values(Priority),
+    Object.values(ActivityType),
+    Object.values(CustomerCategory),
+    Object.values(InspectionStatus),
+    Object.values(TimeLogStatus),
+    Object.values(ProjectNoteCategory),
+    Object.values(AttachmentCategory),
+    Object.values(MeasurementUnit),
+    ['erection', 'dismantling', 'standing', 'other'],
+    Object.values(Role),
+    Object.values(Language)
+  );
+
   return new MobileConfigDTO(
     profile?.defaultLanguage ?? Language.DE,
     profile?.enabledLanguages?.length
       ? profile.enabledLanguages
       : [Language.DE, Language.EN],
     profile?.allowEmployeeManualTime ?? true,
-    legalContents
+    legalContents,
+    enums
   );
 };
 

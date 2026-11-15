@@ -704,18 +704,60 @@ export class MobileLegalContentDTO {
 /**
  * Mobile app configuration from company settings + legal content.
  */
+/**
+ * Canonical Prisma enum value lists for Flutter form dropdowns / validation.
+ * Clients must use these strings exactly — do not invent labels like `PLANNED`.
+ */
+export class MobileEnumsDTO {
+  /**
+   * @param {string[]} phaseStatus - ProjectPhase.status / create `status`.
+   * @param {string[]} phaseType - ProjectPhase.type / create `phaseType`.
+   * @param {string[]} priority - Phase / task priority.
+   * @param {string[]} activityType - Time-log activity.
+   * @param {string[]} customerCategory - Customer.category.
+   * @param {string[]} inspectionStatus - Inspection.status.
+   * @param {string[]} timeLogStatus - TimeLog.status.
+   * @param {string[]} projectNoteCategory - ProjectNote.category.
+   * @param {string[]} attachmentCategory - Attachment.category (PHOTO / PDF_PLAN for project media).
+   * @param {string[]} measurementUnit - ProjectMeasurement.unit.
+   * @param {string[]} scheduleDataType - create/detail `scheduleData[].type` (lowercase Flutter keys).
+   * @param {string[]} role - User.role.
+   * @param {string[]} language - Language codes.
+   */
+  constructor(
+    public phaseStatus: string[],
+    public phaseType: string[],
+    public priority: string[],
+    public activityType: string[],
+    public customerCategory: string[],
+    public inspectionStatus: string[],
+    public timeLogStatus: string[],
+    public projectNoteCategory: string[],
+    public attachmentCategory: string[],
+    public measurementUnit: string[],
+    public scheduleDataType: string[],
+    public role: string[],
+    public language: string[]
+  ) {}
+}
+
+/**
+ * Mobile bootstrap config including legal docs and enum catalogs.
+ */
 export class MobileConfigDTO {
   /**
    * @param {Language} defaultLanguage - Company default language.
    * @param {Language[]} enabledLanguages - Languages enabled for the mobile UI.
    * @param {boolean} allowEmployeeManualTime - Whether employees may submit manual time.
    * @param {MobileLegalContentDTO[]} legalContents - Published legal documents.
+   * @param {MobileEnumsDTO} enums - All API enum value lists for client validation.
    */
   constructor(
     public defaultLanguage: Language,
     public enabledLanguages: Language[],
     public allowEmployeeManualTime: boolean,
-    public legalContents: MobileLegalContentDTO[]
+    public legalContents: MobileLegalContentDTO[],
+    public enums: MobileEnumsDTO
   ) {}
 }
 

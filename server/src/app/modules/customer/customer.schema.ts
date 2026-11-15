@@ -10,7 +10,7 @@ const contactInputSchema = z
   .object({
     name: z.string().trim().min(1, { message: 'Contact name is required' }),
     role: z.string().trim().min(1, { message: 'Contact role is required' }),
-    phone: z.string().trim().min(1).optional(),
+    phone: z.string().trim().optional(),
     email: z.email({ message: 'Invalid contact email address' }).optional(),
     isPrimary: z.boolean().default(false),
   })
@@ -79,7 +79,7 @@ export const createContactSchema = z
   .object({
     name: z.string().trim().min(1, { message: 'Contact name is required' }),
     role: z.string().trim().min(1, { message: 'Contact role is required' }),
-    phone: z.string().trim().min(1).optional(),
+    phone: z.string().trim().optional(),
     email: z.email({ message: 'Invalid contact email address' }).optional(),
     isPrimary: z.boolean().default(false),
   })

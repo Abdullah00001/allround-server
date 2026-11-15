@@ -9,11 +9,7 @@ export const signupSchema = z
     firstName: z.string().trim().min(1, { message: 'First name is required' }),
     lastName: z.string().trim().min(1, { message: 'Last name is required' }),
     email: z.email({ message: 'Invalid email address' }).trim().toLowerCase(),
-    phone: z
-      .string()
-      .trim()
-      .regex(/^[0-9]{10}$/, { message: 'Phone number must be 10 digits long' })
-      .optional(),
+    phone: z.string().trim().optional(),
     role: z.enum(Role),
     password: z
       .string()
