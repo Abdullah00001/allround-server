@@ -43,21 +43,26 @@ export const checkInspectionExistenceMiddleware = asyncHandler(
 );
 
 /**
- * Ensures `req.body.customerId` references a non-deleted customer.
- * Used on inspection create.
+ * Ensures EXISTING-mode create body references a non-deleted customer.
+ * Skips when `customer.mode` is `NEW`.
  *
  * @param {Request} req - Express request with validated create body.
  * @param {Response} res - Express response used for the 404 envelope.
- * @param {NextFunction} next - Continues when the customer exists.
+ * @param {NextFunction} next - Continues when the customer exists or mode is NEW.
  * @returns {Promise<void>}
  */
 export const checkInspectionCustomerExistsMiddleware = asyncHandler(
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const traceId = getTraceId();
-    const { customerId } = req.body as TCreateInspectionPayload;
+    const payload = req.body as TCreateInspectionPayload;
+
+    if (payload.customer.mode !== 'EXISTING') {
+      next();
+      return;
+    }
 
     const customer = await prisma.customer.findFirst({
-      where: { id: customerId, deletedAt: null },
+      where: { id: payload.customer.customerId, deletedAt: null },
       select: { id: true },
     });
 
@@ -66,6 +71,34 @@ export const checkInspectionCustomerExistsMiddleware = asyncHandler(
         success: false,
         message: 'Customer not found',
         errorType: AuthErrorType.CUSTOMER_NOT_FOUND,
+        traceId,
+      });
+      return;
+    }
+
+    next();
+  }
+);
+
+/**
+ * Blocks soft-delete when the inspection is already `CONVERTED`.
+ * Must run after `checkInspectionExistenceMiddleware`.
+ *
+ * @param {Request} req - Express request with trusted `req.inspection`.
+ * @param {Response} res - Express response used for the 409 envelope.
+ * @param {NextFunction} next - Continues when delete is allowed.
+ * @returns {Promise<void>}
+ */
+export const checkInspectionDeletableMiddleware = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const traceId = getTraceId();
+    const inspection = req.inspection as Inspection;
+
+    if (inspection.status === InspectionStatus.CONVERTED) {
+      res.status(409).json({
+        success: false,
+        message: 'Converted inspections cannot be deleted',
+        errorType: AuthErrorType.INSPECTION_ALREADY_CONVERTED,
         traceId,
       });
       return;

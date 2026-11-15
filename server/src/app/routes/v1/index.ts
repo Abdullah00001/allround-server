@@ -13,8 +13,10 @@ import userRoutes from '@/app/modules/user/user.routes';
 import vehicleRoutes from '@/app/modules/vehicle/vehicle.routes';
 import mobileRoutes from '@/app/modules/mobile/mobile.routes';
 import notificationRoutes from '@/app/modules/notification/notification.routes';
+import dashboardRoutes from '@/app/modules/dashboard/dashboard.routes';
 
 const routes: Router[] = [
+  dashboardRoutes,
   notificationRoutes,
   mobileRoutes,
   vehicleRoutes,
@@ -28,7 +30,8 @@ const routes: Router[] = [
   mediaRoutes,
   recoverRoutes,
   adminRoutes,
-  authRoutes,];
+  authRoutes,
+];
 
 const v1Routes = Router();
 

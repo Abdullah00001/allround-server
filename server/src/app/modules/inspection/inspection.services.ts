@@ -1,4 +1,5 @@
 import {
+  AttachmentCategory,
   InspectionStatus,
   NotificationType,
   PhaseStatus,
@@ -8,16 +9,37 @@ import prisma from '@/app/configs/db.configs';
 import {
   ConvertInspectionDTO,
   InspectionDTO,
+  InspectionListDTO,
+  InspectionListStatsDTO,
+  InspectionTabCountsDTO,
 } from '@/app/modules/inspection/inspection.dto';
 import {
   TConvertInspectionServiceParams,
   TCreateInspectionServiceParams,
+  TDeleteInspectionServiceParams,
   TGetInspectionByIdServiceParams,
   TInspectionSiteManagerRef,
   TListInspectionsServiceParams,
   TUpdateInspectionServiceParams,
 } from '@/app/modules/inspection/inspection.types';
 import { triggerPushNotification } from '@/app/utils/notification.utils';
+
+const photoInclude = {
+  where: { category: AttachmentCategory.PHOTO },
+  select: { id: true, url: true, fileType: true, fileName: true },
+  orderBy: { createdAt: 'asc' as const },
+  take: 6,
+} as const;
+
+const inspectionInclude = {
+  customer: { select: { id: true, name: true } },
+  attachments: photoInclude,
+  _count: {
+    select: {
+      attachments: { where: { category: AttachmentCategory.PHOTO } },
+    },
+  },
+} as const;
 
 /**
  * Loads a site-manager projection by user id, or null when absent.
@@ -59,38 +81,199 @@ const loadSiteManagersMap = async (
 };
 
 /**
+ * Builds the search/customer filter shared by list rows and aggregate stats.
+ *
+ * @param {TListInspectionsServiceParams['query']} query - List query.
+ * @returns {Prisma.InspectionWhereInput} Base where (no status tab filter).
+ */
+const buildInspectionBaseWhere = (
+  query: TListInspectionsServiceParams['query']
+): Prisma.InspectionWhereInput => {
+  const { customerId, search } = query;
+  return {
+    deletedAt: null,
+    ...(customerId ? { customerId } : {}),
+    ...(search
+      ? {
+          customer: {
+            name: { contains: search, mode: 'insensitive' },
+            deletedAt: null,
+          },
+        }
+      : {}),
+  };
+};
+
+/**
+ * Upserts a primary contact for a customer when the form sends contact fields.
+ *
+ * @param {Prisma.TransactionClient} tx - Prisma transaction client.
+ * @param {string} customerId - Target customer UUID.
+ * @param {{ name: string; phone?: string; email?: string; role?: string }} contact - Contact payload.
+ * @returns {Promise<void>}
+ */
+const upsertPrimaryContact = async (
+  tx: Prisma.TransactionClient,
+  customerId: string,
+  contact: { name: string; phone?: string; email?: string; role?: string }
+): Promise<void> => {
+  const existingPrimary = await tx.customerContact.findFirst({
+    where: { customerId, isPrimary: true },
+    select: { id: true },
+  });
+
+  if (existingPrimary) {
+    await tx.customerContact.update({
+      where: { id: existingPrimary.id },
+      data: {
+        name: contact.name,
+        phone: contact.phone,
+        email: contact.email,
+        role: contact.role ?? 'Project lead',
+      },
+    });
+    return;
+  }
+
+  await tx.customerContact.create({
+    data: {
+      customerId,
+      name: contact.name,
+      phone: contact.phone,
+      email: contact.email,
+      role: contact.role ?? 'Project lead',
+      isPrimary: true,
+    },
+  });
+};
+
+/**
+ * Replaces all PHOTO attachments on an inspection with the provided list.
+ *
+ * @param {Prisma.TransactionClient} tx - Prisma transaction client.
+ * @param {string} inspectionId - Inspection UUID.
+ * @param {Array<{ url: string; fileType: string; fileName?: string; fileSize?: number }>} photos - New photos.
+ * @returns {Promise<void>}
+ */
+const replaceInspectionPhotos = async (
+  tx: Prisma.TransactionClient,
+  inspectionId: string,
+  photos: Array<{
+    url: string;
+    fileType: string;
+    fileName?: string;
+    fileSize?: number;
+  }>
+): Promise<void> => {
+  await tx.attachment.deleteMany({
+    where: {
+      inspectionId,
+      category: AttachmentCategory.PHOTO,
+    },
+  });
+
+  if (photos.length === 0) return;
+
+  await tx.attachment.createMany({
+    data: photos.map((photo) => ({
+      url: photo.url,
+      fileType: photo.fileType,
+      fileName: photo.fileName,
+      fileSize: photo.fileSize,
+      category: AttachmentCategory.PHOTO,
+      inspectionId,
+    })),
+  });
+};
+
+/**
  * Creates a new inspection in `PENDING` status.
+ * Supports EXISTING or NEW customer (with optional primary contact) and optional photos.
  *
  * @param {TCreateInspectionServiceParams} params - Validated create payload wrapper.
- * @returns {Promise<InspectionDTO>} Created inspection with customer and site manager.
+ * @returns {Promise<InspectionDTO>} Created inspection with customer, site manager, photos.
  */
 export const createInspectionService = async ({
   payload,
 }: TCreateInspectionServiceParams): Promise<InspectionDTO> => {
   const {
+    customer: customerInput,
+    contact,
+    photos,
     scaffoldArea,
     scaffoldHeight,
     appointmentDate,
-    ...rest
+    siteManagerId,
+    siteTitle,
+    address,
+    postalCode,
+    city,
+    scaffoldType,
+    siteAccessInstructions,
+    specialRequirements,
   } = payload;
 
-  const inspection = await prisma.inspection.create({
-    data: {
-      ...rest,
-      appointmentDate,
-      scaffoldArea:
-        scaffoldArea === undefined
-          ? undefined
-          : new Prisma.Decimal(scaffoldArea),
-      scaffoldHeight:
-        scaffoldHeight === undefined
-          ? undefined
-          : new Prisma.Decimal(scaffoldHeight),
-      status: InspectionStatus.PENDING,
-    },
-    include: {
-      customer: { select: { id: true, name: true } },
-    },
+  const inspection = await prisma.$transaction(async (tx) => {
+    let customerId: string;
+
+    if (customerInput.mode === 'EXISTING') {
+      customerId = customerInput.customerId;
+    } else {
+      const createdCustomer = await tx.customer.create({
+        data: {
+          name: customerInput.name,
+          category: customerInput.category,
+          address,
+        },
+      });
+      customerId = createdCustomer.id;
+    }
+
+    if (contact) {
+      await upsertPrimaryContact(tx, customerId, contact);
+    }
+
+    const created = await tx.inspection.create({
+      data: {
+        customerId,
+        siteManagerId,
+        siteTitle,
+        address,
+        postalCode,
+        city,
+        appointmentDate,
+        scaffoldType,
+        siteAccessInstructions,
+        specialRequirements,
+        scaffoldArea:
+          scaffoldArea === undefined
+            ? undefined
+            : new Prisma.Decimal(scaffoldArea),
+        scaffoldHeight:
+          scaffoldHeight === undefined
+            ? undefined
+            : new Prisma.Decimal(scaffoldHeight),
+        status: InspectionStatus.PENDING,
+      },
+    });
+
+    if (photos && photos.length > 0) {
+      await tx.attachment.createMany({
+        data: photos.map((photo) => ({
+          url: photo.url,
+          fileType: photo.fileType,
+          fileName: photo.fileName,
+          fileSize: photo.fileSize,
+          category: AttachmentCategory.PHOTO,
+          inspectionId: created.id,
+        })),
+      });
+    }
+
+    return tx.inspection.findUniqueOrThrow({
+      where: { id: created.id },
+      include: inspectionInclude,
+    });
   });
 
   const siteManager = await loadSiteManager(inspection.siteManagerId);
@@ -98,37 +281,62 @@ export const createInspectionService = async ({
 };
 
 /**
- * Lists non-deleted inspections with pagination and optional filters.
+ * Lists non-deleted inspections with pagination, search, KPI stats, and tab counts.
  *
  * @param {TListInspectionsServiceParams} params - Validated query wrapper.
- * @returns {Promise<{ items: InspectionDTO[]; total: number; page: number; limit: number }>}
- * Paginated inspection DTOs plus total for meta construction.
+ * @returns {Promise<{ data: InspectionListDTO; total: number; page: number; limit: number }>}
+ * List payload plus pagination inputs for meta.
  */
 export const listInspectionsService = async ({
   query,
 }: TListInspectionsServiceParams): Promise<{
-  items: InspectionDTO[];
+  data: InspectionListDTO;
   total: number;
   page: number;
   limit: number;
 }> => {
-  const { page, limit, status, customerId } = query;
+  const { page, limit, status } = query;
+  const baseWhere = buildInspectionBaseWhere(query);
   const where: Prisma.InspectionWhereInput = {
-    deletedAt: null,
+    ...baseWhere,
     ...(status ? { status } : {}),
-    ...(customerId ? { customerId } : {}),
   };
 
-  const [total, inspections] = await Promise.all([
+  const [
+    total,
+    inspections,
+    totalInspections,
+    areaAgg,
+    heightAgg,
+    awaitingSurvey,
+    surveysCompleted,
+    converted,
+  ] = await Promise.all([
     prisma.inspection.count({ where }),
     prisma.inspection.findMany({
       where,
       skip: (page - 1) * limit,
       take: limit,
       orderBy: { appointmentDate: 'desc' },
-      include: {
-        customer: { select: { id: true, name: true } },
-      },
+      include: inspectionInclude,
+    }),
+    prisma.inspection.count({ where: baseWhere }),
+    prisma.inspection.aggregate({
+      where: baseWhere,
+      _sum: { scaffoldArea: true },
+    }),
+    prisma.inspection.aggregate({
+      where: { ...baseWhere, scaffoldHeight: { not: null } },
+      _avg: { scaffoldHeight: true },
+    }),
+    prisma.inspection.count({
+      where: { ...baseWhere, status: InspectionStatus.PENDING },
+    }),
+    prisma.inspection.count({
+      where: { ...baseWhere, status: InspectionStatus.SURVEY_DONE },
+    }),
+    prisma.inspection.count({
+      where: { ...baseWhere, status: InspectionStatus.CONVERTED },
     }),
   ]);
 
@@ -136,13 +344,40 @@ export const listInspectionsService = async ({
     inspections.map((item) => item.siteManagerId)
   );
 
+  const items = inspections.map((inspection) =>
+    InspectionDTO.build(
+      inspection,
+      inspection.siteManagerId
+        ? (siteManagers.get(inspection.siteManagerId) ?? null)
+        : null
+    )
+  );
+
+  const totalSpecsArea = Number(
+    (areaAgg._sum.scaffoldArea ? Number(areaAgg._sum.scaffoldArea) : 0).toFixed(
+      2
+    )
+  );
+  const avgScaffoldHeight =
+    heightAgg._avg.scaffoldHeight === null
+      ? null
+      : Number(Number(heightAgg._avg.scaffoldHeight).toFixed(2));
+
   return {
-    items: inspections.map((inspection) =>
-      InspectionDTO.build(
-        inspection,
-        inspection.siteManagerId
-          ? (siteManagers.get(inspection.siteManagerId) ?? null)
-          : null
+    data: new InspectionListDTO(
+      items,
+      new InspectionListStatsDTO(
+        totalInspections,
+        totalSpecsArea,
+        avgScaffoldHeight,
+        awaitingSurvey,
+        surveysCompleted
+      ),
+      new InspectionTabCountsDTO(
+        totalInspections,
+        awaitingSurvey,
+        surveysCompleted,
+        converted
       )
     ),
     total,
@@ -152,7 +387,7 @@ export const listInspectionsService = async ({
 };
 
 /**
- * Loads a single inspection detail.
+ * Loads a single inspection detail with photos.
  * Assumes existence middleware already verified the inspection.
  *
  * @param {TGetInspectionByIdServiceParams} params - Trusted inspection wrapper.
@@ -163,9 +398,7 @@ export const getInspectionByIdService = async ({
 }: TGetInspectionByIdServiceParams): Promise<InspectionDTO> => {
   const record = await prisma.inspection.findUniqueOrThrow({
     where: { id: inspection.id },
-    include: {
-      customer: { select: { id: true, name: true } },
-    },
+    include: inspectionInclude,
   });
   const siteManager = await loadSiteManager(record.siteManagerId);
   return InspectionDTO.build(record, siteManager);
@@ -173,6 +406,7 @@ export const getInspectionByIdService = async ({
 
 /**
  * Updates an existing non-deleted inspection.
+ * Optional `photos` replaces all PHOTO attachments. Optional `contact` upserts primary contact.
  *
  * @param {TUpdateInspectionServiceParams} params - Trusted inspection and payload.
  * @returns {Promise<InspectionDTO>} Updated inspection DTO.
@@ -185,32 +419,52 @@ export const updateInspectionService = async ({
     scaffoldArea,
     scaffoldHeight,
     appointmentDate,
+    photos,
+    contact,
+    siteAccessInstructions,
+    specialRequirements,
     ...rest
   } = payload;
 
-  const updated = await prisma.inspection.update({
-    where: { id: inspection.id },
-    data: {
-      ...rest,
-      ...(appointmentDate !== undefined ? { appointmentDate } : {}),
-      ...(scaffoldArea !== undefined
-        ? {
-            scaffoldArea:
-              scaffoldArea === null ? null : new Prisma.Decimal(scaffoldArea),
-          }
-        : {}),
-      ...(scaffoldHeight !== undefined
-        ? {
-            scaffoldHeight:
-              scaffoldHeight === null
-                ? null
-                : new Prisma.Decimal(scaffoldHeight),
-          }
-        : {}),
-    },
-    include: {
-      customer: { select: { id: true, name: true } },
-    },
+  const updated = await prisma.$transaction(async (tx) => {
+    if (contact) {
+      await upsertPrimaryContact(tx, inspection.customerId, contact);
+    }
+
+    if (photos !== undefined) {
+      await replaceInspectionPhotos(tx, inspection.id, photos);
+    }
+
+    await tx.inspection.update({
+      where: { id: inspection.id },
+      data: {
+        ...rest,
+        ...(appointmentDate !== undefined ? { appointmentDate } : {}),
+        ...(siteAccessInstructions !== undefined
+          ? { siteAccessInstructions }
+          : {}),
+        ...(specialRequirements !== undefined ? { specialRequirements } : {}),
+        ...(scaffoldArea !== undefined
+          ? {
+              scaffoldArea:
+                scaffoldArea === null ? null : new Prisma.Decimal(scaffoldArea),
+            }
+          : {}),
+        ...(scaffoldHeight !== undefined
+          ? {
+              scaffoldHeight:
+                scaffoldHeight === null
+                  ? null
+                  : new Prisma.Decimal(scaffoldHeight),
+            }
+          : {}),
+      },
+    });
+
+    return tx.inspection.findUniqueOrThrow({
+      where: { id: inspection.id },
+      include: inspectionInclude,
+    });
   });
 
   const siteManager = await loadSiteManager(updated.siteManagerId);
@@ -218,10 +472,26 @@ export const updateInspectionService = async ({
 };
 
 /**
+ * Soft-deletes an inspection. Blocked when status is `CONVERTED`.
+ *
+ * @param {TDeleteInspectionServiceParams} params - Trusted inspection.
+ * @returns {Promise<{ id: string }>} Deleted inspection id.
+ */
+export const deleteInspectionService = async ({
+  inspection,
+}: TDeleteInspectionServiceParams): Promise<{ id: string }> => {
+  await prisma.inspection.update({
+    where: { id: inspection.id },
+    data: { deletedAt: new Date() },
+  });
+
+  return { id: inspection.id };
+};
+
+/**
  * Converts an inspection into a Project + Measurement + initial Phase,
- * then marks the inspection as `CONVERTED` inside one transaction.
+ * assigns the site manager as PM (mobile parity), then marks `CONVERTED`.
  * Assumes convertibility middleware already blocked already-converted rows.
- * Note: Inspection has no lat/long fields; project geo fields stay null.
  *
  * @param {TConvertInspectionServiceParams} params - Trusted inspection and convert payload.
  * @returns {Promise<ConvertInspectionDTO>} Converted inspection plus created project graph.
@@ -261,15 +531,22 @@ export const convertInspectionToProjectService = async ({
       },
     });
 
+    if (inspection.siteManagerId) {
+      await tx.projectManagerAssignment.create({
+        data: {
+          projectId: project.id,
+          userId: inspection.siteManagerId,
+        },
+      });
+    }
+
     const converted = await tx.inspection.update({
       where: { id: inspection.id },
       data: {
         status: InspectionStatus.CONVERTED,
         projectId: project.id,
       },
-      include: {
-        customer: { select: { id: true, name: true } },
-      },
+      include: inspectionInclude,
     });
 
     return { project, measurement, phase, converted };
@@ -294,6 +571,7 @@ export const convertInspectionToProjectService = async ({
   return ConvertInspectionDTO.build(
     inspectionDto,
     result.project,
+    result.converted.customer,
     result.phase,
     result.measurement
   );

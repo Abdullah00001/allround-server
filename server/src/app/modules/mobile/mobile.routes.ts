@@ -81,12 +81,15 @@ import {
   createProjectNoteSchema,
   createProjectTaskSchema,
   getCrewTimeQuerySchema,
+  getDashboardQuerySchema,
   getMapQuerySchema,
   getMobileInspectionsQuerySchema,
   getMobilePhasesQuerySchema,
   getMyProjectsQuerySchema,
   getMyTimeLogsQuerySchema,
   getProjectAttachmentsQuerySchema,
+  getProjectListQuerySchema,
+  getProjectTasksQuerySchema,
   getScheduleQuerySchema,
   manualTimeSchema,
   mobileInspectionIdParamsSchema,
@@ -135,7 +138,13 @@ const siteManagerProjectAccess = [
 
 router.route('/mobile/config').get(...mobileAuth, getMobileConfigController);
 
-router.route('/mobile/dashboard').get(...mobileAuth, getDashboardController);
+router
+  .route('/mobile/dashboard')
+  .get(
+    ...mobileAuth,
+    validateReqQuery(getDashboardQuerySchema),
+    getDashboardController
+  );
 
 router
   .route('/mobile/projects')
@@ -162,7 +171,11 @@ router
 
 router
   .route('/mobile/projects/:projectId/tasks')
-  .get(...siteManagerProjectAccess, listProjectTasksController)
+  .get(
+    ...siteManagerProjectAccess,
+    validateReqQuery(getProjectTasksQuerySchema),
+    listProjectTasksController
+  )
   .post(
     ...siteManagerProjectAccess,
     validateReqBody(createProjectTaskSchema),
@@ -192,7 +205,11 @@ router
 
 router
   .route('/mobile/projects/:projectId/measurements')
-  .get(...siteManagerProjectAccess, listProjectMeasurementsController)
+  .get(
+    ...siteManagerProjectAccess,
+    validateReqQuery(getProjectListQuerySchema),
+    listProjectMeasurementsController
+  )
   .post(
     ...siteManagerProjectAccess,
     validateReqBody(createMeasurementSchema),
@@ -221,7 +238,11 @@ router
 
 router
   .route('/mobile/projects/:projectId/notes')
-  .get(...siteManagerProjectAccess, listProjectNotesController)
+  .get(
+    ...siteManagerProjectAccess,
+    validateReqQuery(getProjectListQuerySchema),
+    listProjectNotesController
+  )
   .post(
     ...siteManagerProjectAccess,
     validateReqBody(createProjectNoteSchema),
@@ -276,7 +297,11 @@ router
 
 router
   .route('/mobile/projects/:projectId/history')
-  .get(...siteManagerProjectAccess, listProjectHistoryController);
+  .get(
+    ...siteManagerProjectAccess,
+    validateReqQuery(getProjectListQuerySchema),
+    listProjectHistoryController
+  );
 
 router
   .route('/mobile/projects/:projectId/attachments/:id/cover')

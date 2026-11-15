@@ -12,12 +12,14 @@ import {
 import {
   checkInspectionConvertibleMiddleware,
   checkInspectionCustomerExistsMiddleware,
+  checkInspectionDeletableMiddleware,
   checkInspectionExistenceMiddleware,
   checkOptionalSiteManagerExistsMiddleware,
 } from '@/app/modules/inspection/inspection.middlewares';
 import {
   convertInspectionController,
   createInspectionController,
+  deleteInspectionController,
   getInspectionByIdController,
   listInspectionsController,
   updateInspectionController,
@@ -71,6 +73,13 @@ router
     validateReqBody(updateInspectionSchema),
     checkOptionalSiteManagerExistsMiddleware,
     updateInspectionController
+  )
+  .delete(
+    ...adminAuth,
+    validateReqParams(inspectionIdParamsSchema),
+    checkInspectionExistenceMiddleware,
+    checkInspectionDeletableMiddleware,
+    deleteInspectionController
   );
 
 router

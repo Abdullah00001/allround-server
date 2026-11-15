@@ -164,6 +164,12 @@ dio.interceptors.add(InterceptorsWrapper(
 ## 2. Shared Response Envelopes
 
 - Success: `{ success, message, data?, meta?, traceId }`
+- **List pagination** (same as admin / alua): every mobile **list** GET accepts `?page=1&limit=10` (max `100`) and returns `meta: { total, totalPages, links }` plus the page window in `data`.
+  - Array lists → `data: T[]`
+  - Dashboard → `data: { stats, upcomingTasks, mapPins }` (`meta` uses `max(upcomingTasks, mapPins)` totals; both arrays sliced)
+  - Crew-time → aggregates stay full-window; `data.logs` is paginated (`meta.total` = log count)
+  - Measurements → `data: { items, totalArea }` (`totalArea` = all rows; `meta` on item count)
+  - Tasks → omit `status` → `{ open, completed }` both sliced; or `status=OPEN|COMPLETED` → flat `data: T[]`
 - Errors: `{ success: false, message, errorType?, errors?, traceId }`
 
 Common mobile `errorType`s: `ACTIVE_TIMER_EXISTS`, `TIMELOG_NOT_FOUND`, `SESSION_EXPIRED`, `SESSION_REVOKED`, `DEVICE_NOT_FOUND`, `DEVICE_NOT_OWNED`, `ACCESS_DENIED`, `FORBIDDEN`, `BAD_REQUEST`.
@@ -248,8 +254,8 @@ If `allowEmployeeManualTime === false`, hide the “Add manual time” UI.
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| `GET` | `/mobile/dashboard` | `stats`, `upcomingTasks[]`, `mapPins[]` (employee-scoped) |
-| `GET` | `/mobile/projects` | Projects where the employee has crew assignments / visibility |
+| `GET` | `/mobile/dashboard` | `?page&limit` → `stats` + paginated `upcomingTasks[]` / `mapPins[]` |
+| `GET` | `/mobile/projects` | `?page&limit` (+ tabs/filters) — phase cards |
 | `GET` | `/mobile/profile` | `weeklyHoursTarget`, `hoursThisWeek`, project counts |
 
 Employee project DTOs **do not** expose site-manager financial fields (`budgetedHours` / profitability). Those appear only for site managers.
@@ -261,7 +267,7 @@ Employee project DTOs **do not** expose site-manager financial fields (`budgeted
 | `POST` | `/mobile/timer/start` | `phaseId`, `activityType`, optional `gpsStartLat` / `gpsStartLng` |
 | `POST` | `/mobile/timer/stop` | `timeLogId`, optional GPS end |
 | `POST` | `/mobile/timer/manual` | `phaseId`, `activityType`, `startTime`, `endTime`, `breakMinutes` → status **`PENDING_APPROVAL`** |
-| `GET` | `/mobile/time-logs` | `?period=TODAY` \| `WEEK` \| `MONTH` |
+| `GET` | `/mobile/time-logs` | `?period=TODAY` \| `WEEK` \| `MONTH` + `page&limit` |
 | `POST` | `/mobile/sync` | Offline batch — see **§6** |
 
 `activityType`: `ERECTION` \| `DISMANTLING` \| `TRANSPORT` \| `MAINTENANCE` \| `OTHER`.
@@ -381,22 +387,22 @@ Dashboard `stats` for SM also includes `standingActiveSites` and per-type `{ pla
 
 | Method | Path | Query |
 | --- | --- | --- |
-| `GET` | `/mobile/schedule` | **required** `startDate`, `endDate` (date-time) → days with phases |
-| `GET` | `/mobile/map` | optional `type` = `ERECTION` \| `DISMANTLING` \| `STANDING` \| `MAINTENANCE` |
+| `GET` | `/mobile/schedule` | **required** `startDate`, `endDate` + `page&limit` → day buckets |
+| `GET` | `/mobile/map` | optional `type` + `page&limit` → project pins |
 
 #### Crew time
 
 | Method | Path | Query |
 | --- | --- | --- |
-| `GET` | `/mobile/crew-time` | **required** `projectId`, optional `date` |
+| `GET` | `/mobile/crew-time` | **required** `projectId`, optional `date` + `page&limit` |
 
-Returns `totalProjectHours`, `hoursByActivity[]`, `crewBreakdown[]`, `logs[]`.
+Returns `totalProjectHours`, `hoursByActivity[]`, `crewBreakdown[]`, paginated `logs[]` (`meta` = log count).
 
 #### Inspections (assigned to this SM)
 
 | Method | Path | Query / Body |
 | --- | --- | --- |
-| `GET` | `/mobile/inspections` | `status=PENDING` (default) or `COMPLETED` (`SURVEY_DONE` + `CONVERTED`) |
+| `GET` | `/mobile/inspections` | `status=PENDING` (default) or `COMPLETED` + `page&limit` |
 | `GET` | `/mobile/inspections/:id` | Detail (must be assigned); includes `projectId` when converted |
 | `PATCH` | `/mobile/inspections/:id/complete` | See **§5.7 Survey Completion** (scaffold specs + notes + photos + optional `convertToProject`) |
 
@@ -404,7 +410,7 @@ Returns `totalProjectHours`, `hoursByActivity[]`, `crewBreakdown[]`, `logs[]`.
 
 | Method | Path | Query / Body |
 | --- | --- | --- |
-| `GET` | `/mobile/phases` | optional `column=ENQUIRY\|ERECTION\|DISMANTLING\|STANDING` |
+| `GET` | `/mobile/phases` | optional `column=ENQUIRY\|ERECTION\|DISMANTLING\|STANDING` + `page&limit` |
 | `PATCH` | `/mobile/phases/:id/status` | `status`: `IN_PROGRESS` \| `COMPLETED` \| `POSTPONED` |
 
 `column=ENQUIRY` filters `status=ENQUIRY` (UI label **Preconstruction**). Other columns filter by phase `type`.
@@ -451,7 +457,7 @@ Content-Type: application/json
   "name": "Goltstein Complex",
   "coordinates": { "lat": 50.9375, "lng": 6.9603 },
   "placeLabel": "Goltsteinstrasse, Köln",
-  "scaffoldArea": 450,
+  "scaffoldSpecification": { "area": 450, "height": 8.2, "type": "Fassadengerüst" },
   "priority": "HIGH",
   "phaseType": "ERECTION",
   "status": "IN_PROGRESS",
@@ -461,8 +467,20 @@ Content-Type: application/json
     "phone": "+0325654514",
     "email": "you33@gmail.com"
   },
-  "erection": { "startDate": "2026-09-18T07:00:00.000Z", "durationDays": 2.5 },
-  "dismantling": { "startDate": "2026-09-25T07:00:00.000Z", "durationDays": 2.5 },
+  "scheduleData": [
+    {
+      "type": "erection",
+      "startDate": "2026-09-18T07:00:00.000Z",
+      "endDate": "2026-09-20T19:00:00.000Z",
+      "durationDays": 2.5
+    },
+    {
+      "type": "dismantling",
+      "startDate": "2026-09-25T07:00:00.000Z",
+      "endDate": "2026-09-25T07:00:00.000Z",
+      "durationDays": 0
+    }
+  ],
   "note": { "category": "SITE_ACCESS", "content": "Gate code 4821" },
   "photos": [{ "url": "https://cdn.example.com/a.jpg", "fileType": "image/jpeg", "isCover": true }]
 }
@@ -471,6 +489,8 @@ Content-Type: application/json
 New client: `"customer": { "mode": "NEW", "name": "Acme GmbH", "category": "COMMERCIAL" }`.  
 `siteManagerId` optional (defaults to the authenticated SM). Upload files with `POST /media` first, then pass URLs in `photos`.
 
+**Scaffold specification:** send `scaffoldSpecification: { area, height?, type? }`. Detail `GET /mobile/projects/:id` returns the same shape — `area` from `Project.scaffoldArea`, `height`/`type` from the seeded initial measurement (same pattern as inspection convert). Legacy `scaffoldArea` alone still works as area-only.
+
 ### 5.1 Project list (phase cards), tabs, filters & sort
 
 Filter-modal option lists are **hardcoded in Flutter** (no `filter-options` endpoint).  
@@ -478,8 +498,28 @@ Location is exposed as `coordinates: { lat, lng }`. Project `address` / `city` /
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| `GET` | `/mobile/projects` | **One card per phase** (`MobileProjectPhaseCardDTO[]`) + tabs/filters/sort/search/geo |
-| `GET` | `/mobile/projects/:projectId` | Detail hub — coordinates, scaffoldSpecification, schedule, nextSafetyInspection, labor, customer, phases, attachment counts |
+| `GET` | `/mobile/projects` | **One card per phase** + tabs/filters/sort/search/geo + `page&limit` + `meta` |
+| `GET` | `/mobile/projects/:projectId` | Detail hub — coordinates, scaffoldSpecification, `scheduleData[]`, nextSafetyInspection, labor, customer, phases, attachment counts |
+
+#### `scheduleData` flow (create ↔ detail) — same shape, no magic
+
+| Field | Create (POST body) | Detail (GET response) | Where stored |
+| --- | --- | --- | --- |
+| `type` | required lowercase | same lowercase | `ProjectPhase.type` (`erection`→`ERECTION`, `other`→`MAINTENANCE`) |
+| `startDate` | required | returned | `ProjectPhase.startDate` |
+| `endDate` | optional (or computed) | returned | `ProjectPhase.endDate` |
+| `durationDays` | optional if `endDate` sent | returned | `ProjectPhase.durationDays` |
+| `id` | not sent | returned (phase UUID) | `ProjectPhase.id` |
+
+**Server rules on create:** `startDate` required; send **`endDate` and/or `durationDays`**.  
+- only `durationDays` → `endDate = startDate + durationDays`  
+- only `endDate` → `durationDays` derived  
+- both → both stored (`endDate` as given)
+
+**Detail** reads those columns back into `scheduleData[]` — nothing invented beyond that mapping. Full phase rows also live in `phases[]` (status, priority, safety flag).
+
+`scheduleData[].type`: `erection` \| `dismantling` \| `standing` \| `other`  
+UI: Scaffold Erection→`erection`, Dismantling→`dismantling`, Standing→`standing`, Other Activity→`other`.
 
 Each list row includes `phaseId`, `type`, `status`, `priority`, dates, `projectId` / `projectName`, `coordinates`, `customer`, `assigneeName`, and (SM only) budget / logged hours / `isProfitable`. Contact comes from `customer` (not duplicated).
 
@@ -530,7 +570,7 @@ Site Managers can list, create, toggle completion, and delete project tasks. Ass
 
 | Method | Path | Body |
 | --- | --- | --- |
-| `GET` | `/mobile/projects/:projectId/tasks` | — → `{ open: [], completed: [] }` with employee details |
+| `GET` | `/mobile/projects/:projectId/tasks` | `?page&limit` (+ optional `status=OPEN\|COMPLETED`) → `{ open, completed }` or flat array + `meta` |
 | `POST` | `/mobile/projects/:projectId/tasks` | `description`, `employeeId`, `priority`, optional `dueDate` |
 | `PATCH` | `/mobile/tasks/:taskId/toggle` | — (flips `isCompleted`) |
 | `DELETE` | `/mobile/tasks/:taskId` | — → `{ id }` |
@@ -570,7 +610,7 @@ Creating, updating, or deleting a line item **recalculates** `Project.scaffoldAr
 
 | Method | Path | Body |
 | --- | --- | --- |
-| `GET` | `/mobile/projects/:projectId/measurements` | — → `{ items: measurement[], totalArea: number }` |
+| `GET` | `/mobile/projects/:projectId/measurements` | `?page&limit` → `{ items, totalArea }` (`totalArea` = all rows) + `meta` |
 | `POST` | `/mobile/projects/:projectId/measurements` | `length`, `height`, `quantity`, optional `position`, `unit`, `remark` |
 | `PATCH` | `/mobile/projects/:projectId/measurements/:id` | Any of create fields (≥1 required); recalculates `area` + `scaffoldArea` |
 | `DELETE` | `/mobile/projects/:projectId/measurements/:id` | — → `{ id }` |
@@ -596,7 +636,7 @@ Categorized notes store author + timestamp. Site Managers can list, create, upda
 
 | Method | Path | Body |
 | --- | --- | --- |
-| `GET` | `/mobile/projects/:projectId/notes` | — → note[] (newest first, includes author) |
+| `GET` | `/mobile/projects/:projectId/notes` | `?page&limit` → note[] (newest first) + `meta` |
 | `POST` | `/mobile/projects/:projectId/notes` | `category`, `content` |
 | `PATCH` | `/mobile/projects/:projectId/notes/:id` | optional `category`, `content` (≥1 required) |
 | `DELETE` | `/mobile/projects/:projectId/notes/:id` | — → `{ id }` |
@@ -687,11 +727,11 @@ Attachments **do not** upload binary through the mobile project routes. Follow t
 
 | Method | Path | Body / Query |
 | --- | --- | --- |
-| `GET` | `/mobile/projects/:projectId/attachments` | optional `category=PHOTO\|PDF_PLAN` → includes `isCover` |
+| `GET` | `/mobile/projects/:projectId/attachments` | optional `category=PHOTO\|PDF_PLAN` + `page&limit` → includes `isCover` |
 | `POST` | `/mobile/projects/:projectId/attachments` | `url`, `fileType`, `category`, optional `fileName`, `fileSize`, `isCover` |
 | `PATCH` | `/mobile/projects/:projectId/attachments/:id/cover` | Sets this PHOTO as cover; clears other project photo covers |
 | `DELETE` | `/mobile/projects/:projectId/attachments/:id` | — → `{ id }` (DB row only; S3 object is not deleted) |
-| `GET` | `/mobile/projects/:projectId/history` | AuditLog timeline → `{ id, action, details, createdAt, user }` |
+| `GET` | `/mobile/projects/:projectId/history` | `?page&limit` AuditLog timeline + `meta` |
 
 `category` for project attachments:
 

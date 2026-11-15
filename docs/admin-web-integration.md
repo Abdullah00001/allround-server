@@ -213,6 +213,23 @@ Common `errorType` values: `TOKEN_EXPIRED`, `TOKEN_INVALID`, `TOKEN_BLACKLISTED`
 
 All paths below are relative to `/api/v1` and require **cookies + `x-csrf-token`** unless noted.
 
+### 3.0 Admin home dashboard
+
+| Method | Path | Query |
+| --- | --- | --- |
+| `GET` | `/admin/dashboard` | `page`, `limit` (paginate **today's operations** only) |
+
+**`data` shape**
+
+| Field | Content |
+| --- | --- |
+| `stats` | `plannedErections`, `erectionInProgress`, `standingScaffolds`, `plannedDismantling`, `dismantlingInProgress`, `inspectionDue` |
+| `map.counts` | Legend badges: `erection`, `standing`, `dismantling` (from active pins) |
+| `map.pins[]` | `{ projectId, name, coordinates: { lat, lng } \| null, phaseType }` — one pin per project with an active phase |
+| `todaysOperations[]` | `{ phaseId, projectId, projectName, customerName, managerName, phaseType, crewCount }` for **UTC today** (same overlap rules as daily planning) |
+
+`meta` is built from `todaysOperations` total. Planned = `ENQUIRY` / `QUOTATION` / `ORDER_CONFIRMED`; in-progress = `IN_PROGRESS`; standing scaffolds = distinct projects with an active `STANDING` phase; `inspectionDue` = global `PENDING` inspections.
+
 ### 3.1 CRM → Pre-Sales → Project conversion
 
 **Recommended UI sequence**
@@ -234,17 +251,45 @@ All paths below are relative to `/api/v1` and require **cookies + `x-csrf-token`
 
 There is **no** admin delete-customer route today.
 
-#### Inspections
+#### Inspections (admin ↔ mobile parity)
+
+Status tabs map to the same Prisma enums the app uses: `PENDING` (Awaiting Survey), `SURVEY_DONE`, `CONVERTED`.
 
 | Method | Path | Body / query |
 | --- | --- | --- |
-| `POST` | `/admin/inspections` | `customerId`, `siteTitle`, `address`, `appointmentDate`, optional `siteManagerId`, `postalCode`, `city`, scaffold fields |
-| `GET` | `/admin/inspections` | `page`, `limit`, optional `status`, `customerId` |
+| `POST` | `/admin/inspections` | See create body below → **201** |
+| `GET` | `/admin/inspections` | `page`, `limit`, optional `status`, `customerId`, `search` (customer name) |
 | `GET` | `/admin/inspections/:id` | — |
-| `PATCH` | `/admin/inspections/:id` | optional fields including nullable `siteManagerId` |
-| `POST` | `/admin/inspections/:id/convert` | `projectName`, `phaseType` (`ERECTION` \| `DISMANTLING` \| `STANDING` \| `MAINTENANCE`) → **201** |
+| `PATCH` | `/admin/inspections/:id` | optional site/scaffold/notes; `photos` replaces PHOTO attachments (max 6); optional `contact` |
+| `DELETE` | `/admin/inspections/:id` | soft delete; **409** if `CONVERTED` |
+| `POST` | `/admin/inspections/:id/convert` | `projectName`, `phaseType` → **201** (also assigns SM as PM, like mobile) |
 
-Convert errors: `INSPECTION_NOT_FOUND`, `INSPECTION_ALREADY_CONVERTED`.
+**List `data`:** `{ items[], stats, tabCounts }` + pagination `meta`.
+
+| `stats` | Meaning |
+| --- | --- |
+| `totalInspections` | Non-deleted (respects `search` / `customerId`) |
+| `totalSpecsArea` | Sum of `scaffoldArea` |
+| `avgScaffoldHeight` | Avg of non-null `scaffoldHeight` |
+| `awaitingSurvey` | `PENDING` count |
+| `surveysCompleted` | `SURVEY_DONE` count |
+
+`tabCounts`: `{ all, pending, surveyDone, converted }` (same search scope).
+
+**Create body (aligned with mobile project NEW customer + survey fields):**
+
+- `customer`: `{ mode: "EXISTING", customerId }` **or** `{ mode: "NEW", name, category? }`
+- Required site: `siteTitle`, `address`, `appointmentDate`
+- Optional: `siteManagerId`, `postalCode`, `city`, `scaffoldArea` / `scaffoldHeight` / `scaffoldType`
+- Optional notes (same columns mobile complete writes): `siteAccessInstructions`, `specialRequirements`
+- Optional `contact` → upserts primary `CustomerContact`
+- Optional `photos[]` max **6** `{ url, fileType }` after `POST /media` (mobile complete allows up to 20)
+
+**DTO extras (parity):** `projectId`, `siteAccessInstructions`, `specialRequirements`, `photos[]`, `photoCount`.
+
+**Convert `data.project`:** `{ id, name, address, client, scaffoldArea, specs }` + `phase` + full `inspection`.
+
+Convert/delete errors: `INSPECTION_NOT_FOUND`, `INSPECTION_ALREADY_CONVERTED`.
 
 ### 3.2 Projects & Kanban (phase status)
 

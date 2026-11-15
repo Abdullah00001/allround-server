@@ -19,12 +19,15 @@ import {
   createProjectNoteSchema,
   createProjectTaskSchema,
   getCrewTimeQuerySchema,
+  getDashboardQuerySchema,
   getMapQuerySchema,
   getMobileInspectionsQuerySchema,
   getMobilePhasesQuerySchema,
   getMyProjectsQuerySchema,
   getMyTimeLogsQuerySchema,
   getProjectAttachmentsQuerySchema,
+  getProjectListQuerySchema,
+  getProjectTasksQuerySchema,
   getScheduleQuerySchema,
   manualTimeSchema,
   startTimerSchema,
@@ -47,6 +50,16 @@ export type TMobileUserServiceParams = {
 };
 
 /**
+ * Service params for paginated dashboard.
+ */
+export type TGetDashboardServiceParams = {
+  /** Trusted authenticated user from the mobile auth chain. */
+  user: User;
+  /** Validated page/limit query. */
+  query: TGetDashboardQuery;
+};
+
+/**
  * Validated start-timer request body.
  */
 export type TStartTimerPayload = z.infer<typeof startTimerSchema>;
@@ -65,6 +78,11 @@ export type TManualTimePayload = z.infer<typeof manualTimeSchema>;
  * Validated sync request body.
  */
 export type TSyncTimeLogsPayload = z.infer<typeof syncTimeLogsSchema>;
+
+/**
+ * Validated dashboard query (page/limit for upcomingTasks + mapPins).
+ */
+export type TGetDashboardQuery = z.infer<typeof getDashboardQuerySchema>;
 
 /**
  * Validated my-time-logs query.
@@ -90,6 +108,16 @@ export type TGetCrewTimeQuery = z.infer<typeof getCrewTimeQuerySchema>;
  * Validated deep project-list filters.
  */
 export type TGetMyProjectsQuery = z.infer<typeof getMyProjectsQuerySchema>;
+
+/**
+ * Validated project tasks list query.
+ */
+export type TGetProjectTasksQuery = z.infer<typeof getProjectTasksQuerySchema>;
+
+/**
+ * Validated project child list query (notes / measurements / history).
+ */
+export type TGetProjectListQuery = z.infer<typeof getProjectListQuerySchema>;
 
 /**
  * Validated create-task request body.
@@ -382,6 +410,30 @@ export type TMobileProjectServiceParams = {
   user: User;
   /** Trusted accessible project. */
   project: Project;
+};
+
+/**
+ * Service params for paginated project tasks list.
+ */
+export type TListProjectTasksServiceParams = {
+  /** Authenticated site manager. */
+  user: User;
+  /** Trusted accessible project. */
+  project: Project;
+  /** Validated page/limit and optional OPEN/COMPLETED filter. */
+  query: TGetProjectTasksQuery;
+};
+
+/**
+ * Service params for paginated project child lists (notes/measurements/history).
+ */
+export type TListProjectChildServiceParams = {
+  /** Authenticated site manager. */
+  user: User;
+  /** Trusted accessible project. */
+  project: Project;
+  /** Validated page/limit query. */
+  query: TGetProjectListQuery;
 };
 
 /**

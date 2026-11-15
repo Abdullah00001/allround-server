@@ -14,6 +14,8 @@ tags:
     description: Authentication and user registration endpoints
   - name: Admin
     description: Admin authentication and panel endpoints
+  - name: Dashboard
+    description: Admin home dashboard (KPI stats, map pins, today's operations)
   - name: Recover
     description: Password recovery endpoints for user and admin
   - name: Media
@@ -2283,6 +2285,67 @@ paths:
                 errorType: 'SERVER_ERROR'
                 traceId: '123e4567-e89b-12d3-a456-426614174000'
 
+  /api/v1/admin/dashboard:
+    get:
+      tags: [Dashboard]
+      summary: Get admin home dashboard
+      description: >
+        Returns KPI cards (planned/running erection & dismantling, standing scaffolds,
+        pending inspections), active-project map pins with legend counts, and paginated
+        today's operations (same day-overlap rules as `GET /admin/plannings/daily` for UTC today).
+        `page`/`limit` apply only to `todaysOperations`; `meta.total` is that list length.
+      operationId: getAdminDashboard
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema: {type: string}
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Dashboard fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetAdminDashboardResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF or access denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
   /api/v1/admin/customers:
     post:
       tags:
@@ -2822,7 +2885,10 @@ paths:
     post:
       tags: [Inspection]
       summary: Create inspection
-      description: Creates a new inspection in PENDING status for an existing customer.
+      description: >
+        Creates a new inspection in PENDING status. Customer may be EXISTING or NEW
+        (creates Customer + optional primary contact). Optional notes/photos mirror
+        mobile survey fields for admin↔app parity (photos max 6).
       operationId: createInspection
       security: [{adminAuth: []}]
       parameters:
@@ -2922,7 +2988,9 @@ paths:
     get:
       tags: [Inspection]
       summary: List inspections
-      description: Lists non-deleted inspections with pagination and optional status/customerId filters.
+      description: >
+        Lists non-deleted inspections with pagination, optional status/customerId/search,
+        KPI stats, and tab counts. `data` is `{ items, stats, tabCounts }`.
       operationId: listInspections
       security: [{adminAuth: []}]
       parameters:
@@ -2954,6 +3022,11 @@ paths:
           schema:
             type: string
             format: uuid
+        - in: query
+          name: search
+          schema:
+            type: string
+          description: Case-insensitive customer name search
       responses:
         '200':
           description: Inspections fetched successfully
@@ -3194,11 +3267,66 @@ paths:
                 message: 'Internal Server Error'
                 errorType: 'SERVER_ERROR'
                 traceId: '123e4567-e89b-12d3-a456-426614174000'
+    delete:
+      tags: [Inspection]
+      summary: Soft-delete inspection
+      description: Sets `deletedAt`. Converted inspections are rejected with 409.
+      operationId: deleteInspection
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema: {type: string}
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Inspection deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteInspectionResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Forbidden or CSRF validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Inspection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '409':
+          description: Converted inspections cannot be deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
   /api/v1/admin/inspections/{id}/convert:
     post:
       tags: [Inspection]
       summary: Convert inspection to project
-      description: Transactionally creates Project, ProjectMeasurement, and initial ProjectPhase, then marks the inspection as CONVERTED. Already-converted inspections are rejected with 409.
+      description: >
+        Transactionally creates Project, ProjectMeasurement, and initial ProjectPhase,
+        assigns siteManager as ProjectManager when present (mobile parity), then marks
+        the inspection as CONVERTED. Already-converted inspections are rejected with 409.
       operationId: convertInspection
       security: [{adminAuth: []}]
       parameters:
@@ -5830,6 +5958,22 @@ paths:
       operationId: getMobileDashboard
       security:
         - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: 1-based page number
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Page size
       responses:
         '200':
           description: Dashboard fetched successfully
@@ -5949,6 +6093,21 @@ paths:
             type: string
             enum: [NEWEST, NEXT_INSPECTION, NAME_AZ]
             default: NEWEST
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: 1-based page number
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Page size
       responses:
         '200':
           description: Phase cards fetched successfully
@@ -6140,10 +6299,31 @@ paths:
       operationId: listMobileProjectTasks
       security: [{bearerAuth: []}]
       parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [OPEN, COMPLETED]
+          description: Optional tab filter; omit to return paginated `{ open, completed }`
         - in: path
           name: projectId
           required: true
           schema: {type: string, format: uuid}
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: 1-based page number
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Page size
       responses:
         '200':
           description: Project tasks fetched successfully
@@ -6325,6 +6505,21 @@ paths:
           name: projectId
           required: true
           schema: {type: string, format: uuid}
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: 1-based page number
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Page size
       responses:
         '200':
           description: Project measurements fetched successfully
@@ -6525,6 +6720,21 @@ paths:
           name: projectId
           required: true
           schema: {type: string, format: uuid}
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: 1-based page number
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Page size
       responses:
         '200':
           description: Project notes fetched successfully
@@ -6789,6 +6999,21 @@ paths:
             type: string
             enum: [PHOTO, PDF_PLAN]
           description: Optional category filter for Photos vs PDF Plan tabs
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: 1-based page number
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Page size
       responses:
         '200':
           description: Project attachments fetched successfully
@@ -6892,6 +7117,21 @@ paths:
           name: projectId
           required: true
           schema: {type: string, format: uuid}
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: 1-based page number
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Page size
       responses:
         '200':
           description: Project history fetched successfully
@@ -7317,6 +7557,21 @@ paths:
             type: string
             enum: [TODAY, WEEK, MONTH]
             default: TODAY
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: 1-based page number
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Page size
       responses:
         '200':
           description: Time logs fetched successfully
@@ -7380,6 +7635,21 @@ paths:
           schema:
             type: string
             format: date-time
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: 1-based page number
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Page size
       responses:
         '200':
           description: Schedule fetched successfully
@@ -7436,6 +7706,21 @@ paths:
           schema:
             type: string
             enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: 1-based page number
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Page size
       responses:
         '200':
           description: Map data fetched successfully
@@ -7498,6 +7783,21 @@ paths:
           schema:
             type: string
             format: date-time
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: 1-based page number
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Page size
       responses:
         '200':
           description: Crew time fetched successfully
@@ -7626,6 +7926,21 @@ paths:
             enum: [PENDING, COMPLETED]
             default: PENDING
           description: Pending vs Completed inspections tab
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: 1-based page number
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Page size
       responses:
         '200':
           description: Inspections fetched successfully
@@ -7835,6 +8150,21 @@ paths:
             type: string
             enum: [ENQUIRY, ERECTION, DISMANTLING, STANDING]
           description: Phase Board column filter
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: 1-based page number
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Page size
       responses:
         '200':
           description: Phases fetched successfully
@@ -8415,6 +8745,99 @@ components:
                   type: integer
                   minimum: 0
                   example: 5
+
+    AdminDashboardStatsDTO:
+      type: object
+      required:
+        - plannedErections
+        - erectionInProgress
+        - standingScaffolds
+        - plannedDismantling
+        - dismantlingInProgress
+        - inspectionDue
+      properties:
+        plannedErections: {type: integer}
+        erectionInProgress: {type: integer}
+        standingScaffolds: {type: integer}
+        plannedDismantling: {type: integer}
+        dismantlingInProgress: {type: integer}
+        inspectionDue: {type: integer}
+    AdminDashboardMapPinDTO:
+      type: object
+      required: [projectId, name, coordinates, phaseType]
+      properties:
+        projectId: {type: string, format: uuid}
+        name: {type: string}
+        coordinates:
+          type: object
+          nullable: true
+          required: [lat, lng]
+          properties:
+            lat: {type: number}
+            lng: {type: number}
+        phaseType:
+          type: string
+          enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
+    AdminDashboardMapDTO:
+      type: object
+      required: [counts, pins]
+      properties:
+        counts:
+          type: object
+          required: [erection, standing, dismantling]
+          properties:
+            erection: {type: integer}
+            standing: {type: integer}
+            dismantling: {type: integer}
+        pins:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminDashboardMapPinDTO'
+    AdminTodaysOperationDTO:
+      type: object
+      required:
+        - phaseId
+        - projectId
+        - projectName
+        - customerName
+        - managerName
+        - phaseType
+        - crewCount
+      properties:
+        phaseId: {type: string, format: uuid}
+        projectId: {type: string, format: uuid}
+        projectName: {type: string}
+        customerName: {type: string}
+        managerName: {type: string, nullable: true}
+        phaseType:
+          type: string
+          enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
+        crewCount: {type: integer, minimum: 0}
+    AdminDashboardDTO:
+      type: object
+      required: [stats, map, todaysOperations]
+      properties:
+        stats:
+          $ref: '#/components/schemas/AdminDashboardStatsDTO'
+        map:
+          $ref: '#/components/schemas/AdminDashboardMapDTO'
+        todaysOperations:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminTodaysOperationDTO'
+    GetAdminDashboardResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [meta, data]
+          properties:
+            message:
+              type: string
+              example: 'Dashboard fetched successfully.'
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
+            data:
+              $ref: '#/components/schemas/AdminDashboardDTO'
 
     PaginationMeta:
       type: object
@@ -9121,77 +9544,83 @@ components:
               $ref: '#/components/schemas/CustomerContactDTO'
 
 
+    InspectionPhotoInput:
+      type: object
+      required: [url, fileType]
+      properties:
+        url: {type: string, format: uri}
+        fileType: {type: string}
+        fileName: {type: string}
+        fileSize: {type: integer, minimum: 1}
+    InspectionContactInput:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string}
+        phone: {type: string}
+        email: {type: string, format: email}
+        role: {type: string, default: 'Project lead'}
     CreateInspectionRequest:
       type: object
-      required: [customerId, siteTitle, address, appointmentDate]
+      required: [customer, siteTitle, address, appointmentDate]
       properties:
-        customerId:
-          type: string
-          format: uuid
-        siteManagerId:
-          type: string
-          format: uuid
-        siteTitle:
-          type: string
-          example: 'Roof scaffold survey'
-        address:
-          type: string
-          example: 'Hauptstr. 10, Berlin'
-        postalCode:
-          type: string
-          example: '10115'
-        city:
-          type: string
-          example: 'Berlin'
-        appointmentDate:
-          type: string
-          format: date-time
-        scaffoldArea:
-          type: number
-          example: 120.5
-        scaffoldHeight:
-          type: number
-          example: 8.2
-        scaffoldType:
-          type: string
-          example: 'Facade'
+        customer:
+          oneOf:
+            - type: object
+              required: [mode, customerId]
+              properties:
+                mode: {type: string, enum: [EXISTING]}
+                customerId: {type: string, format: uuid}
+            - type: object
+              required: [mode, name]
+              properties:
+                mode: {type: string, enum: [NEW]}
+                name: {type: string}
+                category:
+                  type: string
+                  enum: [COMMERCIAL, MUNICIPALITY, ARCHITECT, PRIVATE]
+                  default: COMMERCIAL
+        siteManagerId: {type: string, format: uuid}
+        siteTitle: {type: string, example: 'Roof scaffold survey'}
+        address: {type: string, example: 'Hauptstr. 10, Berlin'}
+        postalCode: {type: string, example: '10115'}
+        city: {type: string, example: 'Berlin'}
+        appointmentDate: {type: string, format: date-time}
+        scaffoldArea: {type: number, example: 120.5}
+        scaffoldHeight: {type: number, example: 8.2}
+        scaffoldType: {type: string, example: 'Facade'}
+        siteAccessInstructions: {type: string}
+        specialRequirements: {type: string}
+        contact: {$ref: '#/components/schemas/InspectionContactInput'}
+        photos:
+          type: array
+          maxItems: 6
+          items: {$ref: '#/components/schemas/InspectionPhotoInput'}
     UpdateInspectionRequest:
       type: object
+      description: At least one field is required. Sending `photos` replaces all PHOTO attachments.
       properties:
-        siteManagerId:
-          type: string
-          format: uuid
-          nullable: true
-        siteTitle:
-          type: string
-        address:
-          type: string
-        postalCode:
-          type: string
-          nullable: true
-        city:
-          type: string
-          nullable: true
-        appointmentDate:
-          type: string
-          format: date-time
-        scaffoldArea:
-          type: number
-          nullable: true
-        scaffoldHeight:
-          type: number
-          nullable: true
-        scaffoldType:
-          type: string
-          nullable: true
-      description: At least one field is required.
+        siteManagerId: {type: string, format: uuid, nullable: true}
+        siteTitle: {type: string}
+        address: {type: string}
+        postalCode: {type: string, nullable: true}
+        city: {type: string, nullable: true}
+        appointmentDate: {type: string, format: date-time}
+        scaffoldArea: {type: number, nullable: true}
+        scaffoldHeight: {type: number, nullable: true}
+        scaffoldType: {type: string, nullable: true}
+        siteAccessInstructions: {type: string, nullable: true}
+        specialRequirements: {type: string, nullable: true}
+        contact: {$ref: '#/components/schemas/InspectionContactInput'}
+        photos:
+          type: array
+          maxItems: 6
+          items: {$ref: '#/components/schemas/InspectionPhotoInput'}
     ConvertInspectionRequest:
       type: object
       required: [projectName, phaseType]
       properties:
-        projectName:
-          type: string
-          example: 'Project Hauptstr. 10'
+        projectName: {type: string, example: 'Project Hauptstr. 10'}
         phaseType:
           type: string
           enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
@@ -9200,22 +9629,40 @@ components:
       type: object
       required: [id, name]
       properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
+        id: {type: string, format: uuid}
+        name: {type: string}
     InspectionSiteManagerDTO:
       type: object
       required: [id, firstName, lastName]
       properties:
-        id:
-          type: string
-          format: uuid
-        firstName:
-          type: string
-        lastName:
-          type: string
+        id: {type: string, format: uuid}
+        firstName: {type: string}
+        lastName: {type: string}
+    InspectionPhotoDTO:
+      type: object
+      required: [id, url, fileType, fileName]
+      properties:
+        id: {type: string, format: uuid}
+        url: {type: string}
+        fileType: {type: string}
+        fileName: {type: string, nullable: true}
+    InspectionListStatsDTO:
+      type: object
+      required: [totalInspections, totalSpecsArea, avgScaffoldHeight, awaitingSurvey, surveysCompleted]
+      properties:
+        totalInspections: {type: integer}
+        totalSpecsArea: {type: number}
+        avgScaffoldHeight: {type: number, nullable: true}
+        awaitingSurvey: {type: integer}
+        surveysCompleted: {type: integer}
+    InspectionTabCountsDTO:
+      type: object
+      required: [all, pending, surveyDone, converted]
+      properties:
+        all: {type: integer}
+        pending: {type: integer}
+        surveyDone: {type: integer}
+        converted: {type: integer}
     InspectionDTO:
       type: object
       required:
@@ -9230,164 +9677,142 @@ components:
         - scaffoldArea
         - scaffoldHeight
         - scaffoldType
+        - siteAccessInstructions
+        - specialRequirements
         - status
+        - projectId
         - customer
         - siteManager
+        - photos
+        - photoCount
         - createdAt
         - updatedAt
       properties:
-        id:
-          type: string
-          format: uuid
-        customerId:
-          type: string
-          format: uuid
-        siteManagerId:
-          type: string
-          format: uuid
-          nullable: true
-        siteTitle:
-          type: string
-        address:
-          type: string
-        postalCode:
-          type: string
-          nullable: true
-        city:
-          type: string
-          nullable: true
-        appointmentDate:
-          type: string
-          format: date-time
-        scaffoldArea:
-          type: number
-          nullable: true
-        scaffoldHeight:
-          type: number
-          nullable: true
-        scaffoldType:
-          type: string
-          nullable: true
-        status:
-          type: string
-          enum: [PENDING, SURVEY_DONE, CONVERTED]
-        customer:
-          $ref: '#/components/schemas/InspectionCustomerDTO'
+        id: {type: string, format: uuid}
+        customerId: {type: string, format: uuid}
+        siteManagerId: {type: string, format: uuid, nullable: true}
+        siteTitle: {type: string}
+        address: {type: string}
+        postalCode: {type: string, nullable: true}
+        city: {type: string, nullable: true}
+        appointmentDate: {type: string, format: date-time}
+        scaffoldArea: {type: number, nullable: true}
+        scaffoldHeight: {type: number, nullable: true}
+        scaffoldType: {type: string, nullable: true}
+        siteAccessInstructions: {type: string, nullable: true}
+        specialRequirements: {type: string, nullable: true}
+        status: {type: string, enum: [PENDING, SURVEY_DONE, CONVERTED]}
+        projectId: {type: string, format: uuid, nullable: true}
+        customer: {$ref: '#/components/schemas/InspectionCustomerDTO'}
         siteManager:
-          nullable: true
           type: object
+          nullable: true
           allOf:
             - $ref: '#/components/schemas/InspectionSiteManagerDTO'
-        createdAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
+        photos:
+          type: array
+          items: {$ref: '#/components/schemas/InspectionPhotoDTO'}
+        photoCount: {type: integer, minimum: 0}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
     ConvertInspectionDTO:
       type: object
       required: [inspection, project, phase, measurement]
       properties:
-        inspection:
-          $ref: '#/components/schemas/InspectionDTO'
+        inspection: {$ref: '#/components/schemas/InspectionDTO'}
         project:
           type: object
-          required: [id, name, address]
+          required: [id, name, address, client, scaffoldArea, specs]
           properties:
-            id:
-              type: string
-              format: uuid
-            name:
-              type: string
-            address:
-              type: string
+            id: {type: string, format: uuid}
+            name: {type: string}
+            address: {type: string}
+            client: {$ref: '#/components/schemas/InspectionCustomerDTO'}
+            scaffoldArea: {type: number, nullable: true}
+            specs:
+              type: object
+              required: [area, height, scaffoldType]
+              properties:
+                area: {type: number, nullable: true}
+                height: {type: number, nullable: true}
+                scaffoldType: {type: string, nullable: true}
         phase:
           type: object
           required: [id, type, status]
           properties:
-            id:
-              type: string
-              format: uuid
-            type:
-              type: string
-              enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
-            status:
-              type: string
-              example: 'ENQUIRY'
+            id: {type: string, format: uuid}
+            type: {type: string, enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]}
+            status: {type: string, example: 'ENQUIRY'}
         measurement:
           type: object
           nullable: true
           required: [id, area, height, scaffoldType]
           properties:
-            id:
-              type: string
-              format: uuid
-            area:
-              type: number
-            height:
-              type: number
-            scaffoldType:
-              type: string
-              nullable: true
+            id: {type: string, format: uuid}
+            area: {type: number}
+            height: {type: number}
+            scaffoldType: {type: string, nullable: true}
     CreateInspectionResponse:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
         - type: object
           required: [data]
           properties:
-            message:
-              type: string
-              example: 'Inspection created successfully.'
-            data:
-              $ref: '#/components/schemas/InspectionDTO'
+            message: {type: string, example: 'Inspection created successfully.'}
+            data: {$ref: '#/components/schemas/InspectionDTO'}
     ListInspectionsResponse:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
         - type: object
           required: [data, meta]
           properties:
-            message:
-              type: string
-              example: 'Inspections fetched successfully.'
-            meta:
-              $ref: '#/components/schemas/PaginationMeta'
+            message: {type: string, example: 'Inspections fetched successfully.'}
+            meta: {$ref: '#/components/schemas/PaginationMeta'}
             data:
-              type: array
-              items:
-                $ref: '#/components/schemas/InspectionDTO'
+              type: object
+              required: [items, stats, tabCounts]
+              properties:
+                items:
+                  type: array
+                  items: {$ref: '#/components/schemas/InspectionDTO'}
+                stats: {$ref: '#/components/schemas/InspectionListStatsDTO'}
+                tabCounts: {$ref: '#/components/schemas/InspectionTabCountsDTO'}
     GetInspectionResponse:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
         - type: object
           required: [data]
           properties:
-            message:
-              type: string
-              example: 'Inspection fetched successfully.'
-            data:
-              $ref: '#/components/schemas/InspectionDTO'
+            message: {type: string, example: 'Inspection fetched successfully.'}
+            data: {$ref: '#/components/schemas/InspectionDTO'}
     UpdateInspectionResponse:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
         - type: object
           required: [data]
           properties:
-            message:
-              type: string
-              example: 'Inspection updated successfully.'
+            message: {type: string, example: 'Inspection updated successfully.'}
+            data: {$ref: '#/components/schemas/InspectionDTO'}
+    DeleteInspectionResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message: {type: string, example: 'Inspection deleted successfully.'}
             data:
-              $ref: '#/components/schemas/InspectionDTO'
+              type: object
+              required: [id]
+              properties:
+                id: {type: string, format: uuid}
     ConvertInspectionResponse:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
         - type: object
           required: [data]
           properties:
-            message:
-              type: string
-              example: 'Inspection converted to project successfully.'
-            data:
-              $ref: '#/components/schemas/ConvertInspectionDTO'
+            message: {type: string, example: 'Inspection converted to project successfully.'}
+            data: {$ref: '#/components/schemas/ConvertInspectionDTO'}
 
 
     UpdateProjectRequest:
@@ -10764,7 +11189,7 @@ components:
           description: Present for SITE_MANAGER only
     MobileProjectDetailDTO:
       type: object
-      required: [id, name, coordinates, siteAccessCode, siteAccessNotes, scaffoldSpecification, schedule, nextSafetyInspection, budgetedHours, totalLoggedHours, isProfitable, phases, customer, hoursByActivity, crewBreakdown, attachmentCounts]
+      required: [id, name, coordinates, siteAccessCode, siteAccessNotes, scaffoldSpecification, scheduleData, nextSafetyInspection, budgetedHours, totalLoggedHours, isProfitable, phases, customer, hoursByActivity, crewBreakdown, attachmentCounts]
       properties:
         id: {type: string, format: uuid}
         name: {type: string}
@@ -10784,13 +11209,20 @@ components:
             area: {type: number, nullable: true}
             height: {type: number, nullable: true}
             type: {type: string, nullable: true}
-        schedule:
-          type: object
-          required: [startDate, endDate, durationDays]
-          properties:
-            startDate: {type: string, format: date-time, nullable: true}
-            endDate: {type: string, format: date-time, nullable: true}
-            durationDays: {type: number, nullable: true}
+        scheduleData:
+          type: array
+          description: >
+            Flutter Activity Type schedules (lowercase). Scaffold Erection→erection,
+            Dismantling→dismantling, Standing→standing, Other Activity→other.
+          items:
+            type: object
+            required: [id, type, startDate, endDate, durationDays]
+            properties:
+              id: {type: string, format: uuid}
+              type: {type: string, enum: [erection, dismantling, standing, other]}
+              startDate: {type: string, format: date-time, nullable: true}
+              endDate: {type: string, format: date-time, nullable: true}
+              durationDays: {type: number, nullable: true}
         nextSafetyInspection:
           type: object
           nullable: true
@@ -10889,11 +11321,13 @@ components:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
         - type: object
-          required: [data]
+          required: [meta, data]
           properties:
             message:
               type: string
               example: 'Dashboard fetched successfully.'
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
             data:
               $ref: '#/components/schemas/MobileDashboardDTO'
 
@@ -10939,13 +11373,22 @@ components:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
         - type: object
-          required: [data]
+          required: [meta, data]
           properties:
             message:
               type: string
               example: 'Project tasks fetched successfully.'
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
             data:
-              $ref: '#/components/schemas/MobileProjectTasksListDTO'
+              description: >
+                Without `status` → `{ open, completed }` (each page-sliced).
+                With `status=OPEN|COMPLETED` → flat task array for that tab.
+              oneOf:
+                - $ref: '#/components/schemas/MobileProjectTasksListDTO'
+                - type: array
+                  items:
+                    $ref: '#/components/schemas/MobileProjectTaskDTO'
     CreateMobileProjectTaskRequest:
       type: object
       required: [description, employeeId, priority]
@@ -10992,8 +11435,10 @@ components:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
         - type: object
-          required: [data]
+          required: [meta, data]
           properties:
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
             data:
               $ref: '#/components/schemas/MobileMeasurementsListDTO'
     CreateMobileMeasurementRequest:
@@ -11045,8 +11490,10 @@ components:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
         - type: object
-          required: [data]
+          required: [meta, data]
           properties:
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
             data:
               type: array
               items:
@@ -11098,7 +11545,20 @@ components:
         placeLabel:
           type: string
           description: Optional map place label stored as Project.address
-        scaffoldArea: {type: number}
+        scaffoldSpecification:
+          type: object
+          required: [area]
+          description: >
+            Scaffold spec returned on project detail. area → Project.scaffoldArea;
+            height/type seed an initial measurement for detail aggregation.
+          properties:
+            area: {type: number}
+            height: {type: number}
+            type: {type: string}
+        scaffoldArea:
+          type: number
+          deprecated: true
+          description: Prefer scaffoldSpecification.area
         priority: {type: string, enum: [HIGH, MEDIUM, LOW], default: MEDIUM}
         phaseType: {type: string, enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE], default: ERECTION}
         status: {type: string, enum: [ENQUIRY, QUOTATION, ORDER_CONFIRMED, IN_PROGRESS, COMPLETED, POSTPONED], default: ENQUIRY}
@@ -11124,18 +11584,54 @@ components:
             phone: {type: string}
             email: {type: string, format: email}
             role: {type: string, default: Project lead}
+        scheduleData:
+          type: array
+          minItems: 1
+          description: >
+            Flutter Activity Type schedules (same fields as detail). type lowercase.
+            Require startDate plus endDate and/or durationDays.
+          items:
+            type: object
+            required: [type, startDate]
+            properties:
+              type: {type: string, enum: [erection, dismantling, standing, other]}
+              startDate: {type: string, format: date-time}
+              endDate: {type: string, format: date-time}
+              durationDays: {type: number, minimum: 0}
+        schedules:
+          type: array
+          minItems: 1
+          deprecated: true
+          description: Prefer scheduleData
+          items:
+            type: object
+            required: [type, startDate, durationDays]
+            properties:
+              type: {type: string, enum: [erection, dismantling, standing, other]}
+              startDate: {type: string, format: date-time}
+              durationDays: {type: number, minimum: 0}
         erection:
-          type: object
-          required: [startDate, durationDays]
-          properties:
-            startDate: {type: string, format: date-time}
-            durationDays: {type: number}
+          type: array
+          minItems: 1
+          deprecated: true
+          description: Prefer scheduleData with type erection
+          items:
+            type: object
+            required: [startDate, durationDays]
+            properties:
+              startDate: {type: string, format: date-time}
+              durationDays: {type: number, minimum: 0}
         dismantling:
-          type: object
-          required: [startDate, durationDays]
-          properties:
-            startDate: {type: string, format: date-time}
-            durationDays: {type: number}
+          type: array
+          minItems: 1
+          deprecated: true
+          description: Prefer scheduleData with type dismantling
+          items:
+            type: object
+            required: [startDate, durationDays]
+            properties:
+              startDate: {type: string, format: date-time}
+              durationDays: {type: number, minimum: 0}
         note:
           type: object
           required: [category, content]
@@ -11271,8 +11767,10 @@ components:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
         - type: object
-          required: [data]
+          required: [meta, data]
           properties:
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
             data:
               type: array
               items:
@@ -11292,8 +11790,10 @@ components:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
         - type: object
-          required: [data]
+          required: [meta, data]
           properties:
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
             data:
               type: array
               items:
@@ -11303,11 +11803,13 @@ components:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
         - type: object
-          required: [data]
+          required: [meta, data]
           properties:
             message:
               type: string
               example: 'Projects fetched successfully.'
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
             data:
               type: array
               items:
@@ -11479,11 +11981,13 @@ components:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
         - type: object
-          required: [data]
+          required: [meta, data]
           properties:
             message:
               type: string
               example: 'Time logs fetched successfully.'
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
             data:
               type: array
               items:
@@ -11609,11 +12113,13 @@ components:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
         - type: object
-          required: [data]
+          required: [meta, data]
           properties:
             message:
               type: string
               example: 'Schedule fetched successfully.'
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
             data:
               type: array
               items:
@@ -11622,11 +12128,13 @@ components:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
         - type: object
-          required: [data]
+          required: [meta, data]
           properties:
             message:
               type: string
               example: 'Map data fetched successfully.'
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
             data:
               type: array
               items:
@@ -11646,11 +12154,13 @@ components:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
         - type: object
-          required: [data]
+          required: [meta, data]
           properties:
             message:
               type: string
               example: 'Crew time fetched successfully.'
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
             data:
               $ref: '#/components/schemas/MobileCrewTimeDTO'
     SyncMobileTimeLogsResponse:
@@ -11826,11 +12336,13 @@ components:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
         - type: object
-          required: [data]
+          required: [meta, data]
           properties:
             message:
               type: string
               example: 'Inspections fetched successfully.'
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
             data:
               type: array
               items:
@@ -11861,11 +12373,13 @@ components:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
         - type: object
-          required: [data]
+          required: [meta, data]
           properties:
             message:
               type: string
               example: 'Phases fetched successfully.'
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
             data:
               type: array
               items:

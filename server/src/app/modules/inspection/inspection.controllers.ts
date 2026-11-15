@@ -6,6 +6,7 @@ import { buildPaginationMeta } from '@/app/utils/pagination.utils';
 import {
   convertInspectionToProjectService,
   createInspectionService,
+  deleteInspectionService,
   getInspectionByIdService,
   listInspectionsService,
   updateInspectionService,
@@ -43,7 +44,7 @@ export const createInspectionController = asyncHandler(
 
 /**
  * Handles `GET /admin/inspections`.
- * Returns a paginated inspection list with meta links.
+ * Returns paginated items plus KPI stats and tab counts.
  *
  * @param {Request} req - Express request with `validatedQuery`.
  * @param {Response} res - Express response.
@@ -53,7 +54,7 @@ export const listInspectionsController = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const traceId = getTraceId();
     const query = req.validatedQuery as TGetInspectionsQuery;
-    const { items, total, page, limit } = await listInspectionsService({
+    const { data, total, page, limit } = await listInspectionsService({
       query,
     });
     const meta = buildPaginationMeta({ total, page, limit, req });
@@ -62,7 +63,7 @@ export const listInspectionsController = asyncHandler(
       success: true,
       message: 'Inspections fetched successfully.',
       meta,
-      data: items,
+      data,
       traceId,
     });
     return;
@@ -111,6 +112,30 @@ export const updateInspectionController = asyncHandler(
     res.status(200).json({
       success: true,
       message: 'Inspection updated successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `DELETE /admin/inspections/:id`.
+ * Soft-deletes; blocked for CONVERTED by middleware.
+ *
+ * @param {Request} req - Express request with trusted `req.inspection`.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const deleteInspectionController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const inspection = req.inspection as Inspection;
+    const data = await deleteInspectionService({ inspection });
+
+    res.status(200).json({
+      success: true,
+      message: 'Inspection deleted successfully.',
       data,
       traceId,
     });

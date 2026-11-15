@@ -9,6 +9,15 @@ import {
   ProjectNoteCategory,
 } from '@prisma/client';
 import { z } from 'zod';
+import { DEFAULT_LIMIT, DEFAULT_PAGE } from '@/const';
+
+/**
+ * Shared page/limit query fields (admin + alua-compatible).
+ */
+const paginationQueryFields = {
+  page: z.coerce.number().int().min(1).default(DEFAULT_PAGE),
+  limit: z.coerce.number().int().min(1).max(100).default(DEFAULT_LIMIT),
+};
 
 /**
  * Note categories exposed to the mobile UI (legacy SAFETY/INTERNAL omitted).
@@ -96,12 +105,22 @@ export const syncTimeLogsSchema = z
   .strict();
 
 /**
+ * Query schema for `GET /mobile/dashboard` (paginates `upcomingTasks` + `mapPins`).
+ */
+export const getDashboardQuerySchema = z
+  .object({
+    ...paginationQueryFields,
+  })
+  .strict();
+
+/**
  * Query schema for `GET /mobile/time-logs`.
  * Filters the authenticated user's logs to today, this week, or this month (UTC).
  */
 export const getMyTimeLogsQuerySchema = z
   .object({
     period: z.enum(['TODAY', 'WEEK', 'MONTH']).default('TODAY'),
+    ...paginationQueryFields,
   })
   .strict();
 
@@ -113,6 +132,7 @@ export const getScheduleQuerySchema = z
   .object({
     startDate: z.coerce.date({ error: 'Invalid startDate' }),
     endDate: z.coerce.date({ error: 'Invalid endDate' }),
+    ...paginationQueryFields,
   })
   .strict()
   .refine((data) => data.endDate.getTime() >= data.startDate.getTime(), {
@@ -127,17 +147,20 @@ export const getScheduleQuerySchema = z
 export const getMapQuerySchema = z
   .object({
     type: z.enum(PhaseType, { message: 'Invalid phase type' }).optional(),
+    ...paginationQueryFields,
   })
   .strict();
 
 /**
  * Query schema for `GET /mobile/crew-time`.
  * Project-scoped crew aggregation with optional UTC calendar-day filter.
+ * `page`/`limit` paginate the `logs` array; aggregates stay full-window.
  */
 export const getCrewTimeQuerySchema = z
   .object({
     projectId: z.string().uuid({ error: 'Invalid project id' }),
     date: z.coerce.date({ error: 'Invalid date' }).optional(),
+    ...paginationQueryFields,
   })
   .strict();
 
@@ -272,6 +295,7 @@ export const getMyProjectsQuerySchema = z
       })
       .optional()
       .default('NEWEST'),
+    ...paginationQueryFields,
   })
   .strict()
   .refine(
@@ -291,6 +315,7 @@ export const getMobilePhasesQuerySchema = z
         message: 'Invalid phase board column',
       })
       .optional(),
+    ...paginationQueryFields,
   })
   .strict();
 
@@ -303,6 +328,7 @@ export const getMobileInspectionsQuerySchema = z
       .enum(['PENDING', 'COMPLETED'], { message: 'Invalid inspection status' })
       .optional()
       .default('PENDING'),
+    ...paginationQueryFields,
   })
   .strict();
 
@@ -316,6 +342,30 @@ export const getProjectAttachmentsQuerySchema = z
         message: 'Invalid attachment category',
       })
       .optional(),
+    ...paginationQueryFields,
+  })
+  .strict();
+
+/**
+ * Query schema for `GET /mobile/projects/:projectId/tasks`.
+ * Optional `status` returns one tab as a flat paginated array; omit for both buckets.
+ */
+export const getProjectTasksQuerySchema = z
+  .object({
+    status: z
+      .enum(['OPEN', 'COMPLETED'], { message: 'Invalid task status' })
+      .optional(),
+    ...paginationQueryFields,
+  })
+  .strict();
+
+/**
+ * Query schema for project child lists that only need page/limit
+ * (notes, measurements, history).
+ */
+export const getProjectListQuerySchema = z
+  .object({
+    ...paginationQueryFields,
   })
   .strict();
 
@@ -430,14 +480,93 @@ export const updateMeasurementSchema = z
   });
 
 /**
- * Schedule block for erection / dismantling on project create.
+ * Untyped schedule entry (legacy erection/dismantling arrays).
  */
 const mobilePhaseScheduleSchema = z
   .object({
     startDate: z.coerce.date({ error: 'Invalid start date' }),
-    durationDays: z.number().positive({ message: 'Duration must be positive' }),
+    durationDays: z
+      .number()
+      .min(0, { message: 'Duration must be zero or positive' }),
   })
   .strict();
+
+/**
+ * Flutter Activity Type values (lowercase) for `scheduleData[].type`.
+ */
+export const mobileScheduleActivityTypes = [
+  'erection',
+  'dismantling',
+  'standing',
+  'other',
+] as const;
+
+/**
+ * Maps Flutter schedule activity type → Prisma `PhaseType`.
+ */
+export const mapScheduleActivityToPhaseType = (
+  type: (typeof mobileScheduleActivityTypes)[number]
+): PhaseType => {
+  switch (type) {
+    case 'erection':
+      return PhaseType.ERECTION;
+    case 'dismantling':
+      return PhaseType.DISMANTLING;
+    case 'standing':
+      return PhaseType.STANDING;
+    case 'other':
+      return PhaseType.MAINTENANCE;
+  }
+};
+
+/**
+ * Maps Prisma `PhaseType` → Flutter schedule activity type.
+ */
+export const mapPhaseTypeToScheduleActivity = (
+  type: PhaseType
+): (typeof mobileScheduleActivityTypes)[number] => {
+  switch (type) {
+    case PhaseType.ERECTION:
+      return 'erection';
+    case PhaseType.DISMANTLING:
+      return 'dismantling';
+    case PhaseType.STANDING:
+      return 'standing';
+    case PhaseType.MAINTENANCE:
+      return 'other';
+  }
+};
+
+/**
+ * Typed schedule entry for Flutter Activity Type picker (`scheduleData`).
+ * Same shape on create + detail (detail also returns `id`).
+ * Scaffold Erection→erection, Dismantling→dismantling, Standing→standing, Other→other.
+ *
+ * Rules: `startDate` required. Provide `endDate` and/or `durationDays`.
+ * - both → `endDate` stored; `durationDays` used as sent (or derived if omitted)
+ * - only `durationDays` → `endDate = startDate + durationDays`
+ * - only `endDate` → `durationDays` derived from date difference
+ */
+const mobileTypedScheduleSchema = z
+  .object({
+    type: z.enum(mobileScheduleActivityTypes, {
+      message: 'Invalid activity type',
+    }),
+    startDate: z.coerce.date({ error: 'Invalid start date' }),
+    endDate: z.coerce.date({ error: 'Invalid end date' }).optional(),
+    durationDays: z
+      .number()
+      .min(0, { message: 'Duration must be zero or positive' })
+      .optional(),
+  })
+  .strict()
+  .refine(
+    (data) => data.endDate !== undefined || data.durationDays !== undefined,
+    {
+      message: 'Either endDate or durationDays is required',
+      path: ['endDate'],
+    }
+  );
 
 /**
  * Request body for `POST /mobile/projects` (Site Manager create from map).
@@ -453,6 +582,19 @@ export const createMobileProjectSchema = z
       })
       .strict(),
     placeLabel: z.string().trim().min(1).optional(),
+    /**
+     * Scaffold specification shown on project detail.
+     * `area` → Project.scaffoldArea; `height`/`type` seed an initial measurement.
+     */
+    scaffoldSpecification: z
+      .object({
+        area: z.number().positive({ message: 'Scaffold area must be positive' }),
+        height: z.number().positive({ message: 'Scaffold height must be positive' }).optional(),
+        type: z.string().trim().min(1).optional(),
+      })
+      .strict()
+      .optional(),
+    /** @deprecated Prefer `scaffoldSpecification.area`. */
     scaffoldArea: z.number().positive().optional(),
     priority: z
       .enum(Priority, { message: 'Invalid priority' })
@@ -497,8 +639,13 @@ export const createMobileProjectSchema = z
         role: z.string().trim().min(1).optional().default('Project lead'),
       })
       .strict(),
-    erection: mobilePhaseScheduleSchema.optional(),
-    dismantling: mobilePhaseScheduleSchema.optional(),
+    scheduleData: z.array(mobileTypedScheduleSchema).min(1).optional(),
+    /** @deprecated Prefer `scheduleData`. */
+    schedules: z.array(mobileTypedScheduleSchema).min(1).optional(),
+    /** @deprecated Prefer `scheduleData` with `type: "erection"`. */
+    erection: z.array(mobilePhaseScheduleSchema).min(1).optional(),
+    /** @deprecated Prefer `scheduleData` with `type: "dismantling"`. */
+    dismantling: z.array(mobilePhaseScheduleSchema).min(1).optional(),
     note: z
       .object({
         category: mobileNoteCategoryEnum,
@@ -538,6 +685,14 @@ export const updateMobileProjectSchema = z
       .optional(),
     budgetedHours: z.number().min(0).optional(),
     scaffoldArea: z.number().min(0).nullable().optional(),
+    scaffoldSpecification: z
+      .object({
+        area: z.number().min(0).nullable().optional(),
+        height: z.number().positive().nullable().optional(),
+        type: z.string().trim().min(1).nullable().optional(),
+      })
+      .strict()
+      .optional(),
     siteAccessCode: z.string().trim().min(1).nullable().optional(),
     siteAccessNotes: z.string().trim().min(1).nullable().optional(),
     phaseType: z.enum(PhaseType, { message: 'Invalid phase type' }).optional(),

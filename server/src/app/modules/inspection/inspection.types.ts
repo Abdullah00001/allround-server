@@ -75,6 +75,14 @@ export type TUpdateInspectionServiceParams = {
 };
 
 /**
+ * Service params for soft-deleting an inspection.
+ */
+export type TDeleteInspectionServiceParams = {
+  /** Trusted non-deleted inspection. */
+  inspection: Inspection;
+};
+
+/**
  * Service params for converting an inspection into a project.
  */
 export type TConvertInspectionServiceParams = {

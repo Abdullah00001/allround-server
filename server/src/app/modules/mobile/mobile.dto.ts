@@ -1102,7 +1102,7 @@ export class MobileProjectDetailDTO {
    * @param {string | null} siteAccessCode - Gate / access code.
    * @param {string | null} siteAccessNotes - Access notes.
    * @param {{ area: number | null; height: number | null; type: string | null }} scaffoldSpecification - Scaffold area/height/type.
-   * @param {{ startDate: string | null; endDate: string | null; durationDays: number | null }} schedule - Primary phase schedule summary.
+   * @param {{ id: string; type: 'erection' | 'dismantling' | 'standing' | 'other'; startDate: string | null; endDate: string | null; durationDays: number | null }[]} scheduleData - Flutter Activity Type schedules.
    * @param {{ id: string; appointmentDate: string; siteTitle: string; address: string; city: string | null } | null} nextSafetyInspection - Next pending customer inspection.
    * @param {number} budgetedHours - Labor budget hours.
    * @param {number} totalLoggedHours - Approved logged hours.
@@ -1124,11 +1124,13 @@ export class MobileProjectDetailDTO {
       height: number | null;
       type: string | null;
     },
-    public schedule: {
+    public scheduleData: Array<{
+      id: string;
+      type: 'erection' | 'dismantling' | 'standing' | 'other';
       startDate: string | null;
       endDate: string | null;
       durationDays: number | null;
-    },
+    }>,
     public nextSafetyInspection: {
       id: string;
       appointmentDate: string;

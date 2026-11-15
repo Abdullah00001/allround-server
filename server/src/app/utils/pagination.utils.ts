@@ -29,6 +29,36 @@ export interface IBuildPaginationMetaParams {
   req: Request;
 }
 
+export interface IPaginatedSlice<T> {
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+/**
+ * Slices an in-memory list for page/limit pagination.
+ *
+ * @template T
+ * @param {T[]} items - Full ordered result set.
+ * @param {number} page - 1-based page number.
+ * @param {number} limit - Page size.
+ * @returns {IPaginatedSlice<T>} Page window plus total count.
+ */
+export function paginateArray<T>(
+  items: T[],
+  page: number,
+  limit: number
+): IPaginatedSlice<T> {
+  const skip = (page - 1) * limit;
+  return {
+    items: items.slice(skip, skip + limit),
+    total: items.length,
+    page,
+    limit,
+  };
+}
+
 /**
  * Builds standard pagination metadata with dynamically resolved page links.
  * Preserves existing query parameters on the request.

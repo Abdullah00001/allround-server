@@ -63,6 +63,10 @@ import {
   toCoordinates,
 } from '@/app/modules/mobile/mobile.helpers';
 import {
+  mapPhaseTypeToScheduleActivity,
+  mapScheduleActivityToPhaseType,
+} from '@/app/modules/mobile/mobile.schema';
+import {
   TCompleteInspectionServiceParams,
   TCreateMeasurementServiceParams,
   TCreateMobileProjectServiceParams,
@@ -73,6 +77,7 @@ import {
   TDeleteProjectAttachmentServiceParams,
   TDeleteProjectNoteServiceParams,
   TGetCrewTimeServiceParams,
+  TGetDashboardServiceParams,
   TGetMapServiceParams,
   TGetMobileInspectionServiceParams,
   TGetMyProjectsServiceParams,
@@ -81,6 +86,8 @@ import {
   TListMobileInspectionsServiceParams,
   TListMobilePhasesServiceParams,
   TListProjectAttachmentsServiceParams,
+  TListProjectChildServiceParams,
+  TListProjectTasksServiceParams,
   TManualTimeServiceParams,
   TMobileProjectServiceParams,
   TMobileUserServiceParams,
@@ -95,6 +102,7 @@ import {
   TUpdatePhaseDatesServiceParams,
   TUpdateProjectNoteServiceParams,
 } from '@/app/modules/mobile/mobile.types';
+import { paginateArray } from '@/app/utils/pagination.utils';
 
 const timeLogInclude = {
   breaks: true,
@@ -326,8 +334,16 @@ export const getMobileConfigService = async (): Promise<MobileConfigDTO> => {
  */
 export const getDashboardDataService = async ({
   user,
-}: TMobileUserServiceParams): Promise<MobileDashboardDTO> => {
+  query,
+}: TGetDashboardServiceParams): Promise<{
+  data: MobileDashboardDTO;
+  total: number;
+  page: number;
+  limit: number;
+}> => {
   const userId = user.id;
+  const page = query.page;
+  const limit = query.limit;
   const globalAccess = await hasSiteManagerGlobalAccess(user);
 
   const phaseScope = globalAccess
@@ -451,17 +467,26 @@ export const getDashboardDataService = async ({
     );
   }
 
-  return new MobileDashboardDTO(
-    new MobileDashboardStatsDTO(
-      pendingInspections,
-      activeProjectsCount,
-      standingActiveSites,
-      countPlannedRunning(erectionPhases),
-      countPlannedRunning(dismantlingPhases)
+  const allPins = [...pinByProject.values()];
+  const tasksPage = paginateArray(upcomingTasks, page, limit);
+  const pinsPage = paginateArray(allPins, page, limit);
+
+  return {
+    data: new MobileDashboardDTO(
+      new MobileDashboardStatsDTO(
+        pendingInspections,
+        activeProjectsCount,
+        standingActiveSites,
+        countPlannedRunning(erectionPhases),
+        countPlannedRunning(dismantlingPhases)
+      ),
+      tasksPage.items,
+      pinsPage.items
     ),
-    upcomingTasks,
-    [...pinByProject.values()]
-  );
+    total: Math.max(tasksPage.total, pinsPage.total),
+    page,
+    limit,
+  };
 };
 
 /**
@@ -647,8 +672,15 @@ const nextInspectionSortKey = (
 export const getMyProjectsService = async ({
   user,
   query,
-}: TGetMyProjectsServiceParams): Promise<MobileProjectPhaseCardDTO[]> => {
+}: TGetMyProjectsServiceParams): Promise<{
+  items: MobileProjectPhaseCardDTO[];
+  total: number;
+  page: number;
+  limit: number;
+}> => {
   const userId = user.id;
+  const page = query.page;
+  const limit = query.limit;
   const globalAccess = await hasSiteManagerGlobalAccess(user);
   const tabWhere = buildProjectTabWhere(query.tab ?? 'ALL', userId);
   const modalWhere = buildProjectModalFilters(query);
@@ -720,7 +752,9 @@ export const getMyProjectsService = async ({
     });
   } else {
     const assignedProjectIds = await getAssignedProjectIds(userId);
-    if (assignedProjectIds.length === 0) return [];
+    if (assignedProjectIds.length === 0) {
+      return { items: [], total: 0, page, limit };
+    }
 
     const managedProjectIds = new Set(
       (
@@ -845,7 +879,7 @@ export const getMyProjectsService = async ({
     );
   }
 
-  return cards;
+  return paginateArray(cards, page, limit);
 };
 
 /**
@@ -1063,22 +1097,39 @@ export const createManualTimeService = async ({
 export const getMyTimeLogsService = async ({
   user,
   query,
-}: TGetMyTimeLogsServiceParams): Promise<MobileTimeLogDTO[]> => {
+}: TGetMyTimeLogsServiceParams): Promise<{
+  items: MobileTimeLogDTO[];
+  total: number;
+  page: number;
+  limit: number;
+}> => {
   const { start, endExclusive } = getPeriodRange(query.period);
-
-  const timeLogs = await prisma.timeLog.findMany({
-    where: {
-      userId: user.id,
-      startTime: {
-        gte: start,
-        lt: endExclusive,
-      },
+  const { page, limit } = query;
+  const where = {
+    userId: user.id,
+    startTime: {
+      gte: start,
+      lt: endExclusive,
     },
-    include: timeLogInclude,
-    orderBy: { startTime: 'desc' },
-  });
+  };
 
-  return timeLogs.map(MobileTimeLogDTO.build);
+  const [total, timeLogs] = await Promise.all([
+    prisma.timeLog.count({ where }),
+    prisma.timeLog.findMany({
+      where,
+      include: timeLogInclude,
+      orderBy: { startTime: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+  ]);
+
+  return {
+    items: timeLogs.map(MobileTimeLogDTO.build),
+    total,
+    page,
+    limit,
+  };
 };
 
 /**
@@ -1093,7 +1144,13 @@ export const getMyTimeLogsService = async ({
 export const getCrewTimeService = async ({
   project,
   query,
-}: TGetCrewTimeServiceParams): Promise<MobileCrewTimeDTO> => {
+}: TGetCrewTimeServiceParams): Promise<{
+  data: MobileCrewTimeDTO;
+  total: number;
+  page: number;
+  limit: number;
+}> => {
+  const { page, limit } = query;
   const dateFilter = query.date
     ? (() => {
         const start = getUtcDayStart(query.date);
@@ -1157,14 +1214,25 @@ export const getCrewTimeService = async ({
       )
   );
 
-  return new MobileCrewTimeDTO(
-    totalLoggedHours,
-    hoursByActivity.map(
-      (row) => new MobileHoursByActivityDTO(row.activityType, row.hours)
-    ),
-    crewBreakdown,
-    timeLogs.map(MobileTimeLogDTO.build)
+  const logsPage = paginateArray(
+    timeLogs.map(MobileTimeLogDTO.build),
+    page,
+    limit
   );
+
+  return {
+    data: new MobileCrewTimeDTO(
+      totalLoggedHours,
+      hoursByActivity.map(
+        (row) => new MobileHoursByActivityDTO(row.activityType, row.hours)
+      ),
+      crewBreakdown,
+      logsPage.items
+    ),
+    total: logsPage.total,
+    page,
+    limit,
+  };
 };
 
 /**
@@ -1179,7 +1247,13 @@ export const getCrewTimeService = async ({
 export const getScheduleService = async ({
   user,
   query,
-}: TGetScheduleServiceParams): Promise<MobileScheduleDayDTO[]> => {
+}: TGetScheduleServiceParams): Promise<{
+  items: MobileScheduleDayDTO[];
+  total: number;
+  page: number;
+  limit: number;
+}> => {
+  const { page, limit } = query;
   const globalAccess = await hasSiteManagerGlobalAccess(user);
   const rangeStart = getUtcDayStart(query.startDate);
   const rangeEndExclusive = getUtcDayEndExclusive(getUtcDayStart(query.endDate));
@@ -1257,9 +1331,11 @@ export const getScheduleService = async ({
     if (!byDate.has(dateKey)) byDate.set(dateKey, []);
   }
 
-  return [...byDate.entries()]
+  const days = [...byDate.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, dayPhases]) => new MobileScheduleDayDTO(date, dayPhases));
+
+  return paginateArray(days, page, limit);
 };
 
 /**
@@ -1272,7 +1348,13 @@ export const getScheduleService = async ({
 export const getMapDataService = async ({
   user,
   query,
-}: TGetMapServiceParams): Promise<MobileMapProjectDTO[]> => {
+}: TGetMapServiceParams): Promise<{
+  items: MobileMapProjectDTO[];
+  total: number;
+  page: number;
+  limit: number;
+}> => {
+  const { page, limit } = query;
   const globalAccess = await hasSiteManagerGlobalAccess(user);
 
   const phases = await prisma.projectPhase.findMany({
@@ -1319,7 +1401,7 @@ export const getMapDataService = async ({
     );
   }
 
-  return [...pinByProject.values()];
+  return paginateArray([...pinByProject.values()], page, limit);
 };
 
 /**
@@ -1403,7 +1485,13 @@ export const syncTimeLogsService = async ({
 export const listMobileInspectionsService = async ({
   user,
   query,
-}: TListMobileInspectionsServiceParams): Promise<MobileInspectionDTO[]> => {
+}: TListMobileInspectionsServiceParams): Promise<{
+  items: MobileInspectionDTO[];
+  total: number;
+  page: number;
+  limit: number;
+}> => {
+  const { page, limit } = query;
   const statusFilter =
     query.status === 'COMPLETED'
       ? {
@@ -1413,19 +1501,33 @@ export const listMobileInspectionsService = async ({
         }
       : { status: InspectionStatus.PENDING };
 
-  const inspections = await prisma.inspection.findMany({
-    where: {
-      siteManagerId: user.id,
-      deletedAt: null,
-      ...statusFilter,
-    },
-    include: {
-      customer: { select: { id: true, name: true, category: true } },
-    },
-    orderBy: { appointmentDate: 'asc' },
-  });
+  const where = {
+    siteManagerId: user.id,
+    deletedAt: null,
+    ...statusFilter,
+  };
 
-  return inspections.map((inspection) => MobileInspectionDTO.build(inspection));
+  const [total, inspections] = await Promise.all([
+    prisma.inspection.count({ where }),
+    prisma.inspection.findMany({
+      where,
+      include: {
+        customer: { select: { id: true, name: true, category: true } },
+      },
+      orderBy: { appointmentDate: 'asc' },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+  ]);
+
+  return {
+    items: inspections.map((inspection) =>
+      MobileInspectionDTO.build(inspection)
+    ),
+    total,
+    page,
+    limit,
+  };
 };
 
 /**
@@ -1571,7 +1673,13 @@ export const completeMobileInspectionService = async ({
 export const listMobilePhasesService = async ({
   user,
   query,
-}: TListMobilePhasesServiceParams): Promise<MobileManagedPhaseDTO[]> => {
+}: TListMobilePhasesServiceParams): Promise<{
+  items: MobileManagedPhaseDTO[];
+  total: number;
+  page: number;
+  limit: number;
+}> => {
+  const { page, limit } = query;
   const columnWhere =
     query.column === 'ENQUIRY'
       ? { status: PhaseStatus.ENQUIRY }
@@ -1581,40 +1689,52 @@ export const listMobilePhasesService = async ({
         ? { type: query.column as PhaseType }
         : {};
 
-  const phases = await prisma.projectPhase.findMany({
-    where: {
-      ...columnWhere,
-      project: {
-        deletedAt: null,
-        projectManagers: {
-          some: { userId: user.id },
+  const where = {
+    ...columnWhere,
+    project: {
+      deletedAt: null,
+      projectManagers: {
+        some: { userId: user.id },
+      },
+    },
+  };
+
+  const [total, phases] = await Promise.all([
+    prisma.projectPhase.count({ where }),
+    prisma.projectPhase.findMany({
+      where,
+      include: {
+        project: {
+          select: { id: true, name: true, address: true },
         },
       },
-    },
-    include: {
-      project: {
-        select: { id: true, name: true, address: true },
-      },
-    },
-    orderBy: [{ status: 'asc' }, { updatedAt: 'desc' }],
-  });
+      orderBy: [{ status: 'asc' }, { updatedAt: 'desc' }],
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+  ]);
 
-  return phases.map(
-    (phase) =>
-      new MobileManagedPhaseDTO(
-        phase.id,
-        phase.type,
-        phase.status,
-        phase.priority,
-        phase.startDate ? phase.startDate.toISOString() : null,
-        phase.endDate ? phase.endDate.toISOString() : null,
-        {
-          id: phase.project.id,
-          name: phase.project.name,
-          address: phase.project.address,
-        }
-      )
-  );
+  return {
+    items: phases.map(
+      (phase) =>
+        new MobileManagedPhaseDTO(
+          phase.id,
+          phase.type,
+          phase.status,
+          phase.priority,
+          phase.startDate ? phase.startDate.toISOString() : null,
+          phase.endDate ? phase.endDate.toISOString() : null,
+          {
+            id: phase.project.id,
+            name: phase.project.name,
+            address: phase.project.address,
+          }
+        )
+    ),
+    total,
+    page,
+    limit,
+  };
 };
 
 /**
@@ -1687,9 +1807,23 @@ export const updateMobilePhaseStatusService = async ({
  */
 export const listProjectTasksService = async ({
   project,
-}: TMobileProjectServiceParams): Promise<MobileProjectTasksListDTO> => {
+  query,
+}: TListProjectTasksServiceParams): Promise<{
+  data: MobileProjectTasksListDTO | MobileProjectTaskDTO[];
+  total: number;
+  page: number;
+  limit: number;
+}> => {
+  const { page, limit, status } = query;
   const tasks = await prisma.projectTask.findMany({
-    where: { projectId: project.id },
+    where: {
+      projectId: project.id,
+      ...(status === 'OPEN'
+        ? { isCompleted: false }
+        : status === 'COMPLETED'
+          ? { isCompleted: true }
+          : {}),
+    },
     include: {
       employee: {
         select: { id: true, firstName: true, lastName: true, avatarUrl: true },
@@ -1698,14 +1832,35 @@ export const listProjectTasksService = async ({
     orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
   });
 
+  if (status === 'OPEN' || status === 'COMPLETED') {
+    const sliced = paginateArray(
+      tasks.map((task) => MobileProjectTaskDTO.build(task)),
+      page,
+      limit
+    );
+    return {
+      data: sliced.items,
+      total: sliced.total,
+      page: sliced.page,
+      limit: sliced.limit,
+    };
+  }
+
   const open = tasks
     .filter((task) => !task.isCompleted)
     .map((task) => MobileProjectTaskDTO.build(task));
   const completed = tasks
     .filter((task) => task.isCompleted)
     .map((task) => MobileProjectTaskDTO.build(task));
+  const openPage = paginateArray(open, page, limit);
+  const completedPage = paginateArray(completed, page, limit);
 
-  return new MobileProjectTasksListDTO(open, completed);
+  return {
+    data: new MobileProjectTasksListDTO(openPage.items, completedPage.items),
+    total: openPage.total + completedPage.total,
+    page,
+    limit,
+  };
 };
 
 /**
@@ -1781,16 +1936,43 @@ export const deleteProjectTaskService = async ({
  */
 export const listProjectMeasurementsService = async ({
   project,
-}: TMobileProjectServiceParams): Promise<MobileMeasurementsListDTO> => {
-  const rows = await prisma.projectMeasurement.findMany({
-    where: { projectId: project.id },
-    orderBy: { createdAt: 'desc' },
-  });
-  const items = rows.map((row) => MobileMeasurementDTO.build(row));
+  query,
+}: TListProjectChildServiceParams): Promise<{
+  data: MobileMeasurementsListDTO;
+  total: number;
+  page: number;
+  limit: number;
+}> => {
+  const { page, limit } = query;
+  const where = { projectId: project.id };
+
+  const [total, rows, aggregate] = await Promise.all([
+    prisma.projectMeasurement.count({ where }),
+    prisma.projectMeasurement.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.projectMeasurement.aggregate({
+      where,
+      _sum: { area: true },
+    }),
+  ]);
+
   const totalArea = Number(
-    items.reduce((sum, row) => sum + row.area, 0).toFixed(2)
+    (aggregate._sum.area ? Number(aggregate._sum.area) : 0).toFixed(2)
   );
-  return new MobileMeasurementsListDTO(items, totalArea);
+
+  return {
+    data: new MobileMeasurementsListDTO(
+      rows.map((row) => MobileMeasurementDTO.build(row)),
+      totalArea
+    ),
+    total,
+    page,
+    limit,
+  };
 };
 
 /**
@@ -1874,15 +2056,35 @@ export const deleteProjectMeasurementService = async ({
  */
 export const listProjectNotesService = async ({
   project,
-}: TMobileProjectServiceParams): Promise<MobileProjectNoteDTO[]> => {
-  const notes = await prisma.projectNote.findMany({
-    where: { projectId: project.id },
-    include: {
-      author: { select: { id: true, firstName: true, lastName: true } },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
-  return notes.map((note) => MobileProjectNoteDTO.build(note));
+  query,
+}: TListProjectChildServiceParams): Promise<{
+  items: MobileProjectNoteDTO[];
+  total: number;
+  page: number;
+  limit: number;
+}> => {
+  const { page, limit } = query;
+  const where = { projectId: project.id };
+
+  const [total, notes] = await Promise.all([
+    prisma.projectNote.count({ where }),
+    prisma.projectNote.findMany({
+      where,
+      include: {
+        author: { select: { id: true, firstName: true, lastName: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+  ]);
+
+  return {
+    items: notes.map((note) => MobileProjectNoteDTO.build(note)),
+    total,
+    page,
+    limit,
+  };
 };
 
 /**
@@ -2157,8 +2359,42 @@ export const createMobileProjectService = async ({
   const phaseType = payload.phaseType ?? PhaseType.ERECTION;
   const status = payload.status ?? PhaseStatus.ENQUIRY;
 
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
   const endFromDuration = (start: Date, durationDays: number): Date => {
-    return new Date(start.getTime() + durationDays * 24 * 60 * 60 * 1000);
+    return new Date(start.getTime() + durationDays * MS_PER_DAY);
+  };
+
+  const durationFromRange = (start: Date, end: Date): number => {
+    return Math.max(0, (end.getTime() - start.getTime()) / MS_PER_DAY);
+  };
+
+  /**
+   * Resolves start/end/duration for one scheduleData row (create ↔ detail same fields).
+   *
+   * @param {{ startDate: Date; endDate?: Date; durationDays?: number }} schedule - Flutter schedule entry.
+   * @returns {{ startDate: Date; endDate: Date; durationDays: number }} Normalized dates for ProjectPhase.
+   */
+  const resolveScheduleDates = (schedule: {
+    startDate: Date;
+    endDate?: Date;
+    durationDays?: number;
+  }): { startDate: Date; endDate: Date; durationDays: number } => {
+    const startDate = schedule.startDate;
+    if (schedule.endDate !== undefined) {
+      const endDate = schedule.endDate;
+      const durationDays =
+        schedule.durationDays !== undefined
+          ? schedule.durationDays
+          : Number(durationFromRange(startDate, endDate).toFixed(2));
+      return { startDate, endDate, durationDays };
+    }
+    const durationDays = schedule.durationDays ?? 0;
+    return {
+      startDate,
+      endDate: endFromDuration(startDate, durationDays),
+      durationDays,
+    };
   };
 
   const projectId = await prisma.$transaction(async (tx) => {
@@ -2202,6 +2438,11 @@ export const createMobileProjectService = async ({
       customerId = createdCustomer.id;
     }
 
+    const scaffoldAreaValue =
+      payload.scaffoldSpecification?.area ?? payload.scaffoldArea;
+    const scaffoldHeight = payload.scaffoldSpecification?.height;
+    const scaffoldType = payload.scaffoldSpecification?.type;
+
     const project = await tx.project.create({
       data: {
         customerId,
@@ -2210,11 +2451,32 @@ export const createMobileProjectService = async ({
         latitude: new Prisma.Decimal(payload.coordinates.lat),
         longitude: new Prisma.Decimal(payload.coordinates.lng),
         scaffoldArea:
-          payload.scaffoldArea !== undefined
-            ? new Prisma.Decimal(payload.scaffoldArea)
+          scaffoldAreaValue !== undefined
+            ? new Prisma.Decimal(scaffoldAreaValue)
             : undefined,
       },
     });
+
+    // Seed measurement so detail scaffoldSpecification.height/type resolve.
+    if (
+      scaffoldAreaValue !== undefined ||
+      scaffoldHeight !== undefined ||
+      scaffoldType !== undefined
+    ) {
+      const height = scaffoldHeight ?? 1;
+      const area = scaffoldAreaValue ?? height;
+      await tx.projectMeasurement.create({
+        data: {
+          projectId: project.id,
+          length: new Prisma.Decimal(0),
+          height: new Prisma.Decimal(height),
+          quantity: new Prisma.Decimal(1),
+          area: new Prisma.Decimal(area),
+          scaffoldType: scaffoldType,
+          remark: 'Initial scaffold specification',
+        },
+      });
+    }
 
     await tx.projectManagerAssignment.create({
       data: {
@@ -2223,54 +2485,63 @@ export const createMobileProjectService = async ({
       },
     });
 
-    const scheduleFields = (
-      schedule: { startDate: Date; durationDays: number } | undefined
-    ) =>
-      schedule
-        ? {
-            startDate: schedule.startDate,
-            endDate: endFromDuration(schedule.startDate, schedule.durationDays),
-            durationDays: new Prisma.Decimal(schedule.durationDays),
-          }
-        : {};
+    const typedSchedules: Array<{
+      type: PhaseType;
+      startDate: Date;
+      endDate?: Date;
+      durationDays?: number;
+    }> = [
+      ...(payload.scheduleData ?? []).map((schedule) => ({
+        type: mapScheduleActivityToPhaseType(schedule.type),
+        startDate: schedule.startDate,
+        endDate: schedule.endDate,
+        durationDays: schedule.durationDays,
+      })),
+      ...(payload.schedules ?? []).map((schedule) => ({
+        type: mapScheduleActivityToPhaseType(schedule.type),
+        startDate: schedule.startDate,
+        endDate: schedule.endDate,
+        durationDays: schedule.durationDays,
+      })),
+      ...(payload.erection ?? []).map((schedule) => ({
+        type: PhaseType.ERECTION,
+        startDate: schedule.startDate,
+        durationDays: schedule.durationDays,
+      })),
+      ...(payload.dismantling ?? []).map((schedule) => ({
+        type: PhaseType.DISMANTLING,
+        startDate: schedule.startDate,
+        durationDays: schedule.durationDays,
+      })),
+    ];
 
-    const primarySchedule =
-      phaseType === PhaseType.DISMANTLING
-        ? payload.dismantling
-        : payload.erection;
-
-    await tx.projectPhase.create({
-      data: {
-        projectId: project.id,
-        type: phaseType,
-        status,
-        priority,
-        ...scheduleFields(primarySchedule),
-      },
-    });
-
-    if (payload.erection && phaseType !== PhaseType.ERECTION) {
+    if (typedSchedules.length === 0) {
       await tx.projectPhase.create({
         data: {
           projectId: project.id,
-          type: PhaseType.ERECTION,
-          status: PhaseStatus.ENQUIRY,
+          type: phaseType,
+          status,
           priority,
-          ...scheduleFields(payload.erection),
         },
       });
-    }
-
-    if (payload.dismantling && phaseType !== PhaseType.DISMANTLING) {
-      await tx.projectPhase.create({
-        data: {
-          projectId: project.id,
-          type: PhaseType.DISMANTLING,
-          status: PhaseStatus.ENQUIRY,
-          priority,
-          ...scheduleFields(payload.dismantling),
-        },
-      });
+    } else {
+      for (const [index, schedule] of typedSchedules.entries()) {
+        const dates = resolveScheduleDates(schedule);
+        await tx.projectPhase.create({
+          data: {
+            projectId: project.id,
+            type: schedule.type,
+            status:
+              index === 0 && schedule.type === phaseType
+                ? status
+                : PhaseStatus.ENQUIRY,
+            priority,
+            startDate: dates.startDate,
+            endDate: dates.endDate,
+            durationDays: new Prisma.Decimal(dates.durationDays),
+          },
+        });
+      }
     }
 
     if (payload.note) {
@@ -2413,7 +2684,6 @@ export const getMobileProjectByIdService = async ({
   }
 
   const primary = record.customer.contacts[0] ?? null;
-  const primaryPhase = record.phases[0] ?? null;
   const scaffoldType =
     measurements.find((row) => row.scaffoldType)?.scaffoldType ?? null;
   const scaffoldHeight = measurements.reduce<number | null>((max, row) => {
@@ -2436,15 +2706,13 @@ export const getMobileProjectByIdService = async ({
       height: scaffoldHeight,
       type: scaffoldType,
     },
-    {
-      startDate: primaryPhase?.startDate
-        ? primaryPhase.startDate.toISOString()
-        : null,
-      endDate: primaryPhase?.endDate ? primaryPhase.endDate.toISOString() : null,
-      durationDays: primaryPhase
-        ? decimalToNumber(primaryPhase.durationDays)
-        : null,
-    },
+    record.phases.map((phase) => ({
+      id: phase.id,
+      type: mapPhaseTypeToScheduleActivity(phase.type),
+      startDate: phase.startDate ? phase.startDate.toISOString() : null,
+      endDate: phase.endDate ? phase.endDate.toISOString() : null,
+      durationDays: decimalToNumber(phase.durationDays),
+    })),
     nextInspection
       ? {
           id: nextInspection.id,
@@ -2494,15 +2762,34 @@ export const getMobileProjectByIdService = async ({
 export const listProjectAttachmentsService = async ({
   project,
   query,
-}: TListProjectAttachmentsServiceParams): Promise<MobileAttachmentDTO[]> => {
-  const rows = await prisma.attachment.findMany({
-    where: {
-      projectId: project.id,
-      ...(query.category ? { category: query.category } : {}),
-    },
-    orderBy: { createdAt: 'desc' },
-  });
-  return rows.map((row) => MobileAttachmentDTO.build(row));
+}: TListProjectAttachmentsServiceParams): Promise<{
+  items: MobileAttachmentDTO[];
+  total: number;
+  page: number;
+  limit: number;
+}> => {
+  const { page, limit } = query;
+  const where = {
+    projectId: project.id,
+    ...(query.category ? { category: query.category } : {}),
+  };
+
+  const [total, rows] = await Promise.all([
+    prisma.attachment.count({ where }),
+    prisma.attachment.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+  ]);
+
+  return {
+    items: rows.map((row) => MobileAttachmentDTO.build(row)),
+    total,
+    page,
+    limit,
+  };
 };
 
 /**
@@ -2513,32 +2800,51 @@ export const listProjectAttachmentsService = async ({
  */
 export const listProjectHistoryService = async ({
   project,
-}: TMobileProjectServiceParams): Promise<MobileProjectHistoryDTO[]> => {
-  const rows = await prisma.auditLog.findMany({
-    where: { projectId: project.id },
-    include: {
-      user: {
-        select: { id: true, firstName: true, lastName: true, role: true },
-      },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
+  query,
+}: TListProjectChildServiceParams): Promise<{
+  items: MobileProjectHistoryDTO[];
+  total: number;
+  page: number;
+  limit: number;
+}> => {
+  const { page, limit } = query;
+  const where = { projectId: project.id };
 
-  return rows.map(
-    (row) =>
-      new MobileProjectHistoryDTO(
-        row.id,
-        row.action,
-        row.details,
-        row.createdAt.toISOString(),
-        {
-          id: row.user.id,
-          firstName: row.user.firstName,
-          lastName: row.user.lastName,
-          role: row.user.role,
-        }
-      )
-  );
+  const [total, rows] = await Promise.all([
+    prisma.auditLog.count({ where }),
+    prisma.auditLog.findMany({
+      where,
+      include: {
+        user: {
+          select: { id: true, firstName: true, lastName: true, role: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+  ]);
+
+  return {
+    items: rows.map(
+      (row) =>
+        new MobileProjectHistoryDTO(
+          row.id,
+          row.action,
+          row.details,
+          row.createdAt.toISOString(),
+          {
+            id: row.user.id,
+            firstName: row.user.firstName,
+            lastName: row.user.lastName,
+            role: row.user.role,
+          }
+        )
+    ),
+    total,
+    page,
+    limit,
+  };
 };
 
 /**

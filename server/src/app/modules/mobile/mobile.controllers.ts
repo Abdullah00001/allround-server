@@ -11,6 +11,7 @@ import {
   User,
 } from '@prisma/client';
 import { getTraceId } from '@/app/configs/requestContext.configs';
+import { buildPaginationMeta } from '@/app/utils/pagination.utils';
 import { asyncHandler } from '@/app/utils/system.utils';
 import {
   completeMobileInspectionService,
@@ -60,12 +61,15 @@ import {
   TCreateProjectNotePayload,
   TCreateProjectTaskPayload,
   TGetCrewTimeQuery,
+  TGetDashboardQuery,
   TGetMapQuery,
   TGetMobileInspectionsQuery,
   TGetMobilePhasesQuery,
   TGetMyProjectsQuery,
   TGetMyTimeLogsQuery,
   TGetProjectAttachmentsQuery,
+  TGetProjectListQuery,
+  TGetProjectTasksQuery,
   TGetScheduleQuery,
   TManualTimePayload,
   TStartTimerPayload,
@@ -113,11 +117,17 @@ export const getDashboardController = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const traceId = getTraceId();
     const user = req.user as User;
-    const data = await getDashboardDataService({ user });
+    const query = req.validatedQuery as TGetDashboardQuery;
+    const { data, total, page, limit } = await getDashboardDataService({
+      user,
+      query,
+    });
+    const meta = buildPaginationMeta({ total, page, limit, req });
 
     res.status(200).json({
       success: true,
       message: 'Dashboard fetched successfully.',
+      meta,
       data,
       traceId,
     });
@@ -138,12 +148,17 @@ export const getMyProjectsController = asyncHandler(
     const traceId = getTraceId();
     const user = req.user as User;
     const query = req.validatedQuery as TGetMyProjectsQuery;
-    const data = await getMyProjectsService({ user, query });
+    const { items, total, page, limit } = await getMyProjectsService({
+      user,
+      query,
+    });
+    const meta = buildPaginationMeta({ total, page, limit, req });
 
     res.status(200).json({
       success: true,
       message: 'Projects fetched successfully.',
-      data,
+      meta,
+      data: items,
       traceId,
     });
     return;
@@ -264,12 +279,17 @@ export const getMyTimeLogsController = asyncHandler(
     const traceId = getTraceId();
     const user = req.user as User;
     const query = req.validatedQuery as TGetMyTimeLogsQuery;
-    const data = await getMyTimeLogsService({ user, query });
+    const { items, total, page, limit } = await getMyTimeLogsService({
+      user,
+      query,
+    });
+    const meta = buildPaginationMeta({ total, page, limit, req });
 
     res.status(200).json({
       success: true,
       message: 'Time logs fetched successfully.',
-      data,
+      meta,
+      data: items,
       traceId,
     });
     return;
@@ -290,11 +310,17 @@ export const getCrewTimeController = asyncHandler(
     const user = req.user as User;
     const project = req.project as Project;
     const query = req.validatedQuery as TGetCrewTimeQuery;
-    const data = await getCrewTimeService({ user, project, query });
+    const { data, total, page, limit } = await getCrewTimeService({
+      user,
+      project,
+      query,
+    });
+    const meta = buildPaginationMeta({ total, page, limit, req });
 
     res.status(200).json({
       success: true,
       message: 'Crew time fetched successfully.',
+      meta,
       data,
       traceId,
     });
@@ -315,12 +341,17 @@ export const getScheduleController = asyncHandler(
     const traceId = getTraceId();
     const user = req.user as User;
     const query = req.validatedQuery as TGetScheduleQuery;
-    const data = await getScheduleService({ user, query });
+    const { items, total, page, limit } = await getScheduleService({
+      user,
+      query,
+    });
+    const meta = buildPaginationMeta({ total, page, limit, req });
 
     res.status(200).json({
       success: true,
       message: 'Schedule fetched successfully.',
-      data,
+      meta,
+      data: items,
       traceId,
     });
     return;
@@ -340,12 +371,17 @@ export const getMapController = asyncHandler(
     const traceId = getTraceId();
     const user = req.user as User;
     const query = req.validatedQuery as TGetMapQuery;
-    const data = await getMapDataService({ user, query });
+    const { items, total, page, limit } = await getMapDataService({
+      user,
+      query,
+    });
+    const meta = buildPaginationMeta({ total, page, limit, req });
 
     res.status(200).json({
       success: true,
       message: 'Map data fetched successfully.',
-      data,
+      meta,
+      data: items,
       traceId,
     });
     return;
@@ -390,12 +426,17 @@ export const listMobileInspectionsController = asyncHandler(
     const traceId = getTraceId();
     const user = req.user as User;
     const query = req.validatedQuery as TGetMobileInspectionsQuery;
-    const data = await listMobileInspectionsService({ user, query });
+    const { items, total, page, limit } = await listMobileInspectionsService({
+      user,
+      query,
+    });
+    const meta = buildPaginationMeta({ total, page, limit, req });
 
     res.status(200).json({
       success: true,
       message: 'Inspections fetched successfully.',
-      data,
+      meta,
+      data: items,
       traceId,
     });
     return;
@@ -466,13 +507,18 @@ export const listMobilePhasesController = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const traceId = getTraceId();
     const user = req.user as User;
-    const query = (req.validatedQuery as TGetMobilePhasesQuery | undefined) ?? {};
-    const data = await listMobilePhasesService({ user, query });
+    const query = req.validatedQuery as TGetMobilePhasesQuery;
+    const { items, total, page, limit } = await listMobilePhasesService({
+      user,
+      query,
+    });
+    const meta = buildPaginationMeta({ total, page, limit, req });
 
     res.status(200).json({
       success: true,
       message: 'Phases fetched successfully.',
-      data,
+      meta,
+      data: items,
       traceId,
     });
     return;
@@ -521,11 +567,18 @@ export const listProjectTasksController = asyncHandler(
     const traceId = getTraceId();
     const user = req.user as User;
     const project = req.project as Project;
-    const data = await listProjectTasksService({ user, project });
+    const query = req.validatedQuery as TGetProjectTasksQuery;
+    const { data, total, page, limit } = await listProjectTasksService({
+      user,
+      project,
+      query,
+    });
+    const meta = buildPaginationMeta({ total, page, limit, req });
 
     res.status(200).json({
       success: true,
       message: 'Project tasks fetched successfully.',
+      meta,
       data,
       traceId,
     });
@@ -616,11 +669,18 @@ export const listProjectMeasurementsController = asyncHandler(
     const traceId = getTraceId();
     const user = req.user as User;
     const project = req.project as Project;
-    const data = await listProjectMeasurementsService({ user, project });
+    const query = req.validatedQuery as TGetProjectListQuery;
+    const { data, total, page, limit } = await listProjectMeasurementsService({
+      user,
+      project,
+      query,
+    });
+    const meta = buildPaginationMeta({ total, page, limit, req });
 
     res.status(200).json({
       success: true,
       message: 'Project measurements fetched successfully.',
+      meta,
       data,
       traceId,
     });
@@ -691,12 +751,19 @@ export const listProjectNotesController = asyncHandler(
     const traceId = getTraceId();
     const user = req.user as User;
     const project = req.project as Project;
-    const data = await listProjectNotesService({ user, project });
+    const query = req.validatedQuery as TGetProjectListQuery;
+    const { items, total, page, limit } = await listProjectNotesService({
+      user,
+      project,
+      query,
+    });
+    const meta = buildPaginationMeta({ total, page, limit, req });
 
     res.status(200).json({
       success: true,
       message: 'Project notes fetched successfully.',
-      data,
+      meta,
+      data: items,
       traceId,
     });
     return;
@@ -911,13 +978,18 @@ export const listProjectAttachmentsController = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const traceId = getTraceId();
     const project = req.project as Project;
-    const query = (req.validatedQuery as TGetProjectAttachmentsQuery | undefined) ?? {};
-    const data = await listProjectAttachmentsService({ project, query });
+    const query = req.validatedQuery as TGetProjectAttachmentsQuery;
+    const { items, total, page, limit } = await listProjectAttachmentsService({
+      project,
+      query,
+    });
+    const meta = buildPaginationMeta({ total, page, limit, req });
 
     res.status(200).json({
       success: true,
       message: 'Project attachments fetched successfully.',
-      data,
+      meta,
+      data: items,
       traceId,
     });
     return;
@@ -936,12 +1008,19 @@ export const listProjectHistoryController = asyncHandler(
     const traceId = getTraceId();
     const user = req.user as User;
     const project = req.project as Project;
-    const data = await listProjectHistoryService({ user, project });
+    const query = req.validatedQuery as TGetProjectListQuery;
+    const { items, total, page, limit } = await listProjectHistoryService({
+      user,
+      project,
+      query,
+    });
+    const meta = buildPaginationMeta({ total, page, limit, req });
 
     res.status(200).json({
       success: true,
       message: 'Project history fetched successfully.',
-      data,
+      meta,
+      data: items,
       traceId,
     });
     return;
