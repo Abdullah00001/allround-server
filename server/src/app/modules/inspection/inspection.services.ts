@@ -236,6 +236,7 @@ export const convertInspectionToProjectService = async ({
         customerId: inspection.customerId,
         name: payload.projectName,
         address: inspection.address,
+        city: inspection.city,
         scaffoldArea: inspection.scaffoldArea,
         siteAccessNotes: inspection.siteAccessInstructions,
       },
@@ -262,7 +263,10 @@ export const convertInspectionToProjectService = async ({
 
     const converted = await tx.inspection.update({
       where: { id: inspection.id },
-      data: { status: InspectionStatus.CONVERTED },
+      data: {
+        status: InspectionStatus.CONVERTED,
+        projectId: project.id,
+      },
       include: {
         customer: { select: { id: true, name: true } },
       },

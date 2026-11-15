@@ -143,8 +143,12 @@ enum NotificationType {
 enum ProjectNoteCategory {
   SITE_ACCESS
   CUSTOMER_REQUEST
-  SAFETY
+  OPEN_POINTS
+  AGREEMENTS
+  SPECIAL_REQUIREMENTS
+  LOCAL_CONTACT
   GENERAL
+  SAFETY
   INTERNAL
 }
 
@@ -218,6 +222,7 @@ model Customer {
   name        String
   category    CustomerCategory
   address     String
+  city        String?
   latitude    Decimal?         @db.Decimal(10, 8)
   longitude   Decimal?         @db.Decimal(11, 8)
   
@@ -270,6 +275,8 @@ model Inspection {
   specialRequirements    String?   @db.Text
 
   status          InspectionStatus @default(PENDING)
+  projectId       String?
+  project         Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
   deletedAt       DateTime?
 
   attachments     Attachment[]     
@@ -279,6 +286,7 @@ model Inspection {
 
   @@index([status, appointmentDate]) 
   @@index([customerId])
+  @@index([projectId])
 }
 
 // ==========================================
@@ -292,6 +300,7 @@ model Project {
   
   name            String        
   address         String
+  city            String?
   latitude        Decimal?      @db.Decimal(10, 8)
   longitude       Decimal?      @db.Decimal(11, 8)
   
@@ -311,7 +320,8 @@ model Project {
   notes             ProjectNote[]      
   measurements      ProjectMeasurement[] 
   projectTasks      ProjectTask[]      
-  auditLogs         AuditLog[]         
+  auditLogs         AuditLog[]
+  inspections       Inspection[]
 
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
@@ -645,13 +655,16 @@ model UserPreference {
 
 model Attachment {
   id             String       @id @default(uuid())
-  url            String       
+  url            String
   fileType       String
+  fileName       String?
+  fileSize       Int?
+  isCover        Boolean      @default(false)
   category       AttachmentCategory @default(OTHER)
-  
+
   projectId      String?
   project        Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  
+
   inspectionId   String?
   inspection     Inspection?  @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
 
@@ -659,4 +672,5 @@ model Attachment {
 
   @@index([projectId])
   @@index([inspectionId])
+  @@index([projectId, isCover])
 }

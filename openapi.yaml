@@ -5875,75 +5875,83 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemErrorResponse'
-  /api/v1/mobile/projects/filter-options:
-    get:
-      tags: [MobileProjectManagement]
-      summary: Get project filter options
-      description: Returns phases, cities, priorities, categories, and sortBy options for the Site Manager filter modal.
-      operationId: getMobileProjectFilterOptions
-      security: [{bearerAuth: []}]
-      responses:
-        '200':
-          description: Project filter options fetched successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GetMobileProjectFilterOptionsResponse'
-        '401':
-          description: Authentication or device session failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AuthErrorResponse'
-        '403':
-          description: Forbidden (not site manager)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AuthErrorResponse'
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SystemErrorResponse'
   /api/v1/mobile/projects:
     get:
       tags: [MobileDashboard, MobileProjectManagement]
-      summary: List my projects
-      description: Returns distinct projects assigned to the authenticated user via ProjectManagerAssignment or CrewAssignment, with optional deep filters (phaseType, city, priority, category, sortBy).
+      summary: List project phase cards
+      description: >
+        Returns one row per visible phase (phase-centric cards) for projects
+        visible to the authenticated user (GLOBAL_ACCESS or assignment-scoped).
+        Supports UI tabs (`tab`), filter-modal multi-selects (`phaseTypes`,
+        `phaseStatuses`, `priorities`, `categories` as CSV or repeated
+        query params), and sorting (`sortBy`). Cities filter against `Project.city`.
+        Use `phaseStatuses=COMPLETED` for the Completed modal filter. UI label
+        Preconstruction maps to status `ENQUIRY` (not a PhaseType).
       operationId: getMobileProjects
       security:
         - bearerAuth: []
       parameters:
         - in: query
-          name: phaseType
+          name: tab
           schema:
             type: string
-            enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
+            enum: [ALL, ACTIVE, MY_PROJECTS, THIS_WEEK, INSPECTION]
+            default: ALL
+          description: Top navigation tab filter
         - in: query
-          name: city
+          name: phaseTypes
           schema:
             type: string
+          description: Comma-separated PhaseType values (or repeated query params)
+          example: ERECTION,DISMANTLING
         - in: query
-          name: priority
+          name: phaseStatuses
           schema:
             type: string
-            enum: [HIGH, MEDIUM, LOW]
+          description: Comma-separated PhaseStatus values (e.g. COMPLETED for Completed filter)
+          example: COMPLETED,IN_PROGRESS
         - in: query
-          name: category
+          name: search
           schema:
             type: string
-            enum: [COMMERCIAL, MUNICIPALITY, ARCHITECT, PRIVATE]
+          description: Case-insensitive search across project name, address, and city
+        - in: query
+          name: lat
+          schema:
+            type: number
+          description: Center latitude for geo filter (requires lng)
+        - in: query
+          name: lng
+          schema:
+            type: number
+          description: Center longitude for geo filter (requires lat)
+        - in: query
+          name: radiusKm
+          schema:
+            type: number
+            default: 25
+          description: Geo filter radius in kilometers (default 25; used with lat+lng).
+        - in: query
+          name: priorities
+          schema:
+            type: string
+          description: Comma-separated Priority values
+          example: HIGH,MEDIUM
+        - in: query
+          name: categories
+          schema:
+            type: string
+          description: Comma-separated CustomerCategory values
+          example: COMMERCIAL,MUNICIPALITY
         - in: query
           name: sortBy
           schema:
             type: string
-            enum: [newest, nextInspectionDate, nameAZ]
-            default: newest
+            enum: [NEWEST, NEXT_INSPECTION, NAME_AZ]
+            default: NEWEST
       responses:
         '200':
-          description: Projects fetched successfully
+          description: Phase cards fetched successfully
           content:
             application/json:
               schema:
@@ -5972,7 +5980,104 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemErrorResponse'
+    post:
+      tags: [MobileProjectManagement]
+      summary: Create project (Site Manager)
+      description: >
+        Creates a project from the Create New Project form. Location is required
+        as map `coordinates` (`lat`/`lng`). Optional `placeLabel` is stored as
+        DB address; otherwise `"lat, lng"` is used. Supports EXISTING or NEW
+        customer, primary contact, erection/dismantling schedules, note, and photos.
+      operationId: createMobileProject
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMobileProjectRequest'
+      responses:
+        '201':
+          description: Project created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMobileProjectDetailResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Forbidden (not site manager)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Customer or site manager not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
   /api/v1/mobile/projects/{projectId}:
+    get:
+      tags: [MobileProjectManagement]
+      summary: Get project detail hub
+      description: >
+        Site Manager project Overview/header payload — phases, labor summary,
+        customer + primary contact, city, attachment counts.
+      operationId: getMobileProjectById
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Project fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMobileProjectDetailResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
     patch:
       tags: [MobileProjectManagement]
       summary: Update project settings
@@ -6306,6 +6411,64 @@ paths:
               schema:
                 $ref: '#/components/schemas/SystemErrorResponse'
   /api/v1/mobile/projects/{projectId}/measurements/{id}:
+    patch:
+      tags: [MobileProjectManagement]
+      summary: Update project measurement
+      description: Updates measurement fields and recalculates area plus Project.scaffoldArea.
+      operationId: updateMobileProjectMeasurement
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema: {type: string, format: uuid}
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMobileMeasurementRequest'
+      responses:
+        '200':
+          description: Project measurement updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileMeasurementResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Measurement not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
     delete:
       tags: [MobileProjectManagement]
       summary: Delete project measurement
@@ -6447,6 +6610,63 @@ paths:
               schema:
                 $ref: '#/components/schemas/SystemErrorResponse'
   /api/v1/mobile/projects/{projectId}/notes/{id}:
+    patch:
+      tags: [MobileProjectManagement]
+      summary: Update project note
+      operationId: updateMobileProjectNote
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema: {type: string, format: uuid}
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMobileProjectNoteRequest'
+      responses:
+        '200':
+          description: Project note updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileProjectNoteResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Note not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
     delete:
       tags: [MobileProjectManagement]
       summary: Delete project note
@@ -6552,6 +6772,60 @@ paths:
               schema:
                 $ref: '#/components/schemas/SystemErrorResponse'
   /api/v1/mobile/projects/{projectId}/attachments:
+    get:
+      tags: [MobileProjectManagement]
+      summary: List project attachments
+      description: Lists PHOTO / PDF_PLAN attachments for Photos and PDF Plan tabs.
+      operationId: listMobileProjectAttachments
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema: {type: string, format: uuid}
+        - in: query
+          name: category
+          schema:
+            type: string
+            enum: [PHOTO, PDF_PLAN]
+          description: Optional category filter for Photos vs PDF Plan tabs
+      responses:
+        '200':
+          description: Project attachments fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMobileProjectAttachmentsResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
     post:
       tags: [MobileProjectManagement]
       summary: Register project attachment
@@ -6600,6 +6874,102 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/mobile/projects/{projectId}/history:
+    get:
+      tags: [MobileProjectManagement]
+      summary: List project history
+      description: Returns AuditLog rows for the project (newest first) for the History tab.
+      operationId: listMobileProjectHistory
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Project history fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMobileProjectHistoryResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/mobile/projects/{projectId}/attachments/{id}/cover:
+    patch:
+      tags: [MobileProjectManagement]
+      summary: Set project cover photo
+      description: Marks a PHOTO attachment as cover and clears isCover on other project photos.
+      operationId: setMobileProjectAttachmentCover
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema: {type: string, format: uuid}
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Cover photo updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileAttachmentResponse'
+        '400':
+          description: Attachment is not a PHOTO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Attachment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
         '500':
           description: Internal server error
           content:
@@ -7242,9 +7612,20 @@ paths:
     get:
       tags: [MobileInspection]
       summary: List my inspections
-      description: Site Manager only. Returns PENDING and SURVEY_DONE inspections assigned via siteManagerId.
+      description: >
+        Site Manager only. Returns inspections assigned via siteManagerId.
+        `status=PENDING` (default) returns PENDING; `status=COMPLETED` returns
+        SURVEY_DONE and CONVERTED. Includes `projectId` when converted.
       operationId: listMobileInspections
       security: [{bearerAuth: []}]
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [PENDING, COMPLETED]
+            default: PENDING
+          description: Pending vs Completed inspections tab
       responses:
         '200':
           description: Inspections fetched successfully
@@ -7275,7 +7656,12 @@ paths:
                 message: 'Only site managers can access this resource'
                 errorType: 'FORBIDDEN'
                 traceId: '123e4567-e89b-12d3-a456-426614174000'
-
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
         '500':
           description: Internal server error
           content:
@@ -7435,9 +7821,20 @@ paths:
     get:
       tags: [MobilePhase]
       summary: List managed phases
-      description: Site Manager only. Returns ProjectPhases for projects where the user has a ProjectManagerAssignment.
+      description: >
+        Site Manager only. Returns ProjectPhases for projects where the user has
+        a ProjectManagerAssignment. Optional `column` maps Phase Board columns:
+        `ENQUIRY` filters `status=ENQUIRY` (UI Preconstruction); `ERECTION`,
+        `DISMANTLING`, `STANDING` filter by phase `type`.
       operationId: listMobilePhases
       security: [{bearerAuth: []}]
+      parameters:
+        - in: query
+          name: column
+          schema:
+            type: string
+            enum: [ENQUIRY, ERECTION, DISMANTLING, STANDING]
+          description: Phase Board column filter
       responses:
         '200':
           description: Phases fetched successfully
@@ -7468,7 +7865,12 @@ paths:
                 message: 'Only site managers can access this resource'
                 errorType: 'FORBIDDEN'
                 traceId: '123e4567-e89b-12d3-a456-426614174000'
-
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
         '500':
           description: Internal server error
           content:
@@ -10173,29 +10575,53 @@ components:
               type: string
             address:
               type: string
+    MobilePhaseTypeStatsDTO:
+      type: object
+      required: [planned, running]
+      properties:
+        planned:
+          type: integer
+          description: Scheduled phases not yet IN_PROGRESS (ENQUIRY/QUOTATION/ORDER_CONFIRMED)
+        running:
+          type: integer
+          description: Phases with status IN_PROGRESS
     MobileDashboardStatsDTO:
       type: object
-      required: [pendingInspections, assignedProjects]
+      required: [pendingInspections, assignedProjects, standingActiveSites, erection, dismantling]
       properties:
         pendingInspections:
           type: integer
         assignedProjects:
           type: integer
+        standingActiveSites:
+          type: integer
+          description: Distinct projects with an active STANDING phase
+        erection:
+          $ref: '#/components/schemas/MobilePhaseTypeStatsDTO'
+        dismantling:
+          $ref: '#/components/schemas/MobilePhaseTypeStatsDTO'
+    MobileCoordinates:
+      type: object
+      required: [lat, lng]
+      properties:
+        lat: {type: number}
+        lng: {type: number}
     MobileMapPinDTO:
       type: object
-      required: [id, name, latitude, longitude, activePhaseType]
+      required: [id, name, coordinates, activePhaseType]
       properties:
         id:
           type: string
           format: uuid
         name:
           type: string
-        latitude:
-          type: number
+        coordinates:
+          type: object
           nullable: true
-        longitude:
-          type: number
-          nullable: true
+          required: [lat, lng]
+          properties:
+            lat: {type: number}
+            lng: {type: number}
         activePhaseType:
           type: string
           enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
@@ -10237,10 +10663,75 @@ components:
           type: string
           format: date-time
           nullable: true
+    MobileProjectPhaseCardDTO:
+      type: object
+      required: [phaseId, type, status, priority, startDate, endDate, durationDays, projectId, projectName, coordinates, customer, assigneeName]
+      description: One list-card row per phase. Financial fields are SITE_MANAGER only.
+      properties:
+        phaseId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
+        status:
+          type: string
+          enum: [ENQUIRY, QUOTATION, ORDER_CONFIRMED, IN_PROGRESS, COMPLETED, POSTPONED]
+        priority:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+        startDate:
+          type: string
+          format: date-time
+          nullable: true
+        endDate:
+          type: string
+          format: date-time
+          nullable: true
+        durationDays:
+          type: number
+          nullable: true
+        projectId:
+          type: string
+          format: uuid
+        projectName:
+          type: string
+        coordinates:
+          type: object
+          nullable: true
+          required: [lat, lng]
+          properties:
+            lat: {type: number}
+            lng: {type: number}
+        customer:
+          type: object
+          required: [id, name, category]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            category:
+              type: string
+              enum: [COMMERCIAL, MUNICIPALITY, ARCHITECT, PRIVATE]
+        assigneeName:
+          type: string
+          nullable: true
+          description: Primary project manager display name
+        budgetedHours:
+          type: number
+          description: Present for SITE_MANAGER only
+        totalLoggedHours:
+          type: number
+          description: Present for SITE_MANAGER only
+        isProfitable:
+          type: boolean
+          description: Present for SITE_MANAGER only
     MobileProjectDTO:
       type: object
       required: [id, name, address, customer, phases]
-      description: Financial fields are included only for SITE_MANAGER responses.
+      description: Legacy nested project shape (settings/crew-time). List uses MobileProjectPhaseCardDTO.
       properties:
         id:
           type: string
@@ -10271,6 +10762,97 @@ components:
         isProfitable:
           type: boolean
           description: Present for SITE_MANAGER only
+    MobileProjectDetailDTO:
+      type: object
+      required: [id, name, coordinates, siteAccessCode, siteAccessNotes, scaffoldSpecification, schedule, nextSafetyInspection, budgetedHours, totalLoggedHours, isProfitable, phases, customer, hoursByActivity, crewBreakdown, attachmentCounts]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        coordinates:
+          type: object
+          nullable: true
+          required: [lat, lng]
+          properties:
+            lat: {type: number}
+            lng: {type: number}
+        siteAccessCode: {type: string, nullable: true}
+        siteAccessNotes: {type: string, nullable: true}
+        scaffoldSpecification:
+          type: object
+          required: [area, height, type]
+          properties:
+            area: {type: number, nullable: true}
+            height: {type: number, nullable: true}
+            type: {type: string, nullable: true}
+        schedule:
+          type: object
+          required: [startDate, endDate, durationDays]
+          properties:
+            startDate: {type: string, format: date-time, nullable: true}
+            endDate: {type: string, format: date-time, nullable: true}
+            durationDays: {type: number, nullable: true}
+        nextSafetyInspection:
+          type: object
+          nullable: true
+          required: [id, appointmentDate, siteTitle, address, city]
+          properties:
+            id: {type: string, format: uuid}
+            appointmentDate: {type: string, format: date-time}
+            siteTitle: {type: string}
+            address: {type: string}
+            city: {type: string, nullable: true}
+        budgetedHours: {type: number}
+        totalLoggedHours: {type: number}
+        isProfitable: {type: boolean}
+        phases:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobilePhaseDatesDTO'
+        customer:
+          type: object
+          required: [id, name, category, primaryContact]
+          properties:
+            id: {type: string, format: uuid}
+            name: {type: string}
+            category: {type: string, enum: [COMMERCIAL, MUNICIPALITY, ARCHITECT, PRIVATE]}
+            primaryContact:
+              type: object
+              nullable: true
+              required: [name, phone, email]
+              properties:
+                name: {type: string}
+                phone: {type: string, nullable: true}
+                email: {type: string, nullable: true}
+        hoursByActivity:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileHoursByActivityDTO'
+        crewBreakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileCrewBreakdownDTO'
+        attachmentCounts:
+          type: object
+          required: [photos, pdfPlans]
+          properties:
+            photos: {type: integer}
+            pdfPlans: {type: integer}
+    MobileProjectHistoryDTO:
+      type: object
+      required: [id, action, details, createdAt, user]
+      properties:
+        id: {type: string, format: uuid}
+        action: {type: string}
+        details: {type: string}
+        createdAt: {type: string, format: date-time}
+        user:
+          type: object
+          required: [id, firstName, lastName, role]
+          properties:
+            id: {type: string, format: uuid}
+            firstName: {type: string}
+            lastName: {type: string}
+            role: {type: string, enum: [ADMIN, SITE_MANAGER, EMPLOYEE]}
     MobileProfileDTO:
       type: object
       required: [id, firstName, lastName, role, email, phone, avatarUrl, weeklyHoursTarget, hoursThisWeek, assignedProjectsCount, completedProjectsCount]
@@ -10315,45 +10897,6 @@ components:
             data:
               $ref: '#/components/schemas/MobileDashboardDTO'
 
-    MobileProjectFilterOptionsDTO:
-      type: object
-      required: [phases, cities, priorities, categories, sortBy]
-      properties:
-        phases:
-          type: array
-          items:
-            type: string
-            enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
-        cities:
-          type: array
-          items:
-            type: string
-        priorities:
-          type: array
-          items:
-            type: string
-            enum: [HIGH, MEDIUM, LOW]
-        categories:
-          type: array
-          items:
-            type: string
-            enum: [COMMERCIAL, MUNICIPALITY, ARCHITECT, PRIVATE]
-        sortBy:
-          type: array
-          items:
-            type: string
-            enum: [newest, nextInspectionDate, nameAZ]
-    GetMobileProjectFilterOptionsResponse:
-      allOf:
-        - $ref: '#/components/schemas/SuccessResponse'
-        - type: object
-          required: [data]
-          properties:
-            message:
-              type: string
-              example: 'Project filter options fetched successfully.'
-            data:
-              $ref: '#/components/schemas/MobileProjectFilterOptionsDTO'
     MobileTaskEmployeeDTO:
       type: object
       required: [id, firstName, lastName, avatarUrl]
@@ -10452,9 +10995,7 @@ components:
           required: [data]
           properties:
             data:
-              type: array
-              items:
-                $ref: '#/components/schemas/MobileMeasurementDTO'
+              $ref: '#/components/schemas/MobileMeasurementsListDTO'
     CreateMobileMeasurementRequest:
       type: object
       required: [length, height, quantity]
@@ -10465,6 +11006,15 @@ components:
         quantity: {type: number}
         unit: {type: string, enum: [M, M2, PCS], default: M}
         remark: {type: string}
+    MobileMeasurementsListDTO:
+      type: object
+      required: [items, totalArea]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileMeasurementDTO'
+        totalArea: {type: number}
     MobileMeasurementResponse:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
@@ -10481,7 +11031,7 @@ components:
         projectId: {type: string, format: uuid}
         category:
           type: string
-          enum: [SITE_ACCESS, CUSTOMER_REQUEST, SAFETY, GENERAL, INTERNAL]
+          enum: [SITE_ACCESS, CUSTOMER_REQUEST, OPEN_POINTS, AGREEMENTS, SPECIAL_REQUIREMENTS, LOCAL_CONTACT, GENERAL]
         content: {type: string}
         author:
           type: object
@@ -10507,8 +11057,24 @@ components:
       properties:
         category:
           type: string
-          enum: [SITE_ACCESS, CUSTOMER_REQUEST, SAFETY, GENERAL, INTERNAL]
+          enum: [SITE_ACCESS, CUSTOMER_REQUEST, OPEN_POINTS, AGREEMENTS, SPECIAL_REQUIREMENTS, LOCAL_CONTACT, GENERAL]
         content: {type: string}
+    UpdateMobileProjectNoteRequest:
+      type: object
+      properties:
+        category:
+          type: string
+          enum: [SITE_ACCESS, CUSTOMER_REQUEST, OPEN_POINTS, AGREEMENTS, SPECIAL_REQUIREMENTS, LOCAL_CONTACT, GENERAL]
+        content: {type: string}
+    UpdateMobileMeasurementRequest:
+      type: object
+      properties:
+        position: {type: string, nullable: true}
+        length: {type: number}
+        height: {type: number}
+        quantity: {type: number}
+        unit: {type: string, enum: [M, M2, PCS]}
+        remark: {type: string, nullable: true}
     MobileProjectNoteResponse:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
@@ -10517,30 +11083,122 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/MobileProjectNoteDTO'
+
+    CreateMobileProjectRequest:
+      type: object
+      required: [name, coordinates, customer, contact]
+      properties:
+        name: {type: string}
+        coordinates:
+          type: object
+          required: [lat, lng]
+          properties:
+            lat: {type: number}
+            lng: {type: number}
+        placeLabel:
+          type: string
+          description: Optional map place label stored as Project.address
+        scaffoldArea: {type: number}
+        priority: {type: string, enum: [HIGH, MEDIUM, LOW], default: MEDIUM}
+        phaseType: {type: string, enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE], default: ERECTION}
+        status: {type: string, enum: [ENQUIRY, QUOTATION, ORDER_CONFIRMED, IN_PROGRESS, COMPLETED, POSTPONED], default: ENQUIRY}
+        siteManagerId: {type: string, format: uuid, description: Defaults to authenticated site manager}
+        customer:
+          oneOf:
+            - type: object
+              required: [mode, customerId]
+              properties:
+                mode: {type: string, enum: [EXISTING]}
+                customerId: {type: string, format: uuid}
+            - type: object
+              required: [mode, name]
+              properties:
+                mode: {type: string, enum: [NEW]}
+                name: {type: string}
+                category: {type: string, enum: [COMMERCIAL, MUNICIPALITY, ARCHITECT, PRIVATE], default: COMMERCIAL}
+        contact:
+          type: object
+          required: [name]
+          properties:
+            name: {type: string}
+            phone: {type: string}
+            email: {type: string, format: email}
+            role: {type: string, default: Project lead}
+        erection:
+          type: object
+          required: [startDate, durationDays]
+          properties:
+            startDate: {type: string, format: date-time}
+            durationDays: {type: number}
+        dismantling:
+          type: object
+          required: [startDate, durationDays]
+          properties:
+            startDate: {type: string, format: date-time}
+            durationDays: {type: number}
+        note:
+          type: object
+          required: [category, content]
+          properties:
+            category: {type: string, enum: [SITE_ACCESS, CUSTOMER_REQUEST, OPEN_POINTS, AGREEMENTS, SPECIAL_REQUIREMENTS, LOCAL_CONTACT, GENERAL]}
+            content: {type: string}
+        photos:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            required: [url, fileType]
+            properties:
+              url: {type: string, format: uri}
+              fileType: {type: string}
+              fileName: {type: string}
+              fileSize: {type: integer}
+              isCover: {type: boolean}
+
     UpdateMobileProjectRequest:
       type: object
+      description: Elaborate project edit excluding customer linkage. Phase fields update the most recently updated phase.
       properties:
+        name: {type: string}
+        coordinates:
+          type: object
+          nullable: true
+          required: [lat, lng]
+          properties:
+            lat: {type: number}
+            lng: {type: number}
+        budgetedHours: {type: number}
+        scaffoldArea: {type: number, nullable: true}
+        siteAccessCode: {type: string, nullable: true}
+        siteAccessNotes: {type: string, nullable: true}
         phaseType: {type: string, enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]}
         status: {type: string, enum: [ENQUIRY, QUOTATION, ORDER_CONFIRMED, IN_PROGRESS, COMPLETED, POSTPONED]}
         priority: {type: string, enum: [HIGH, MEDIUM, LOW]}
-        contactName: {type: string, nullable: true}
-        contactPhone: {type: string, nullable: true}
-        contactEmail: {type: string, format: email, nullable: true}
+        startDate: {type: string, format: date-time, nullable: true}
+        endDate: {type: string, format: date-time, nullable: true}
+        durationDays: {type: number, nullable: true}
+        safetyInspectionComplete: {type: boolean}
     MobileProjectSettingsDTO:
       type: object
-      required: [id, name, address, contactName, contactPhone, contactEmail, scaffoldArea, phases]
+      required: [id, name, coordinates, budgetedHours, scaffoldArea, siteAccessCode, siteAccessNotes, phases]
       properties:
         id: {type: string, format: uuid}
         name: {type: string}
-        address: {type: string}
-        contactName: {type: string, nullable: true}
-        contactPhone: {type: string, nullable: true}
-        contactEmail: {type: string, nullable: true}
+        coordinates:
+          type: object
+          nullable: true
+          required: [lat, lng]
+          properties:
+            lat: {type: number}
+            lng: {type: number}
+        budgetedHours: {type: number}
         scaffoldArea: {type: number, nullable: true}
+        siteAccessCode: {type: string, nullable: true}
+        siteAccessNotes: {type: string, nullable: true}
         phases:
           type: array
           items:
-            $ref: '#/components/schemas/MobileProjectPhaseDTO'
+            $ref: '#/components/schemas/MobilePhaseDatesDTO'
     UpdateMobileProjectResponse:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
@@ -10584,13 +11242,19 @@ components:
         url: {type: string, format: uri}
         fileType: {type: string}
         category: {type: string, enum: [PHOTO, PDF_PLAN]}
+        fileName: {type: string}
+        fileSize: {type: integer}
+        isCover: {type: boolean}
     MobileAttachmentDTO:
       type: object
-      required: [id, url, fileType, category, projectId, inspectionId, createdAt]
+      required: [id, url, fileType, fileName, fileSize, isCover, category, projectId, inspectionId, createdAt]
       properties:
         id: {type: string, format: uuid}
         url: {type: string, format: uri}
         fileType: {type: string}
+        fileName: {type: string, nullable: true}
+        fileSize: {type: integer, nullable: true}
+        isCover: {type: boolean}
         category: {type: string, enum: [PHOTO, PDF_PLAN, OTHER]}
         projectId: {type: string, format: uuid, nullable: true}
         inspectionId: {type: string, format: uuid, nullable: true}
@@ -10603,6 +11267,37 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/MobileAttachmentDTO'
+    GetMobileProjectAttachmentsResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/MobileAttachmentDTO'
+    GetMobileProjectDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Project fetched successfully.'
+            data:
+              $ref: '#/components/schemas/MobileProjectDetailDTO'
+    GetMobileProjectHistoryResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/MobileProjectHistoryDTO'
 
     GetMobileProjectsResponse:
       allOf:
@@ -10616,7 +11311,7 @@ components:
             data:
               type: array
               items:
-                $ref: '#/components/schemas/MobileProjectDTO'
+                $ref: '#/components/schemas/MobileProjectPhaseCardDTO'
     GetMobileProfileResponse:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
@@ -10839,19 +11534,20 @@ components:
             $ref: '#/components/schemas/MobileSchedulePhaseDTO'
     MobileMapProjectDTO:
       type: object
-      required: [id, name, latitude, longitude, activePhaseType]
+      required: [id, name, coordinates, activePhaseType]
       properties:
         id:
           type: string
           format: uuid
         name:
           type: string
-        latitude:
-          type: number
+        coordinates:
+          type: object
           nullable: true
-        longitude:
-          type: number
-          nullable: true
+          required: [lat, lng]
+          properties:
+            lat: {type: number}
+            lng: {type: number}
         activePhaseType:
           type: string
           enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
@@ -11022,7 +11718,7 @@ components:
           example: 'COMPLETED'
     MobileInspectionDTO:
       type: object
-      required: [id, siteTitle, address, postalCode, city, appointmentDate, scaffoldArea, scaffoldHeight, scaffoldType, siteAccessInstructions, specialRequirements, status, customer, createdAt, updatedAt]
+      required: [id, siteTitle, address, postalCode, city, appointmentDate, scaffoldArea, scaffoldHeight, scaffoldType, siteAccessInstructions, specialRequirements, status, projectId, customer, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -11058,6 +11754,11 @@ components:
         status:
           type: string
           enum: [PENDING, SURVEY_DONE, CONVERTED]
+        projectId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Linked project id after convertToProject
         customer:
           type: object
           required: [id, name]
@@ -11067,6 +11768,9 @@ components:
               format: uuid
             name:
               type: string
+            category:
+              type: string
+              enum: [COMMERCIAL, MUNICIPALITY, ARCHITECT, PRIVATE]
         createdAt:
           type: string
           format: date-time

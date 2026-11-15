@@ -19,7 +19,7 @@ Integration contract for the **Flutter iOS/Android app** against the Allround ba
 > **How to use this doc:**  
 > Sections **1–2** are shared (auth + envelopes).  
 > Then jump to **§3 Employee** or **§4 Site Manager** for role-specific screens and APIs.  
-> Section **§5** is Site Manager–only advanced project management (filters, tasks, measurements, notes, settings, media).  
+> Section **§5** is Site Manager–only advanced project management (project list tabs/filters, tasks, measurements, notes, settings, media).  
 > Sections **6–8** (offline sync, notifications/Socket/FCM, localization) apply to **both** roles.
 
 ---
@@ -203,7 +203,6 @@ These routes return **403** for employees (`checkSiteManagerRoleMiddleware`):
 | `PATCH /mobile/inspections/:id/complete` | Site Manager only |
 | `GET /mobile/phases` | Site Manager only |
 | `PATCH /mobile/phases/:id/status` | Site Manager only |
-| `GET /mobile/projects/filter-options` | Site Manager only |
 | `PATCH /mobile/projects/:projectId` | Site Manager only |
 | `GET` / `POST` `/mobile/projects/:projectId/tasks` | Site Manager only |
 | `PATCH /mobile/tasks/:taskId/toggle` | Site Manager only |
@@ -213,7 +212,9 @@ These routes return **403** for employees (`checkSiteManagerRoleMiddleware`):
 | `GET` / `POST` `/mobile/projects/:projectId/notes` | Site Manager only |
 | `DELETE /mobile/projects/:projectId/notes/:id` | Site Manager only |
 | `PATCH /mobile/projects/:projectId/phases/:phaseId/dates` | Site Manager only |
-| `POST /mobile/projects/:projectId/attachments` | Site Manager only |
+| `GET /mobile/projects/:projectId` | Site Manager only (detail hub) |
+| `GET/POST /mobile/projects/:projectId/attachments` | Site Manager only |
+| `GET /mobile/projects/:projectId/history` | Site Manager only |
 | `DELETE /mobile/projects/:projectId/attachments/:id` | Site Manager only |
 
 **Do not render** Schedule, Map, Crew Time, Inspections, Phase Board, or Project Management (tasks / measurements / notes / attachments / settings) tabs for employees.
@@ -322,28 +323,31 @@ Stored on `CompanyProfile` (`id: "global"`):
 ```text
 Login (role=SITE_MANAGER)
   → GET /mobile/config
-  → GET /mobile/dashboard          (stats include pendingInspections for this SM)
+  → GET /mobile/dashboard          (stats: pendingInspections, standingActiveSites, erection/dismantling planned+running)
   → GET /mobile/schedule           (week view)
   → GET /mobile/map                (project pins)
-  → GET /mobile/projects/filter-options
-  → GET /mobile/projects?phaseType&city&priority&category&sortBy
-       → open project detail
+  → GET /mobile/projects?tab&search&phaseTypes&phaseStatuses&priorities&categories&lat&lng&radiusKm&sortBy
+  → POST /mobile/projects  (create; coordinates from map)
+       → one card per phase (MobileProjectPhaseCardDTO)
+       → GET /mobile/projects/:projectId   (detail hub / Overview)
        → GET /mobile/crew-time?projectId=...
-       → GET /mobile/phases
+       → GET /mobile/phases?column=ENQUIRY|ERECTION|DISMANTLING|STANDING
        → PATCH /mobile/phases/:id/status
        → GET/POST /mobile/projects/:projectId/tasks
        → PATCH /mobile/tasks/:taskId/toggle  |  DELETE /mobile/tasks/:taskId
        → GET/POST /mobile/projects/:projectId/measurements
-       → DELETE /mobile/projects/:projectId/measurements/:id
+       → PATCH/DELETE /mobile/projects/:projectId/measurements/:id
        → GET/POST /mobile/projects/:projectId/notes
-       → DELETE /mobile/projects/:projectId/notes/:id
+       → PATCH/DELETE /mobile/projects/:projectId/notes/:id
        → PATCH /mobile/projects/:projectId
        → PATCH /mobile/projects/:projectId/phases/:phaseId/dates
+       → GET /mobile/projects/:projectId/attachments?category=PHOTO|PDF_PLAN
        → POST /media  →  POST /mobile/projects/:projectId/attachments
        → DELETE /mobile/projects/:projectId/attachments/:id
-  → GET /mobile/inspections
+       → GET /mobile/projects/:projectId/history
+  → GET /mobile/inspections?status=PENDING|COMPLETED
        → GET /mobile/inspections/:id
-       → PATCH /mobile/inspections/:id/complete  (notes + photos + optional convertToProject)
+       → PATCH /mobile/inspections/:id/complete  (notes + photos + optional convertToProject → projectId)
   → Own timer / time-logs / sync   (same as employee)
   → GET /mobile/notifications
 ```
@@ -367,7 +371,9 @@ Same as employee — call these freely:
 
 Site managers are **not** blocked by `allowEmployeeManualTime` for manual entries.
 
-Project list for SM may include `budgetedHours`, `totalLoggedHours`, `isProfitable`.
+Project list cards for SM may include `budgetedHours`, `totalLoggedHours`, `isProfitable`.
+
+Dashboard `stats` for SM also includes `standingActiveSites` and per-type `{ planned, running }` for `erection` / `dismantling`.
 
 ### 4.5 Site Manager–only API reference
 
@@ -388,20 +394,22 @@ Returns `totalProjectHours`, `hoursByActivity[]`, `crewBreakdown[]`, `logs[]`.
 
 #### Inspections (assigned to this SM)
 
-| Method | Path | Body |
+| Method | Path | Query / Body |
 | --- | --- | --- |
-| `GET` | `/mobile/inspections` | List `PENDING` + `SURVEY_DONE` for `siteManagerId = me` |
-| `GET` | `/mobile/inspections/:id` | Detail (must be assigned) |
+| `GET` | `/mobile/inspections` | `status=PENDING` (default) or `COMPLETED` (`SURVEY_DONE` + `CONVERTED`) |
+| `GET` | `/mobile/inspections/:id` | Detail (must be assigned); includes `projectId` when converted |
 | `PATCH` | `/mobile/inspections/:id/complete` | See **§5.7 Survey Completion** (scaffold specs + notes + photos + optional `convertToProject`) |
 
 #### Phase board
 
-| Method | Path | Body |
+| Method | Path | Query / Body |
 | --- | --- | --- |
-| `GET` | `/mobile/phases` | Managed phases |
+| `GET` | `/mobile/phases` | optional `column=ENQUIRY\|ERECTION\|DISMANTLING\|STANDING` |
 | `PATCH` | `/mobile/phases/:id/status` | `status`: `IN_PROGRESS` \| `COMPLETED` \| `POSTPONED` |
 
-Project-management CRUD (filters, tasks, measurements, notes, settings, attachments) is documented in **§5**.
+`column=ENQUIRY` filters `status=ENQUIRY` (UI label **Preconstruction**). Other columns filter by phase `type`.
+
+Project-management CRUD (filters, detail hub, tasks, measurements, notes, settings, attachments, history) is documented in **§5**.
 
 ### 4.6 Site Manager checklist
 
@@ -409,7 +417,7 @@ Project-management CRUD (filters, tasks, measurements, notes, settings, attachme
 2. Build **Site Manager** navigation (Schedule, Map, Crew Time, Inspections, Phases, Project Detail PM tabs + own Timer).  
 3. Handle 403 if assignment/global rule denies a project.  
 4. Complete inspections only when status is `PENDING`.  
-5. Wire project-detail tabs to **§5** (tasks / measurements / notes / dates / attachments).  
+5. Wire project-detail tabs to **§5** (Overview detail GET / tasks / measurements / notes / dates / attachments / history).  
 6. Use same offline sync + Socket/FCM stack as employees.  
 
 ---
@@ -425,43 +433,96 @@ OpenAPI tag: **`MobileProjectManagement`**.
 > **Auth:** All routes below require Site Manager role + valid Bearer/device session.  
 > Project-scoped routes also require the project to exist (`deletedAt: null`) and pass `checkSiteManagerProjectAccessMiddleware`.
 
-### 5.1 Deep Filtering
 
-Populate the Filter modal from the server, then pass selected values into the projects list.
+### 5.0 Create project (map location)
+
+Site Managers create projects via `POST /mobile/projects`. **Address is taken from the map** as required `coordinates: { lat, lng }`. Optional `placeLabel` (place name from the map picker) is stored as the DB address; if omitted the server stores `"lat, lng"`.
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| `GET` | `/mobile/projects/filter-options` | Options for the Filter modal |
-| `GET` | `/mobile/projects` | Same list as before, plus optional query filters |
-
-#### `GET /mobile/projects/filter-options`
-
-Response `data`:
-
-| Field | Values |
-| --- | --- |
-| `phases` | `ERECTION` \| `DISMANTLING` \| `STANDING` \| `MAINTENANCE` |
-| `cities` | Distinct city tokens parsed from accessible project/customer addresses |
-| `priorities` | `HIGH` \| `MEDIUM` \| `LOW` |
-| `categories` | Customer categories: `COMMERCIAL` \| `MUNICIPALITY` \| `ARCHITECT` \| `PRIVATE` |
-| `sortBy` | `newest` \| `nextInspectionDate` \| `nameAZ` |
-
-#### `GET /mobile/projects` query params
-
-| Query | Type | Notes |
-| --- | --- | --- |
-| `phaseType` | enum | Filter projects that have at least one phase of this type |
-| `city` | string | Case-insensitive match on project or customer address |
-| `priority` | enum | Filter projects that have at least one phase with this priority |
-| `category` | enum | Filter by linked customer `CustomerCategory` |
-| `sortBy` | enum | Default `newest`. Also `nextInspectionDate`, `nameAZ` |
+| `POST` | `/mobile/projects` | SM only → returns project detail hub (`201`) |
 
 ```http
-GET /api/v1/mobile/projects?phaseType=ERECTION&city=Köln&priority=HIGH&category=COMMERCIAL&sortBy=nameAZ
+POST /api/v1/mobile/projects
+Authorization: Bearer <accessJwt>
+Content-Type: application/json
+
+{
+  "name": "Goltstein Complex",
+  "coordinates": { "lat": 50.9375, "lng": 6.9603 },
+  "placeLabel": "Goltsteinstrasse, Köln",
+  "scaffoldArea": 450,
+  "priority": "HIGH",
+  "phaseType": "ERECTION",
+  "status": "IN_PROGRESS",
+  "customer": { "mode": "EXISTING", "customerId": "<uuid>" },
+  "contact": {
+    "name": "Tim Muller",
+    "phone": "+0325654514",
+    "email": "you33@gmail.com"
+  },
+  "erection": { "startDate": "2026-09-18T07:00:00.000Z", "durationDays": 2.5 },
+  "dismantling": { "startDate": "2026-09-25T07:00:00.000Z", "durationDays": 2.5 },
+  "note": { "category": "SITE_ACCESS", "content": "Gate code 4821" },
+  "photos": [{ "url": "https://cdn.example.com/a.jpg", "fileType": "image/jpeg", "isCover": true }]
+}
+```
+
+New client: `"customer": { "mode": "NEW", "name": "Acme GmbH", "category": "COMMERCIAL" }`.  
+`siteManagerId` optional (defaults to the authenticated SM). Upload files with `POST /media` first, then pass URLs in `photos`.
+
+### 5.1 Project list (phase cards), tabs, filters & sort
+
+Filter-modal option lists are **hardcoded in Flutter** (no `filter-options` endpoint).  
+Location is exposed as `coordinates: { lat, lng }`. Project `address` / `city` / site-contact fields are **not** returned on mobile project APIs (contacts via `customer.primaryContact`).
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| `GET` | `/mobile/projects` | **One card per phase** (`MobileProjectPhaseCardDTO[]`) + tabs/filters/sort/search/geo |
+| `GET` | `/mobile/projects/:projectId` | Detail hub — coordinates, scaffoldSpecification, schedule, nextSafetyInspection, labor, customer, phases, attachment counts |
+
+Each list row includes `phaseId`, `type`, `status`, `priority`, dates, `projectId` / `projectName`, `coordinates`, `customer`, `assigneeName`, and (SM only) budget / logged hours / `isProfitable`. Contact comes from `customer` (not duplicated).
+
+#### Tab (`tab`)
+
+| Value | Server filter |
+| --- | --- |
+| `ALL` (default) | Non-deleted projects in the user’s visibility scope |
+| `ACTIVE` | Has a phase in `IN_PROGRESS` or `ORDER_CONFIRMED` |
+| `MY_PROJECTS` | User is a project manager **or** has a crew assignment on a phase |
+| `THIS_WEEK` | Has a phase whose `startDate` or `endDate` falls in the current UTC ISO week |
+| `INSPECTION` | Linked customer has at least one `PENDING` inspection |
+
+#### Filter modal (CSV or repeated query params)
+
+| Query | Filters on |
+| --- | --- |
+| `search` | Case-insensitive contains on project `name` |
+| `phaseTypes` | Phase rows of these `PhaseType`s — **CSV multi-select** (e.g. `ERECTION,DISMANTLING`) |
+| `phaseStatuses` | Phase rows of these `PhaseStatus`s — use `COMPLETED` for the Completed filter |
+| `lat` + `lng` | Geo center (both required together); refined with Haversine |
+| `radiusKm` | Geo radius in km (default `25`) |
+| `priorities` | Phase rows of these `Priority`s — **CSV multi-select** |
+| `categories` | `customer.category` `IN (...)` — **CSV multi-select** |
+
+Coordinates on cards/detail/map are always `{ "lat": number, "lng": number } | null` (never separate latitude/longitude fields).
+
+UI label **Preconstruction** maps to phase status `ENQUIRY` (do not invent a `PhaseType`).
+
+#### Sort (`sortBy`)
+
+| Value | Behavior |
+| --- | --- |
+| `NEWEST` (default) | Parent project `createdAt` descending |
+| `NEXT_INSPECTION` | Earliest pending customer `appointmentDate` first |
+| `NAME_AZ` | Project name ascending |
+
+```http
+GET /api/v1/mobile/projects?tab=ACTIVE&search=haupt&phaseTypes=ERECTION,DISMANTLING&priorities=HIGH,MEDIUM&categories=COMMERCIAL,PRIVATE&lat=50.94&lng=6.96&radiusKm=30&sortBy=NAME_AZ
 Authorization: Bearer <accessJwt>
 ```
 
-Employees may still call `GET /mobile/projects` (assignment-scoped, no financial fields). Filter-options and deep filters are intended for the **Site Manager** Filter UI.
+Employees may still call `GET /mobile/projects` (assignment-scoped, no financial fields). Tabs/filters/sort are available on the same endpoint for both roles when params are sent.
 
 ### 5.2 Task Management
 
@@ -505,12 +566,13 @@ Each task includes `employee: { id, firstName, lastName, avatarUrl }` (nullable 
 Line items store `length`, `height`, `quantity`, optional `position` / `remark`, and `unit` (`M` \| `M2` \| `PCS`, default `M`).
 
 **Area formula:** `area = length × height × quantity`  
-Creating or deleting a line item **recalculates** `Project.scaffoldArea` as the sum of remaining measurement areas.
+Creating, updating, or deleting a line item **recalculates** `Project.scaffoldArea` as the sum of remaining measurement areas.
 
 | Method | Path | Body |
 | --- | --- | --- |
-| `GET` | `/mobile/projects/:projectId/measurements` | — → measurement[] |
+| `GET` | `/mobile/projects/:projectId/measurements` | — → `{ items: measurement[], totalArea: number }` |
 | `POST` | `/mobile/projects/:projectId/measurements` | `length`, `height`, `quantity`, optional `position`, `unit`, `remark` |
+| `PATCH` | `/mobile/projects/:projectId/measurements/:id` | Any of create fields (≥1 required); recalculates `area` + `scaffoldArea` |
 | `DELETE` | `/mobile/projects/:projectId/measurements/:id` | — → `{ id }` |
 
 ```http
@@ -530,23 +592,26 @@ Content-Type: application/json
 
 ### 5.4 Project Notes
 
-Categorized notes store author + timestamp. Site Managers can list, create, and delete.
+Categorized notes store author + timestamp. Site Managers can list, create, update, and delete.
 
 | Method | Path | Body |
 | --- | --- | --- |
 | `GET` | `/mobile/projects/:projectId/notes` | — → note[] (newest first, includes author) |
 | `POST` | `/mobile/projects/:projectId/notes` | `category`, `content` |
+| `PATCH` | `/mobile/projects/:projectId/notes/:id` | optional `category`, `content` (≥1 required) |
 | `DELETE` | `/mobile/projects/:projectId/notes/:id` | — → `{ id }` |
 
-`category` enum:
+`category` enum (mobile Zod; legacy `SAFETY` / `INTERNAL` remain in DB but are not accepted on create/update):
 
 | Value | Typical UI label |
 | --- | --- |
 | `SITE_ACCESS` | Site Access |
 | `CUSTOMER_REQUEST` | Customer Request |
-| `SAFETY` | Safety |
+| `OPEN_POINTS` | Open Points |
+| `AGREEMENTS` | Agreements |
+| `SPECIAL_REQUIREMENTS` | Special Requirements |
+| `LOCAL_CONTACT` | Local Contact |
 | `GENERAL` | General |
-| `INTERNAL` | Internal |
 
 ```http
 POST /api/v1/mobile/projects/<projectId>/notes
@@ -565,11 +630,14 @@ Content-Type: application/json
 
 | Method | Path | Body |
 | --- | --- | --- |
-| `PATCH` | `/mobile/projects/:projectId` | Any of: `phaseType`, `status`, `priority`, `contactName`, `contactPhone`, `contactEmail` (≥1 required) |
+| `PATCH` | `/mobile/projects/:projectId` | Elaborate project fields **except customer** (≥1 required) |
 
-- Contact fields update the **project**.  
-- `phaseType` / `status` / `priority` update the **most recently updated phase** on that project (settings screen “current phase”).  
-- Nullable contacts: send `null` to clear.
+Allowed body fields:
+
+- Project: `name`, `coordinates` (`{ lat, lng }` or `null`), `budgetedHours`, `scaffoldArea`, `siteAccessCode`, `siteAccessNotes`
+- Primary phase (most recently updated): `phaseType`, `status`, `priority`, `startDate`, `endDate`, `durationDays`, `safetyInspectionComplete`
+
+Customer linkage cannot be changed from mobile.
 
 ```http
 PATCH /api/v1/mobile/projects/<projectId>
@@ -577,12 +645,17 @@ Authorization: Bearer <accessJwt>
 Content-Type: application/json
 
 {
+  "name": "Scaffold Site A",
+  "coordinates": { "lat": 50.9375, "lng": 6.9603 },
+  "budgetedHours": 120,
+  "siteAccessCode": "4821",
+  "siteAccessNotes": "Use rear gate",
   "priority": "HIGH",
   "status": "IN_PROGRESS",
   "phaseType": "ERECTION",
-  "contactName": "Hans Müller",
-  "contactPhone": "+491701234567",
-  "contactEmail": "hans@customer.de"
+  "startDate": "2026-11-18T07:00:00.000Z",
+  "endDate": "2026-11-22T16:00:00.000Z",
+  "durationDays": 5
 }
 ```
 
@@ -605,17 +678,20 @@ Content-Type: application/json
 }
 ```
 
-### 5.6 Media & PDFs (Attachments)
+### 5.6 Media & PDFs (Attachments) + History
 
 Attachments **do not** upload binary through the mobile project routes. Follow the existing shared Media flow, then register the URL on the project.
 
 1. **Upload file(s) to S3** via `POST /api/v1/media` (multipart `files`, max 10). Response returns public URL string(s).  
-2. **Register** the URL on the project:
+2. **List / register / delete** on the project:
 
-| Method | Path | Body |
+| Method | Path | Body / Query |
 | --- | --- | --- |
-| `POST` | `/mobile/projects/:projectId/attachments` | `url`, `fileType`, `category` |
+| `GET` | `/mobile/projects/:projectId/attachments` | optional `category=PHOTO\|PDF_PLAN` → includes `isCover` |
+| `POST` | `/mobile/projects/:projectId/attachments` | `url`, `fileType`, `category`, optional `fileName`, `fileSize`, `isCover` |
+| `PATCH` | `/mobile/projects/:projectId/attachments/:id/cover` | Sets this PHOTO as cover; clears other project photo covers |
 | `DELETE` | `/mobile/projects/:projectId/attachments/:id` | — → `{ id }` (DB row only; S3 object is not deleted) |
+| `GET` | `/mobile/projects/:projectId/history` | AuditLog timeline → `{ id, action, details, createdAt, user }` |
 
 `category` for project attachments:
 
@@ -632,7 +708,9 @@ Content-Type: application/json
 {
   "url": "https://cdn.example.com/uploads/plan-a.pdf",
   "fileType": "application/pdf",
-  "category": "PDF_PLAN"
+  "category": "PDF_PLAN",
+  "fileName": "plan-a.pdf",
+  "fileSize": 245760
 }
 ```
 
@@ -650,7 +728,7 @@ Use the same Media upload endpoint as admin (`POST /media`); then choose `PHOTO`
 | `siteAccessInstructions` | optional | saved on the inspection |
 | `specialRequirements` | optional | saved on the inspection |
 | `photos` | optional | `[{ url, fileType }]` — stored as `Attachment` rows linked to the **inspection** (`category: PHOTO`) |
-| `convertToProject` | optional | default `false`. When `true`, creates Project + Measurement + Phase, assigns SM as PM, sets status **`CONVERTED`** |
+| `convertToProject` | optional | default `false`. When `true`, creates Project + Measurement + Phase, assigns SM as PM, sets status **`CONVERTED`**, sets `inspection.projectId` |
 | `projectName` | optional | used when converting (defaults to `siteTitle`) |
 | `phaseType` | optional | initial phase when converting (defaults to `ERECTION`) |
 
@@ -821,8 +899,7 @@ Worker data keys typically include `title`, `body`/`message`, `type`, `click_act
 | Login `role` | `EMPLOYEE` | `SITE_MANAGER` |
 | `/mobile/config` | ✅ | ✅ |
 | `/mobile/dashboard` | ✅ | ✅ (+ pending inspections count for SM) |
-| `/mobile/projects` | ✅ | ✅ (+ budget fields + deep filters) |
-| `/mobile/projects/filter-options` | ❌ 403 | ✅ |
+| `/mobile/projects` | ✅ | ✅ (+ budget fields + tabs/filters/sort) |
 | Project tasks / measurements / notes | ❌ 403 | ✅ full CRUD |
 | Project settings + phase dates | ❌ 403 | ✅ |
 | Project attachments (`PHOTO` / `PDF_PLAN`) | ❌ 403 | ✅ |

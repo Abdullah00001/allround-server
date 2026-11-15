@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   Attachment,
+  Customer,
   Inspection,
   Project,
   ProjectMeasurement,
@@ -13,21 +14,27 @@ import {
 import {
   completeInspectionSchema,
   createMeasurementSchema,
+  createMobileProjectSchema,
   createProjectAttachmentSchema,
   createProjectNoteSchema,
   createProjectTaskSchema,
   getCrewTimeQuerySchema,
   getMapQuerySchema,
+  getMobileInspectionsQuerySchema,
+  getMobilePhasesQuerySchema,
   getMyProjectsQuerySchema,
   getMyTimeLogsQuerySchema,
+  getProjectAttachmentsQuerySchema,
   getScheduleQuerySchema,
   manualTimeSchema,
   startTimerSchema,
   stopTimerSchema,
   syncTimeLogsSchema,
+  updateMeasurementSchema,
   updateMobileProjectSchema,
   updatePhaseDatesSchema,
   updatePhaseStatusSchema,
+  updateProjectNoteSchema,
 } from '@/app/modules/mobile/mobile.schema';
 
 /**
@@ -100,12 +107,32 @@ export type TCreateMeasurementPayload = z.infer<typeof createMeasurementSchema>;
 export type TCreateProjectNotePayload = z.infer<typeof createProjectNoteSchema>;
 
 /**
+ * Validated Site Manager create-project request body.
+ */
+export type TCreateMobileProjectPayload = z.infer<
+  typeof createMobileProjectSchema
+>;
+
+/**
  * Validated project-settings patch body.
  */
 export type TUpdateMobileProjectPayload = z.infer<
   typeof updateMobileProjectSchema
 >;
 
+/**
+ * Service params for Site Manager project creation.
+ */
+export type TCreateMobileProjectServiceParams = {
+  /** Authenticated site manager (creator). */
+  user: User;
+  /** Assigned PM site manager (self or selected). */
+  siteManager: User;
+  /** Existing customer when mode is EXISTING; undefined for NEW. */
+  customer?: Customer;
+  /** Validated create payload. */
+  payload: TCreateMobileProjectPayload;
+};
 /**
  * Validated phase-dates patch body.
  */
@@ -217,11 +244,42 @@ export type TUpdateMobilePhaseStatusPayload = z.infer<
 >;
 
 /**
+ * Validated inspections list query (Pending / Completed tabs).
+ */
+export type TGetMobileInspectionsQuery = z.infer<
+  typeof getMobileInspectionsQuerySchema
+>;
+
+/**
+ * Validated phase board column query.
+ */
+export type TGetMobilePhasesQuery = z.infer<typeof getMobilePhasesQuerySchema>;
+
+/**
+ * Validated attachments list query.
+ */
+export type TGetProjectAttachmentsQuery = z.infer<
+  typeof getProjectAttachmentsQuerySchema
+>;
+
+/**
+ * Validated note update body.
+ */
+export type TUpdateProjectNotePayload = z.infer<typeof updateProjectNoteSchema>;
+
+/**
+ * Validated measurement update body.
+ */
+export type TUpdateMeasurementPayload = z.infer<typeof updateMeasurementSchema>;
+
+/**
  * Service params for listing inspections assigned to a site manager.
  */
 export type TListMobileInspectionsServiceParams = {
   /** Authenticated site manager. */
   user: User;
+  /** Pending vs Completed tab filter. */
+  query: TGetMobileInspectionsQuery;
 };
 
 /**
@@ -248,6 +306,50 @@ export type TCompleteInspectionServiceParams = {
 export type TListMobilePhasesServiceParams = {
   /** Authenticated site manager. */
   user: User;
+  /** Optional Phase Board column filter. */
+  query: TGetMobilePhasesQuery;
+};
+
+/**
+ * Service params for listing project attachments.
+ */
+export type TListProjectAttachmentsServiceParams = {
+  /** Trusted accessible project. */
+  project: Project;
+  /** Optional category filter. */
+  query: TGetProjectAttachmentsQuery;
+};
+
+/**
+ * Service params for setting a project photo as cover.
+ */
+export type TSetProjectAttachmentCoverServiceParams = {
+  /** Trusted accessible project. */
+  project: Project;
+  /** Trusted PHOTO attachment on the project. */
+  attachment: Attachment;
+};
+
+/**
+ * Service params for updating a project note.
+ */
+export type TUpdateProjectNoteServiceParams = {
+  /** Trusted note. */
+  note: ProjectNote;
+  /** Validated patch payload. */
+  payload: TUpdateProjectNotePayload;
+};
+
+/**
+ * Service params for updating a measurement.
+ */
+export type TUpdateMeasurementServiceParams = {
+  /** Trusted accessible project. */
+  project: Project;
+  /** Trusted measurement. */
+  measurement: ProjectMeasurement;
+  /** Validated patch payload. */
+  payload: TUpdateMeasurementPayload;
 };
 
 /**

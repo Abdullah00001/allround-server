@@ -1,6 +1,8 @@
 import { NextFunction, Request, Response } from 'express';
 import {
   Attachment,
+  AttachmentCategory,
+  Customer,
   Inspection,
   InspectionStatus,
   Project,
@@ -630,6 +632,92 @@ export const checkProjectAttachmentExistenceMiddleware = asyncHandler(
     }
 
     req.attachment = attachment as Attachment;
+    next();
+  }
+);
+
+/**
+ * Ensures the trusted project attachment is a PHOTO (cover images apply to photos only).
+ *
+ * @param {Request} req - Express request with `req.attachment`.
+ * @param {Response} res - Express response used for the 400 envelope.
+ * @param {NextFunction} next - Continues when the attachment category is PHOTO.
+ * @returns {Promise<void>}
+ */
+export const checkProjectPhotoAttachmentMiddleware = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const traceId = getTraceId();
+    const attachment = req.attachment as Attachment;
+
+    if (attachment.category !== AttachmentCategory.PHOTO) {
+      res.status(400).json({
+        success: false,
+        message: 'Only PHOTO attachments can be set as cover',
+        errorType: AuthErrorType.BAD_REQUEST,
+        traceId,
+      });
+      return;
+    }
+
+    next();
+  }
+);
+
+/**
+ * Validates create-project references: existing customer (when mode=EXISTING)
+ * and the assigned site manager (payload.siteManagerId or the authenticated user).
+ * Attaches `req.customer` (EXISTING only) and `req.managedUser` (assignee SM).
+ *
+ * @param {Request} req - Express request with validated body and `req.user`.
+ * @param {Response} res - Express response used for 404 envelopes.
+ * @param {NextFunction} next - Continues when refs are valid.
+ * @returns {Promise<void>}
+ */
+export const checkMobileCreateProjectRefsMiddleware = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const payload = req.body as {
+      customer:
+        | { mode: 'EXISTING'; customerId: string }
+        | { mode: 'NEW'; name: string };
+      siteManagerId?: string;
+    };
+
+    if (payload.customer.mode === 'EXISTING') {
+      const customer = await prisma.customer.findFirst({
+        where: { id: payload.customer.customerId, deletedAt: null },
+      });
+      if (!customer) {
+        res.status(404).json({
+          success: false,
+          message: 'Customer not found',
+          errorType: AuthErrorType.CUSTOMER_NOT_FOUND,
+          traceId,
+        });
+        return;
+      }
+      req.customer = customer as Customer;
+    }
+
+    const assigneeId = payload.siteManagerId ?? user.id;
+    const siteManager = await prisma.user.findFirst({
+      where: {
+        id: assigneeId,
+        role: Role.SITE_MANAGER,
+        deletedAt: null,
+      },
+    });
+    if (!siteManager) {
+      res.status(404).json({
+        success: false,
+        message: 'Site manager not found',
+        errorType: AuthErrorType.USER_NOT_FOUND,
+        traceId,
+      });
+      return;
+    }
+    req.managedUser = siteManager as User;
     next();
   }
 );

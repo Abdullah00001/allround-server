@@ -11,6 +11,22 @@ import {
 import { z } from 'zod';
 
 /**
+ * Note categories exposed to the mobile UI (legacy SAFETY/INTERNAL omitted).
+ */
+const mobileNoteCategoryEnum = z.enum(
+  [
+    ProjectNoteCategory.SITE_ACCESS,
+    ProjectNoteCategory.CUSTOMER_REQUEST,
+    ProjectNoteCategory.OPEN_POINTS,
+    ProjectNoteCategory.AGREEMENTS,
+    ProjectNoteCategory.SPECIAL_REQUIREMENTS,
+    ProjectNoteCategory.LOCAL_CONTACT,
+    ProjectNoteCategory.GENERAL,
+  ],
+  { message: 'Invalid note category' }
+);
+
+/**
  * Request body schema for `POST /mobile/timer/start`.
  */
 export const startTimerSchema = z
@@ -187,22 +203,119 @@ export const updatePhaseStatusSchema = z
   .strict();
 
 /**
- * Query schema for `GET /mobile/projects` deep filtering.
+ * Preprocesses a query value that may arrive as a comma-separated string
+ * or as a repeated query-array into a string array for Zod validation.
+ *
+ * @param {unknown} value - Raw query value from Express.
+ * @returns {unknown} Normalized string array, `undefined`, or the original value.
+ */
+const preprocessCsvOrArray = (value: unknown): unknown => {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((entry) => String(entry).split(','))
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+  }
+  return value;
+};
+
+/**
+ * Builds an optional array query schema that accepts CSV strings or arrays.
+ *
+ * @template T
+ * @param {z.ZodType<T>} itemSchema - Schema for each array element.
+ * @returns {z.ZodType<T[] | undefined>} Optional non-empty array schema.
+ */
+const csvOrArray = <T>(itemSchema: z.ZodType<T>) =>
+  z.preprocess(
+    preprocessCsvOrArray,
+    z.array(itemSchema).min(1).optional()
+  );
+
+/**
+ * Query schema for `GET /mobile/projects` (tabs + filter modal + sort).
  */
 export const getMyProjectsQuerySchema = z
   .object({
-    phaseType: z.enum(PhaseType, { message: 'Invalid phase type' }).optional(),
-    city: z.string().trim().min(1).optional(),
-    priority: z.enum(Priority, { message: 'Invalid priority' }).optional(),
-    category: z
-      .enum(CustomerCategory, { message: 'Invalid category' })
-      .optional(),
+    tab: z
+      .enum(['ALL', 'ACTIVE', 'MY_PROJECTS', 'THIS_WEEK', 'INSPECTION'], {
+        message: 'Invalid tab',
+      })
+      .optional()
+      .default('ALL'),
+    search: z.string().trim().min(1).optional(),
+    phaseTypes: csvOrArray(
+      z.enum(PhaseType, { message: 'Invalid phase type' })
+    ),
+    phaseStatuses: csvOrArray(
+      z.enum(PhaseStatus, { message: 'Invalid phase status' })
+    ),
+    priorities: csvOrArray(
+      z.enum(Priority, { message: 'Invalid priority' })
+    ),
+    categories: csvOrArray(
+      z.enum(CustomerCategory, { message: 'Invalid category' })
+    ),
+    lat: z.coerce.number().min(-90).max(90).optional(),
+    lng: z.coerce.number().min(-180).max(180).optional(),
+    radiusKm: z.coerce.number().positive().max(500).optional().default(25),
     sortBy: z
-      .enum(['newest', 'nextInspectionDate', 'nameAZ'], {
+      .enum(['NEWEST', 'NEXT_INSPECTION', 'NAME_AZ'], {
         message: 'Invalid sortBy',
       })
       .optional()
-      .default('newest'),
+      .default('NEWEST'),
+  })
+  .strict()
+  .refine(
+    (data) =>
+      (data.lat === undefined && data.lng === undefined) ||
+      (data.lat !== undefined && data.lng !== undefined),
+    { message: 'lat and lng must be provided together', path: ['lat'] }
+  );
+
+/**
+ * Query schema for `GET /mobile/phases` Phase Board columns.
+ */
+export const getMobilePhasesQuerySchema = z
+  .object({
+    column: z
+      .enum(['ENQUIRY', 'ERECTION', 'DISMANTLING', 'STANDING'], {
+        message: 'Invalid phase board column',
+      })
+      .optional(),
+  })
+  .strict();
+
+/**
+ * Query schema for `GET /mobile/inspections` Pending/Completed tabs.
+ */
+export const getMobileInspectionsQuerySchema = z
+  .object({
+    status: z
+      .enum(['PENDING', 'COMPLETED'], { message: 'Invalid inspection status' })
+      .optional()
+      .default('PENDING'),
+  })
+  .strict();
+
+/**
+ * Query schema for `GET /mobile/projects/:projectId/attachments`.
+ */
+export const getProjectAttachmentsQuerySchema = z
+  .object({
+    category: z
+      .enum([AttachmentCategory.PHOTO, AttachmentCategory.PDF_PLAN], {
+        message: 'Invalid attachment category',
+      })
+      .optional(),
   })
   .strict();
 
@@ -278,27 +391,162 @@ export const createMeasurementSchema = z
  */
 export const createProjectNoteSchema = z
   .object({
-    category: z.enum(ProjectNoteCategory, { message: 'Invalid note category' }),
+    category: mobileNoteCategoryEnum,
     content: z.string().trim().min(1, { message: 'Content is required' }),
   })
   .strict();
 
 /**
- * Request body for patching project settings (contacts + primary phase fields).
+ * Request body for updating a project note.
+ */
+export const updateProjectNoteSchema = z
+  .object({
+    category: mobileNoteCategoryEnum.optional(),
+    content: z.string().trim().min(1).optional(),
+  })
+  .strict()
+  .refine((data) => Object.keys(data).length > 0, {
+    message: 'At least one field is required to update',
+  });
+
+/**
+ * Request body for updating a measurement line item.
+ */
+export const updateMeasurementSchema = z
+  .object({
+    position: z.string().trim().min(1).nullable().optional(),
+    length: z.number().positive({ message: 'Length must be positive' }).optional(),
+    height: z.number().positive({ message: 'Height must be positive' }).optional(),
+    quantity: z
+      .number()
+      .positive({ message: 'Quantity must be positive' })
+      .optional(),
+    unit: z.enum(MeasurementUnit, { message: 'Invalid unit' }).optional(),
+    remark: z.string().trim().min(1).nullable().optional(),
+  })
+  .strict()
+  .refine((data) => Object.keys(data).length > 0, {
+    message: 'At least one field is required to update',
+  });
+
+/**
+ * Schedule block for erection / dismantling on project create.
+ */
+const mobilePhaseScheduleSchema = z
+  .object({
+    startDate: z.coerce.date({ error: 'Invalid start date' }),
+    durationDays: z.number().positive({ message: 'Duration must be positive' }),
+  })
+  .strict();
+
+/**
+ * Request body for `POST /mobile/projects` (Site Manager create from map).
+ * Location is required as map coordinates; optional `placeLabel` fills DB address.
+ */
+export const createMobileProjectSchema = z
+  .object({
+    name: z.string().trim().min(1, { message: 'Project name is required' }),
+    coordinates: z
+      .object({
+        lat: z.number().min(-90).max(90),
+        lng: z.number().min(-180).max(180),
+      })
+      .strict(),
+    placeLabel: z.string().trim().min(1).optional(),
+    scaffoldArea: z.number().positive().optional(),
+    priority: z
+      .enum(Priority, { message: 'Invalid priority' })
+      .optional()
+      .default(Priority.MEDIUM),
+    phaseType: z
+      .enum(PhaseType, { message: 'Invalid phase type' })
+      .optional()
+      .default(PhaseType.ERECTION),
+    status: z
+      .enum(PhaseStatus, { message: 'Invalid status' })
+      .optional()
+      .default(PhaseStatus.ENQUIRY),
+    siteManagerId: z.string().uuid({ error: 'Invalid site manager id' }).optional(),
+    customer: z.discriminatedUnion('mode', [
+      z
+        .object({
+          mode: z.literal('EXISTING'),
+          customerId: z.string().uuid({ error: 'Invalid customer id' }),
+        })
+        .strict(),
+      z
+        .object({
+          mode: z.literal('NEW'),
+          name: z.string().trim().min(1, { message: 'Customer name is required' }),
+          category: z
+            .enum(CustomerCategory, { message: 'Invalid category' })
+            .optional()
+            .default(CustomerCategory.COMMERCIAL),
+        })
+        .strict(),
+    ]),
+    contact: z
+      .object({
+        name: z.string().trim().min(1, { message: 'Contact name is required' }),
+        phone: z.string().trim().min(1).optional(),
+        email: z
+          .string()
+          .trim()
+          .email({ message: 'Invalid contact email' })
+          .optional(),
+        role: z.string().trim().min(1).optional().default('Project lead'),
+      })
+      .strict(),
+    erection: mobilePhaseScheduleSchema.optional(),
+    dismantling: mobilePhaseScheduleSchema.optional(),
+    note: z
+      .object({
+        category: mobileNoteCategoryEnum,
+        content: z.string().trim().min(1, { message: 'Note content is required' }),
+      })
+      .strict()
+      .optional(),
+    photos: z
+      .array(
+        z
+          .object({
+            url: z.string().url({ message: 'Invalid photo URL' }),
+            fileType: z.string().trim().min(1),
+            fileName: z.string().trim().min(1).optional(),
+            fileSize: z.number().int().positive().optional(),
+            isCover: z.boolean().optional(),
+          })
+          .strict()
+      )
+      .max(20)
+      .optional(),
+  })
+  .strict();
+
+/**
+ * Request body for elaborating project edit (all project fields except customer).
  */
 export const updateMobileProjectSchema = z
   .object({
+    name: z.string().trim().min(1).optional(),
+    coordinates: z
+      .object({
+        lat: z.number().min(-90).max(90),
+        lng: z.number().min(-180).max(180),
+      })
+      .nullable()
+      .optional(),
+    budgetedHours: z.number().min(0).optional(),
+    scaffoldArea: z.number().min(0).nullable().optional(),
+    siteAccessCode: z.string().trim().min(1).nullable().optional(),
+    siteAccessNotes: z.string().trim().min(1).nullable().optional(),
     phaseType: z.enum(PhaseType, { message: 'Invalid phase type' }).optional(),
     status: z.enum(PhaseStatus, { message: 'Invalid status' }).optional(),
     priority: z.enum(Priority, { message: 'Invalid priority' }).optional(),
-    contactName: z.string().trim().min(1).nullable().optional(),
-    contactPhone: z.string().trim().min(1).nullable().optional(),
-    contactEmail: z
-      .string()
-      .trim()
-      .email({ message: 'Invalid contact email' })
-      .nullable()
-      .optional(),
+    startDate: z.coerce.date({ error: 'Invalid start date' }).nullable().optional(),
+    endDate: z.coerce.date({ error: 'Invalid end date' }).nullable().optional(),
+    durationDays: z.number().positive().nullable().optional(),
+    safetyInspectionComplete: z.boolean().optional(),
   })
   .strict()
   .refine((data) => Object.keys(data).length > 0, {
@@ -327,6 +575,9 @@ export const createProjectAttachmentSchema = z
   .object({
     url: z.string().url({ message: 'Invalid attachment URL' }),
     fileType: z.string().trim().min(1, { message: 'fileType is required' }),
+    fileName: z.string().trim().min(1).optional(),
+    fileSize: z.number().int().positive().optional(),
+    isCover: z.boolean().optional(),
     category: z.enum([AttachmentCategory.PHOTO, AttachmentCategory.PDF_PLAN], {
       message: 'Invalid attachment category',
     }),

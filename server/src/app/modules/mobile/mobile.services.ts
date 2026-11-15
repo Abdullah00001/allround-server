@@ -7,6 +7,7 @@ import {
   PhaseType,
   Priority,
   Prisma,
+  ProjectNoteCategory,
   Role,
   TimeLogStatus,
   User,
@@ -32,10 +33,13 @@ import {
   MobileMapPinDTO,
   MobileMapProjectDTO,
   MobileMeasurementDTO,
+  MobileMeasurementsListDTO,
   MobilePhaseDatesDTO,
-  MobileProjectDTO,
-  MobileProjectFilterOptionsDTO,
+  MobilePhaseTypeStatsDTO,
+  MobileProjectDetailDTO,
+  MobileProjectHistoryDTO,
   MobileProjectNoteDTO,
+  MobileProjectPhaseCardDTO,
   MobileProjectSettingsDTO,
   MobileProjectTaskDTO,
   MobileProjectTasksListDTO,
@@ -50,16 +54,18 @@ import {
 } from '@/app/modules/mobile/mobile.dto';
 import {
   deriveTaskTitle,
-  extractCityFromAddress,
   getPeriodRange,
   getUtcDayEndExclusive,
   getUtcDayStart,
   getUtcWeekEndExclusive,
   getUtcWeekStart,
+  haversineKm,
+  toCoordinates,
 } from '@/app/modules/mobile/mobile.helpers';
 import {
   TCompleteInspectionServiceParams,
   TCreateMeasurementServiceParams,
+  TCreateMobileProjectServiceParams,
   TCreateProjectAttachmentServiceParams,
   TCreateProjectNoteServiceParams,
   TCreateProjectTaskServiceParams,
@@ -74,6 +80,7 @@ import {
   TGetScheduleServiceParams,
   TListMobileInspectionsServiceParams,
   TListMobilePhasesServiceParams,
+  TListProjectAttachmentsServiceParams,
   TManualTimeServiceParams,
   TMobileProjectServiceParams,
   TMobileUserServiceParams,
@@ -81,9 +88,12 @@ import {
   TStartTimerServiceParams,
   TStopTimerServiceParams,
   TSyncTimeLogsServiceParams,
+  TSetProjectAttachmentCoverServiceParams,
+  TUpdateMeasurementServiceParams,
   TUpdateMobilePhaseStatusServiceParams,
   TUpdateMobileProjectServiceParams,
   TUpdatePhaseDatesServiceParams,
+  TUpdateProjectNoteServiceParams,
 } from '@/app/modules/mobile/mobile.types';
 
 const timeLogInclude = {
@@ -320,39 +330,92 @@ export const getDashboardDataService = async ({
   const userId = user.id;
   const globalAccess = await hasSiteManagerGlobalAccess(user);
 
-  const [pendingInspections, upcomingPhases, activeProjectsCount] =
-    await Promise.all([
-      prisma.inspection.count({
-        where: {
-          siteManagerId: userId,
-          status: InspectionStatus.PENDING,
-          deletedAt: null,
+  const phaseScope = globalAccess
+    ? { project: { deletedAt: null } }
+    : {
+        project: { deletedAt: null },
+        OR: [
+          { crewAssignments: { some: { userId } } },
+          { project: { projectManagers: { some: { userId } } } },
+        ],
+      };
+
+  const [
+    pendingInspections,
+    upcomingPhases,
+    activeProjectsCount,
+    standingActiveSites,
+    erectionPhases,
+    dismantlingPhases,
+  ] = await Promise.all([
+    prisma.inspection.count({
+      where: {
+        siteManagerId: userId,
+        status: InspectionStatus.PENDING,
+        deletedAt: null,
+      },
+    }),
+    prisma.projectPhase.findMany({
+      where: {
+        status: { in: ACTIVE_PHASE_STATUSES },
+        ...phaseScope,
+      },
+      include: {
+        project: {
+          select: upcomingPhaseProjectSelect,
         },
-      }),
-      prisma.projectPhase.findMany({
-        where: {
-          status: { in: ACTIVE_PHASE_STATUSES },
-          project: { deletedAt: null },
-          ...(globalAccess
-            ? {}
-            : {
-                OR: [
-                  { crewAssignments: { some: { userId } } },
-                  { project: { projectManagers: { some: { userId } } } },
-                ],
-              }),
-        },
-        include: {
-          project: {
-            select: upcomingPhaseProjectSelect,
+      },
+      orderBy: [{ priority: 'asc' }, { startDate: 'asc' }],
+    }),
+    globalAccess
+      ? countActiveProjects()
+      : getAssignedProjectIds(userId).then((ids) => ids.length),
+    prisma.project.count({
+      where: {
+        deletedAt: null,
+        phases: {
+          some: {
+            type: PhaseType.STANDING,
+            status: { in: ACTIVE_PHASE_STATUSES },
           },
         },
-        orderBy: [{ priority: 'asc' }, { startDate: 'asc' }],
-      }),
-      globalAccess
-        ? countActiveProjects()
-        : getAssignedProjectIds(userId).then((ids) => ids.length),
-    ]);
+        ...(globalAccess
+          ? {}
+          : {
+              OR: [
+                { projectManagers: { some: { userId } } },
+                { phases: { some: { crewAssignments: { some: { userId } } } } },
+              ],
+            }),
+      },
+    }),
+    prisma.projectPhase.findMany({
+      where: { type: PhaseType.ERECTION, ...phaseScope },
+      select: { status: true },
+    }),
+    prisma.projectPhase.findMany({
+      where: { type: PhaseType.DISMANTLING, ...phaseScope },
+      select: { status: true },
+    }),
+  ]);
+
+  const countPlannedRunning = (
+    rows: Array<{ status: PhaseStatus }>
+  ): MobilePhaseTypeStatsDTO => {
+    let planned = 0;
+    let running = 0;
+    for (const row of rows) {
+      if (row.status === PhaseStatus.IN_PROGRESS) running += 1;
+      else if (
+        row.status === PhaseStatus.ENQUIRY ||
+        row.status === PhaseStatus.QUOTATION ||
+        row.status === PhaseStatus.ORDER_CONFIRMED
+      ) {
+        planned += 1;
+      }
+    }
+    return new MobilePhaseTypeStatsDTO(planned, running);
+  };
 
   const upcomingTasks = upcomingPhases.map(
     (phase) =>
@@ -379,51 +442,145 @@ export const getDashboardDataService = async ({
       new MobileMapPinDTO(
         phase.project.id,
         phase.project.name,
-        decimalToNumber(phase.project.latitude),
-        decimalToNumber(phase.project.longitude),
+        toCoordinates(
+          decimalToNumber(phase.project.latitude),
+          decimalToNumber(phase.project.longitude)
+        ),
         phase.type as PhaseType
       )
     );
   }
 
   return new MobileDashboardDTO(
-    new MobileDashboardStatsDTO(pendingInspections, activeProjectsCount),
+    new MobileDashboardStatsDTO(
+      pendingInspections,
+      activeProjectsCount,
+      standingActiveSites,
+      countPlannedRunning(erectionPhases),
+      countPlannedRunning(dismantlingPhases)
+    ),
     upcomingTasks,
     [...pinByProject.values()]
   );
 };
 
 /**
- * Builds Prisma `where` filters for deep project list filtering.
+ * Builds the Prisma `where` clause for a projects-list UI tab.
+ *
+ * @param {TGetMyProjectsServiceParams['query']['tab']} tab - Selected navigation tab.
+ * @param {string} userId - Authenticated user UUID (for `MY_PROJECTS`).
+ * @returns {Prisma.ProjectWhereInput} Tab-specific where fragment.
+ */
+const buildProjectTabWhere = (
+  tab: TGetMyProjectsServiceParams['query']['tab'],
+  userId: string
+): Prisma.ProjectWhereInput => {
+  switch (tab) {
+    case 'ACTIVE':
+      return {
+        deletedAt: null,
+        phases: {
+          some: {
+            status: {
+              in: [PhaseStatus.IN_PROGRESS, PhaseStatus.ORDER_CONFIRMED],
+            },
+          },
+        },
+      };
+    case 'MY_PROJECTS':
+      return {
+        deletedAt: null,
+        OR: [
+          { projectManagers: { some: { userId } } },
+          { phases: { some: { crewAssignments: { some: { userId } } } } },
+        ],
+      };
+    case 'THIS_WEEK': {
+      const startOfWeek = getUtcWeekStart();
+      const endOfWeek = getUtcWeekEndExclusive(startOfWeek);
+      return {
+        deletedAt: null,
+        phases: {
+          some: {
+            OR: [
+              { startDate: { gte: startOfWeek, lt: endOfWeek } },
+              { endDate: { gte: startOfWeek, lt: endOfWeek } },
+            ],
+          },
+        },
+      };
+    }
+    case 'INSPECTION':
+      return {
+        deletedAt: null,
+        customer: {
+          inspections: {
+            some: {
+              status: InspectionStatus.PENDING,
+              deletedAt: null,
+            },
+          },
+        },
+      };
+    case 'ALL':
+    default:
+      return { deletedAt: null };
+  }
+};
+
+/**
+ * Builds Prisma `where` filters for the filter-modal query params.
+ * Phase type/status/priority filters require at least one matching phase so the
+ * project is eligible; row-level phase filtering happens when flattening cards.
  *
  * @param {TGetMyProjectsServiceParams['query']} query - Validated list filters.
  * @returns {Prisma.ProjectWhereInput} Additional where clauses (AND-merged by caller).
  */
-const buildProjectListFilters = (
+const buildProjectModalFilters = (
   query: TGetMyProjectsServiceParams['query']
 ): Prisma.ProjectWhereInput => {
   const and: Prisma.ProjectWhereInput[] = [];
+  const phaseSome: Prisma.ProjectPhaseWhereInput = {};
 
-  if (query.phaseType) {
-    and.push({ phases: { some: { type: query.phaseType } } });
+  if (query.phaseTypes && query.phaseTypes.length > 0) {
+    phaseSome.type = { in: query.phaseTypes };
   }
-  if (query.priority) {
-    and.push({ phases: { some: { priority: query.priority } } });
+  if (query.phaseStatuses && query.phaseStatuses.length > 0) {
+    phaseSome.status = { in: query.phaseStatuses };
   }
-  if (query.category) {
-    and.push({ customer: { category: query.category, deletedAt: null } });
+  if (query.priorities && query.priorities.length > 0) {
+    phaseSome.priority = { in: query.priorities };
   }
-  if (query.city) {
+  if (Object.keys(phaseSome).length > 0) {
+    and.push({ phases: { some: phaseSome } });
+  }
+  if (query.categories && query.categories.length > 0) {
     and.push({
-      OR: [
-        { address: { contains: query.city, mode: 'insensitive' } },
-        {
-          customer: {
-            address: { contains: query.city, mode: 'insensitive' },
-            deletedAt: null,
-          },
-        },
-      ],
+      customer: {
+        category: { in: query.categories },
+        deletedAt: null,
+      },
+    });
+  }
+  if (query.search) {
+    and.push({
+      name: { contains: query.search, mode: 'insensitive' },
+    });
+  }
+  if (query.lat !== undefined && query.lng !== undefined) {
+    const radiusKm = query.radiusKm ?? 25;
+    const latDelta = radiusKm / 111;
+    const lngDelta =
+      radiusKm / (111 * Math.max(0.2, Math.cos((query.lat * Math.PI) / 180)));
+    and.push({
+      latitude: {
+        gte: new Prisma.Decimal(query.lat - latDelta),
+        lte: new Prisma.Decimal(query.lat + latDelta),
+      },
+      longitude: {
+        gte: new Prisma.Decimal(query.lng - lngDelta),
+        lte: new Prisma.Decimal(query.lng + lngDelta),
+      },
     });
   }
 
@@ -431,48 +588,88 @@ const buildProjectListFilters = (
 };
 
 /**
- * Earliest non-null phase startDate used as a next-inspection proxy for sorting.
+ * Returns whether a phase should become a list card under the modal filters.
  *
- * @param {{ startDate: Date | null }[]} phases - Project phases.
- * @returns {number} Epoch ms or `Number.POSITIVE_INFINITY` when none set.
+ * @param {{ type: PhaseType; status: PhaseStatus; priority: Priority }} phase - Phase fields.
+ * @param {TGetMyProjectsServiceParams['query']} query - Validated filters.
+ * @returns {boolean} True when the phase matches modal phase filters (or none set).
  */
-const nextInspectionSortKey = (
-  phases: Array<{ startDate: Date | null }>
-): number => {
-  const timestamps = phases
-    .map((phase) => phase.startDate?.getTime())
-    .filter((value): value is number => typeof value === 'number');
-  if (timestamps.length === 0) return Number.POSITIVE_INFINITY;
-  return Math.min(...timestamps);
+const phaseMatchesModalFilters = (
+  phase: { type: PhaseType; status: PhaseStatus; priority: Priority },
+  query: TGetMyProjectsServiceParams['query']
+): boolean => {
+  if (
+    query.phaseTypes &&
+    query.phaseTypes.length > 0 &&
+    !query.phaseTypes.includes(phase.type)
+  ) {
+    return false;
+  }
+  if (
+    query.phaseStatuses &&
+    query.phaseStatuses.length > 0 &&
+    !query.phaseStatuses.includes(phase.status)
+  ) {
+    return false;
+  }
+  if (
+    query.priorities &&
+    query.priorities.length > 0 &&
+    !query.priorities.includes(phase.priority)
+  ) {
+    return false;
+  }
+  return true;
 };
 
 /**
- * Lists projects for the mobile Projects tab with optional deep filters.
- * SITE_MANAGER + `GLOBAL_ACCESS` returns every non-deleted project with all
- * phases. Otherwise returns assignment-scoped projects (PM → all phases on
- * managed projects; crew → only assigned phases).
- * Project rows are built via `getProjectDto` so site managers receive
- * budget/logged/profitability fields while employees do not.
+ * Earliest pending customer inspection appointment used for `NEXT_INSPECTION` sort.
+ *
+ * @param {{ appointmentDate: Date }[]} inspections - Pending inspections on the customer.
+ * @returns {number} Epoch ms or `Number.POSITIVE_INFINITY` when none exist.
+ */
+const nextInspectionSortKey = (
+  inspections: Array<{ appointmentDate: Date }>
+): number => {
+  if (inspections.length === 0) return Number.POSITIVE_INFINITY;
+  return Math.min(...inspections.map((row) => row.appointmentDate.getTime()));
+};
+
+/**
+ * Lists projects as phase-centric cards for the mobile Projects tab.
+ * SITE_MANAGER + `GLOBAL_ACCESS` starts from all non-deleted projects; otherwise
+ * scopes to assignment (PM or crew). Tab + modal filters are AND-merged; each
+ * matching phase becomes one card so Flutter can render one card per phase.
  *
  * @param {TGetMyProjectsServiceParams} params - Authenticated user and filters.
- * @returns {Promise<MobileProjectDTO[]>} Role-aware mobile project rows.
+ * @returns {Promise<MobileProjectPhaseCardDTO[]>} Phase card rows.
  */
 export const getMyProjectsService = async ({
   user,
   query,
-}: TGetMyProjectsServiceParams): Promise<MobileProjectDTO[]> => {
+}: TGetMyProjectsServiceParams): Promise<MobileProjectPhaseCardDTO[]> => {
   const userId = user.id;
   const globalAccess = await hasSiteManagerGlobalAccess(user);
-  const filterWhere = buildProjectListFilters(query);
-  const sortBy = query.sortBy ?? 'newest';
+  const tabWhere = buildProjectTabWhere(query.tab ?? 'ALL', userId);
+  const modalWhere = buildProjectModalFilters(query);
+  const sortBy = query.sortBy ?? 'NEWEST';
 
   type TProjectListRow = {
     id: string;
     name: string;
-    address: string;
+    latitude: Prisma.Decimal | null;
+    longitude: Prisma.Decimal | null;
     budgetedHours: Prisma.Decimal | number;
-    updatedAt: Date;
-    customer: { id: string; name: string };
+    createdAt: Date;
+    customer: {
+      id: string;
+      name: string;
+      category: import('@prisma/client').CustomerCategory;
+      inspections: Array<{ appointmentDate: Date }>;
+    };
+    projectManagers: Array<{
+      user: { firstName: string; lastName: string };
+    }>;
     phases: Array<{
       id: string;
       type: PhaseType;
@@ -480,20 +677,46 @@ export const getMyProjectsService = async ({
       priority: Priority;
       startDate: Date | null;
       endDate: Date | null;
+      durationDays: Prisma.Decimal | null;
     }>;
+  };
+
+  const include = {
+    customer: {
+      select: {
+        id: true,
+        name: true,
+        category: true,
+        inspections: {
+          where: {
+            status: InspectionStatus.PENDING,
+            deletedAt: null,
+          },
+          select: { appointmentDate: true },
+          orderBy: { appointmentDate: 'asc' as const },
+        },
+      },
+    },
+    projectManagers: {
+      take: 1,
+      orderBy: { assignedAt: 'asc' as const },
+      select: {
+        user: { select: { firstName: true, lastName: true } },
+      },
+    },
+    phases: {
+      orderBy: { createdAt: 'desc' as const },
+    },
   };
 
   let scopedProjects: TProjectListRow[] = [];
 
   if (globalAccess) {
     scopedProjects = await prisma.project.findMany({
-      where: { deletedAt: null, ...filterWhere },
-      include: {
-        customer: { select: { id: true, name: true } },
-        phases: {
-          orderBy: { createdAt: 'desc' },
-        },
+      where: {
+        AND: [tabWhere, modalWhere],
       },
+      include,
     });
   } else {
     const assignedProjectIds = await getAssignedProjectIds(userId);
@@ -522,16 +745,13 @@ export const getMyProjectsService = async ({
 
     const projects = await prisma.project.findMany({
       where: {
-        id: { in: assignedProjectIds },
-        deletedAt: null,
-        ...filterWhere,
+        AND: [
+          { id: { in: assignedProjectIds } },
+          tabWhere,
+          modalWhere,
+        ],
       },
-      include: {
-        customer: { select: { id: true, name: true } },
-        phases: {
-          orderBy: { createdAt: 'desc' },
-        },
-      },
+      include,
     });
 
     scopedProjects = projects.map((project) => ({
@@ -542,26 +762,90 @@ export const getMyProjectsService = async ({
     }));
   }
 
-  if (sortBy === 'nameAZ') {
-    scopedProjects.sort((a, b) => a.name.localeCompare(b.name));
-  } else if (sortBy === 'nextInspectionDate') {
-    scopedProjects.sort(
-      (a, b) =>
-        nextInspectionSortKey(a.phases) - nextInspectionSortKey(b.phases)
-    );
-  } else {
-    scopedProjects.sort(
-      (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()
-    );
+  if (query.lat !== undefined && query.lng !== undefined) {
+    const radiusKm = query.radiusKm ?? 25;
+    scopedProjects = scopedProjects.filter((project) => {
+      const lat = decimalToNumber(project.latitude);
+      const lng = decimalToNumber(project.longitude);
+      if (lat === null || lng === null) return false;
+      return haversineKm(query.lat!, query.lng!, lat, lng) <= radiusKm;
+    });
   }
 
   const loggedByProject = await getLoggedHoursByProjectId(
     scopedProjects.map((project) => project.id)
   );
 
-  return scopedProjects.map((project) =>
-    getProjectDto(project, user.role, loggedByProject.get(project.id) ?? 0)
-  );
+  let cards: MobileProjectPhaseCardDTO[] = [];
+
+  for (const project of scopedProjects) {
+    const pm = project.projectManagers[0]?.user;
+    const assigneeName = pm ? `${pm.firstName} ${pm.lastName}` : null;
+    const logged = loggedByProject.get(project.id) ?? 0;
+    const budgeted = Number(project.budgetedHours);
+    const coordinates = toCoordinates(
+      decimalToNumber(project.latitude),
+      decimalToNumber(project.longitude)
+    );
+
+    for (const phase of project.phases) {
+      if (!phaseMatchesModalFilters(phase, query)) continue;
+
+      const card = new MobileProjectPhaseCardDTO(
+        phase.id,
+        phase.type,
+        phase.status,
+        phase.priority,
+        phase.startDate ? phase.startDate.toISOString() : null,
+        phase.endDate ? phase.endDate.toISOString() : null,
+        decimalToNumber(phase.durationDays),
+        project.id,
+        project.name,
+        coordinates,
+        {
+          id: project.customer.id,
+          name: project.customer.name,
+          category: project.customer.category,
+        },
+        assigneeName
+      );
+
+      if (user.role === Role.SITE_MANAGER) {
+        card.budgetedHours = budgeted;
+        card.totalLoggedHours = Number(logged.toFixed(2));
+        card.isProfitable = card.totalLoggedHours <= budgeted;
+      }
+
+      cards.push(card);
+    }
+  }
+
+  if (sortBy === 'NAME_AZ') {
+    cards.sort((a, b) => a.projectName.localeCompare(b.projectName));
+  } else if (sortBy === 'NEXT_INSPECTION') {
+    const nextByProject = new Map(
+      scopedProjects.map((project) => [
+        project.id,
+        nextInspectionSortKey(project.customer.inspections),
+      ])
+    );
+    cards.sort(
+      (a, b) =>
+        (nextByProject.get(a.projectId) ?? Number.POSITIVE_INFINITY) -
+        (nextByProject.get(b.projectId) ?? Number.POSITIVE_INFINITY)
+    );
+  } else {
+    const createdByProject = new Map(
+      scopedProjects.map((project) => [project.id, project.createdAt.getTime()])
+    );
+    cards.sort(
+      (a, b) =>
+        (createdByProject.get(b.projectId) ?? 0) -
+        (createdByProject.get(a.projectId) ?? 0)
+    );
+  }
+
+  return cards;
 };
 
 /**
@@ -1026,8 +1310,10 @@ export const getMapDataService = async ({
       new MobileMapProjectDTO(
         phase.project.id,
         phase.project.name,
-        decimalToNumber(phase.project.latitude),
-        decimalToNumber(phase.project.longitude),
+        toCoordinates(
+          decimalToNumber(phase.project.latitude),
+          decimalToNumber(phase.project.longitude)
+        ),
         phase.type
       )
     );
@@ -1108,25 +1394,33 @@ export const syncTimeLogsService = async ({
 };
 
 /**
- * Lists inspections assigned to the authenticated site manager
- * in `PENDING` or `SURVEY_DONE` status.
+ * Lists inspections assigned to the authenticated site manager.
+ * `status=PENDING` → PENDING only; `status=COMPLETED` → SURVEY_DONE + CONVERTED.
  *
- * @param {TListMobileInspectionsServiceParams} params - Authenticated site manager.
+ * @param {TListMobileInspectionsServiceParams} params - Site manager and status tab.
  * @returns {Promise<MobileInspectionDTO[]>} Assigned inspections for the survey list.
  */
 export const listMobileInspectionsService = async ({
   user,
+  query,
 }: TListMobileInspectionsServiceParams): Promise<MobileInspectionDTO[]> => {
+  const statusFilter =
+    query.status === 'COMPLETED'
+      ? {
+          status: {
+            in: [InspectionStatus.SURVEY_DONE, InspectionStatus.CONVERTED],
+          },
+        }
+      : { status: InspectionStatus.PENDING };
+
   const inspections = await prisma.inspection.findMany({
     where: {
       siteManagerId: user.id,
       deletedAt: null,
-      status: {
-        in: [InspectionStatus.PENDING, InspectionStatus.SURVEY_DONE],
-      },
+      ...statusFilter,
     },
     include: {
-      customer: { select: { id: true, name: true } },
+      customer: { select: { id: true, name: true, category: true } },
     },
     orderBy: { appointmentDate: 'asc' },
   });
@@ -1147,7 +1441,7 @@ export const getMobileInspectionByIdService = async ({
   const record = await prisma.inspection.findUniqueOrThrow({
     where: { id: inspection.id },
     include: {
-      customer: { select: { id: true, name: true } },
+      customer: { select: { id: true, name: true, category: true } },
     },
   });
 
@@ -1195,7 +1489,7 @@ export const completeMobileInspectionService = async ({
           status: InspectionStatus.SURVEY_DONE,
         },
         include: {
-          customer: { select: { id: true, name: true } },
+          customer: { select: { id: true, name: true, category: true } },
         },
       });
       return { inspection: updated, project: null as { id: string; name: string } | null };
@@ -1206,6 +1500,7 @@ export const completeMobileInspectionService = async ({
         customerId: inspection.customerId,
         name: projectName,
         address: inspection.address,
+        city: inspection.city,
         scaffoldArea: new Prisma.Decimal(payload.scaffoldArea),
         siteAccessNotes: payload.siteAccessInstructions,
       },
@@ -1248,9 +1543,10 @@ export const completeMobileInspectionService = async ({
         siteAccessInstructions: payload.siteAccessInstructions,
         specialRequirements: payload.specialRequirements,
         status: InspectionStatus.CONVERTED,
+        projectId: project.id,
       },
       include: {
-        customer: { select: { id: true, name: true } },
+        customer: { select: { id: true, name: true, category: true } },
       },
     });
 
@@ -1274,9 +1570,20 @@ export const completeMobileInspectionService = async ({
  */
 export const listMobilePhasesService = async ({
   user,
+  query,
 }: TListMobilePhasesServiceParams): Promise<MobileManagedPhaseDTO[]> => {
+  const columnWhere =
+    query.column === 'ENQUIRY'
+      ? { status: PhaseStatus.ENQUIRY }
+      : query.column === 'ERECTION' ||
+          query.column === 'DISMANTLING' ||
+          query.column === 'STANDING'
+        ? { type: query.column as PhaseType }
+        : {};
+
   const phases = await prisma.projectPhase.findMany({
     where: {
+      ...columnWhere,
       project: {
         deletedAt: null,
         projectManagers: {
@@ -1369,49 +1676,6 @@ export const updateMobilePhaseStatusService = async ({
       name: updated.project.name,
       address: updated.project.address,
     }
-  );
-};
-
-/**
- * Returns filter-modal options for the Site Manager projects list.
- * Cities are distinct tokens parsed from project and customer addresses within
- * the caller's accessible project scope.
- *
- * @param {TMobileUserServiceParams} params - Authenticated site manager.
- * @returns {Promise<MobileProjectFilterOptionsDTO>} Filter option bags.
- */
-export const getProjectFilterOptionsService = async ({
-  user,
-}: TMobileUserServiceParams): Promise<MobileProjectFilterOptionsDTO> => {
-  const globalAccess = await hasSiteManagerGlobalAccess(user);
-
-  const projects = await prisma.project.findMany({
-    where: globalAccess
-      ? { deletedAt: null }
-      : {
-          deletedAt: null,
-          id: { in: await getAssignedProjectIds(user.id) },
-        },
-    select: {
-      address: true,
-      customer: { select: { address: true } },
-    },
-  });
-
-  const citySet = new Set<string>();
-  for (const project of projects) {
-    const fromProject = extractCityFromAddress(project.address);
-    const fromCustomer = extractCityFromAddress(project.customer.address);
-    if (fromProject) citySet.add(fromProject);
-    if (fromCustomer) citySet.add(fromCustomer);
-  }
-
-  return new MobileProjectFilterOptionsDTO(
-    Object.values(PhaseType),
-    [...citySet].sort((a, b) => a.localeCompare(b)),
-    Object.values(Priority),
-    Object.values(CustomerCategory),
-    ['newest', 'nextInspectionDate', 'nameAZ']
   );
 };
 
@@ -1510,19 +1774,23 @@ export const deleteProjectTaskService = async ({
 };
 
 /**
- * Lists measurement line items for a project.
+ * Lists measurement line items for a project with total calculated area.
  *
  * @param {TMobileProjectServiceParams} params - Trusted accessible project.
- * @returns {Promise<MobileMeasurementDTO[]>} Measurement rows.
+ * @returns {Promise<MobileMeasurementsListDTO>} Items plus total area.
  */
 export const listProjectMeasurementsService = async ({
   project,
-}: TMobileProjectServiceParams): Promise<MobileMeasurementDTO[]> => {
+}: TMobileProjectServiceParams): Promise<MobileMeasurementsListDTO> => {
   const rows = await prisma.projectMeasurement.findMany({
     where: { projectId: project.id },
     orderBy: { createdAt: 'desc' },
   });
-  return rows.map((row) => MobileMeasurementDTO.build(row));
+  const items = rows.map((row) => MobileMeasurementDTO.build(row));
+  const totalArea = Number(
+    items.reduce((sum, row) => sum + row.area, 0).toFixed(2)
+  );
+  return new MobileMeasurementsListDTO(items, totalArea);
 };
 
 /**
@@ -1656,8 +1924,8 @@ export const deleteProjectNoteService = async ({
 };
 
 /**
- * Updates project contact fields and optionally the most recently updated phase's
- * type/status/priority (project settings screen).
+ * Elaborates project edit for all project fields except customer linkage.
+ * Optionally updates the most recently updated phase (type/status/priority/dates).
  *
  * @param {TUpdateMobileProjectServiceParams} params - Project and patch payload.
  * @returns {Promise<MobileProjectSettingsDTO>} Updated settings projection.
@@ -1667,29 +1935,58 @@ export const updateMobileProjectService = async ({
   payload,
 }: TUpdateMobileProjectServiceParams): Promise<MobileProjectSettingsDTO> => {
   const {
+    name,
+    coordinates,
+    budgetedHours,
+    scaffoldArea,
+    siteAccessCode,
+    siteAccessNotes,
     phaseType,
     status,
     priority,
-    contactName,
-    contactPhone,
-    contactEmail,
+    startDate,
+    endDate,
+    durationDays,
+    safetyInspectionComplete,
   } = payload;
 
   await prisma.$transaction(async (tx) => {
     await tx.project.update({
       where: { id: project.id },
       data: {
-        ...(contactName !== undefined ? { contactName } : {}),
-        ...(contactPhone !== undefined ? { contactPhone } : {}),
-        ...(contactEmail !== undefined ? { contactEmail } : {}),
+        ...(name !== undefined ? { name } : {}),
+        ...(coordinates !== undefined
+          ? coordinates === null
+            ? { latitude: null, longitude: null }
+            : {
+                latitude: new Prisma.Decimal(coordinates.lat),
+                longitude: new Prisma.Decimal(coordinates.lng),
+              }
+          : {}),
+        ...(budgetedHours !== undefined
+          ? { budgetedHours: new Prisma.Decimal(budgetedHours) }
+          : {}),
+        ...(scaffoldArea !== undefined
+          ? {
+              scaffoldArea:
+                scaffoldArea === null ? null : new Prisma.Decimal(scaffoldArea),
+            }
+          : {}),
+        ...(siteAccessCode !== undefined ? { siteAccessCode } : {}),
+        ...(siteAccessNotes !== undefined ? { siteAccessNotes } : {}),
       },
     });
 
-    if (
+    const touchesPhase =
       phaseType !== undefined ||
       status !== undefined ||
-      priority !== undefined
-    ) {
+      priority !== undefined ||
+      startDate !== undefined ||
+      endDate !== undefined ||
+      durationDays !== undefined ||
+      safetyInspectionComplete !== undefined;
+
+    if (touchesPhase) {
       const primaryPhase = await tx.projectPhase.findFirst({
         where: { projectId: project.id },
         orderBy: { updatedAt: 'desc' },
@@ -1702,6 +1999,19 @@ export const updateMobileProjectService = async ({
             ...(phaseType !== undefined ? { type: phaseType } : {}),
             ...(status !== undefined ? { status } : {}),
             ...(priority !== undefined ? { priority } : {}),
+            ...(startDate !== undefined ? { startDate } : {}),
+            ...(endDate !== undefined ? { endDate } : {}),
+            ...(durationDays !== undefined
+              ? {
+                  durationDays:
+                    durationDays === null
+                      ? null
+                      : new Prisma.Decimal(durationDays),
+                }
+              : {}),
+            ...(safetyInspectionComplete !== undefined
+              ? { safetyInspectionComplete }
+              : {}),
           },
         });
       }
@@ -1758,15 +2068,559 @@ export const createProjectAttachmentService = async ({
   project,
   payload,
 }: TCreateProjectAttachmentServiceParams): Promise<MobileAttachmentDTO> => {
-  const attachment = await prisma.attachment.create({
-    data: {
+  const makeCover =
+    payload.isCover === true && payload.category === AttachmentCategory.PHOTO;
+
+  const attachment = await prisma.$transaction(async (tx) => {
+    if (makeCover) {
+      await tx.attachment.updateMany({
+        where: {
+          projectId: project.id,
+          category: AttachmentCategory.PHOTO,
+          isCover: true,
+        },
+        data: { isCover: false },
+      });
+    }
+
+    return tx.attachment.create({
+      data: {
+        projectId: project.id,
+        url: payload.url,
+        fileType: payload.fileType,
+        fileName: payload.fileName,
+        fileSize: payload.fileSize,
+        isCover: makeCover,
+        category: payload.category,
+      },
+    });
+  });
+
+  return MobileAttachmentDTO.build(attachment);
+};
+
+/**
+ * Sets a project PHOTO attachment as the cover image (clears other covers).
+ *
+ * @param {TSetProjectAttachmentCoverServiceParams} params - Project and attachment.
+ * @returns {Promise<MobileAttachmentDTO>} Updated cover attachment.
+ */
+export const setProjectAttachmentCoverService = async ({
+  project,
+  attachment,
+}: TSetProjectAttachmentCoverServiceParams): Promise<MobileAttachmentDTO> => {
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.attachment.updateMany({
+      where: {
+        projectId: project.id,
+        category: AttachmentCategory.PHOTO,
+        isCover: true,
+      },
+      data: { isCover: false },
+    });
+
+    return tx.attachment.update({
+      where: { id: attachment.id },
+      data: { isCover: true },
+    });
+  });
+
+  return MobileAttachmentDTO.build(updated);
+};
+
+/**
+ * Returns project detail hub data for Overview and header badges.
+ *
+ * @param {TMobileProjectServiceParams} params - Trusted accessible project.
+ * @returns {Promise<MobileProjectDetailDTO>} Detail payload.
+ */
+
+/**
+ * Creates a project for a Site Manager from the Create New Project form.
+ * Location is taken from map `coordinates` (required). Optional `placeLabel`
+ * fills the DB `address` column; otherwise `"lat, lng"` is stored.
+ * Supports EXISTING or NEW customer, primary contact, erection/dismantling
+ * schedules, optional note, and optional photos.
+ *
+ * @param {TCreateMobileProjectServiceParams} params - Creator, assignee SM, optional customer, payload.
+ * @returns {Promise<MobileProjectDetailDTO>} Created project detail hub.
+ */
+export const createMobileProjectService = async ({
+  user,
+  siteManager,
+  payload,
+}: TCreateMobileProjectServiceParams): Promise<MobileProjectDetailDTO> => {
+  const address =
+    payload.placeLabel?.trim() ||
+    `${payload.coordinates.lat}, ${payload.coordinates.lng}`;
+  const priority = payload.priority ?? Priority.MEDIUM;
+  const phaseType = payload.phaseType ?? PhaseType.ERECTION;
+  const status = payload.status ?? PhaseStatus.ENQUIRY;
+
+  const endFromDuration = (start: Date, durationDays: number): Date => {
+    return new Date(start.getTime() + durationDays * 24 * 60 * 60 * 1000);
+  };
+
+  const projectId = await prisma.$transaction(async (tx) => {
+    let customerId: string;
+
+    if (payload.customer.mode === 'EXISTING') {
+      customerId = payload.customer.customerId;
+      await tx.customerContact.updateMany({
+        where: { customerId, isPrimary: true },
+        data: { isPrimary: false },
+      });
+      await tx.customerContact.create({
+        data: {
+          customerId,
+          name: payload.contact.name,
+          role: payload.contact.role ?? 'Project lead',
+          phone: payload.contact.phone,
+          email: payload.contact.email,
+          isPrimary: true,
+        },
+      });
+    } else {
+      const createdCustomer = await tx.customer.create({
+        data: {
+          name: payload.customer.name,
+          category: payload.customer.category ?? CustomerCategory.COMMERCIAL,
+          address,
+          latitude: new Prisma.Decimal(payload.coordinates.lat),
+          longitude: new Prisma.Decimal(payload.coordinates.lng),
+          contacts: {
+            create: {
+              name: payload.contact.name,
+              role: payload.contact.role ?? 'Project lead',
+              phone: payload.contact.phone,
+              email: payload.contact.email,
+              isPrimary: true,
+            },
+          },
+        },
+      });
+      customerId = createdCustomer.id;
+    }
+
+    const project = await tx.project.create({
+      data: {
+        customerId,
+        name: payload.name,
+        address,
+        latitude: new Prisma.Decimal(payload.coordinates.lat),
+        longitude: new Prisma.Decimal(payload.coordinates.lng),
+        scaffoldArea:
+          payload.scaffoldArea !== undefined
+            ? new Prisma.Decimal(payload.scaffoldArea)
+            : undefined,
+      },
+    });
+
+    await tx.projectManagerAssignment.create({
+      data: {
+        projectId: project.id,
+        userId: siteManager.id,
+      },
+    });
+
+    const scheduleFields = (
+      schedule: { startDate: Date; durationDays: number } | undefined
+    ) =>
+      schedule
+        ? {
+            startDate: schedule.startDate,
+            endDate: endFromDuration(schedule.startDate, schedule.durationDays),
+            durationDays: new Prisma.Decimal(schedule.durationDays),
+          }
+        : {};
+
+    const primarySchedule =
+      phaseType === PhaseType.DISMANTLING
+        ? payload.dismantling
+        : payload.erection;
+
+    await tx.projectPhase.create({
+      data: {
+        projectId: project.id,
+        type: phaseType,
+        status,
+        priority,
+        ...scheduleFields(primarySchedule),
+      },
+    });
+
+    if (payload.erection && phaseType !== PhaseType.ERECTION) {
+      await tx.projectPhase.create({
+        data: {
+          projectId: project.id,
+          type: PhaseType.ERECTION,
+          status: PhaseStatus.ENQUIRY,
+          priority,
+          ...scheduleFields(payload.erection),
+        },
+      });
+    }
+
+    if (payload.dismantling && phaseType !== PhaseType.DISMANTLING) {
+      await tx.projectPhase.create({
+        data: {
+          projectId: project.id,
+          type: PhaseType.DISMANTLING,
+          status: PhaseStatus.ENQUIRY,
+          priority,
+          ...scheduleFields(payload.dismantling),
+        },
+      });
+    }
+
+    if (payload.note) {
+      await tx.projectNote.create({
+        data: {
+          projectId: project.id,
+          authorId: user.id,
+          category: payload.note.category,
+          content: payload.note.content,
+        },
+      });
+      if (payload.note.category === ProjectNoteCategory.SITE_ACCESS) {
+        await tx.project.update({
+          where: { id: project.id },
+          data: { siteAccessNotes: payload.note.content },
+        });
+      }
+    }
+
+    if (payload.photos && payload.photos.length > 0) {
+      const coverIndex = payload.photos.findIndex((p) => p.isCover === true);
+      await tx.attachment.createMany({
+        data: payload.photos.map((photo, index) => ({
+          projectId: project.id,
+          url: photo.url,
+          fileType: photo.fileType,
+          fileName: photo.fileName,
+          fileSize: photo.fileSize,
+          category: AttachmentCategory.PHOTO,
+          isCover: coverIndex >= 0 ? index === coverIndex : index === 0,
+        })),
+      });
+    }
+
+    await tx.auditLog.create({
+      data: {
+        userId: user.id,
+        projectId: project.id,
+        action: 'MOBILE_PROJECT_CREATED',
+        details: JSON.stringify({
+          name: project.name,
+          customerId,
+          siteManagerId: siteManager.id,
+        }),
+      },
+    });
+
+    return project.id;
+  });
+
+  const created = await prisma.project.findUniqueOrThrow({
+    where: { id: projectId },
+  });
+
+  return getMobileProjectByIdService({ user, project: created });
+};
+
+export const getMobileProjectByIdService = async ({
+  project,
+}: TMobileProjectServiceParams): Promise<MobileProjectDetailDTO> => {
+  const [record, timeLogs, photoCount, pdfCount, measurements, nextInspection] =
+    await Promise.all([
+      prisma.project.findUniqueOrThrow({
+        where: { id: project.id },
+        include: {
+          phases: { orderBy: { updatedAt: 'desc' } },
+          customer: {
+            include: {
+              contacts: {
+                where: { isPrimary: true },
+                take: 1,
+              },
+            },
+          },
+        },
+      }),
+      prisma.timeLog.findMany({
+        where: { phase: { projectId: project.id } },
+        include: timeLogWithUserInclude,
+      }),
+      prisma.attachment.count({
+        where: { projectId: project.id, category: AttachmentCategory.PHOTO },
+      }),
+      prisma.attachment.count({
+        where: { projectId: project.id, category: AttachmentCategory.PDF_PLAN },
+      }),
+      prisma.projectMeasurement.findMany({
+        where: { projectId: project.id },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+      prisma.inspection.findFirst({
+        where: {
+          customerId: project.customerId,
+          status: InspectionStatus.PENDING,
+          deletedAt: null,
+        },
+        orderBy: { appointmentDate: 'asc' },
+        select: {
+          id: true,
+          appointmentDate: true,
+          siteTitle: true,
+          address: true,
+          city: true,
+        },
+      }),
+    ]);
+
+  const { totalLoggedHours, hoursByActivity } = aggregateLoggedHours(
+    timeLogs as TTimeLogWithBreaks[]
+  );
+  const budgetedHours = Number(record.budgetedHours);
+
+  const byUser = new Map<
+    string,
+    {
+      user: { id: string; firstName: string; lastName: string };
+      hours: number;
+      logs: typeof timeLogs;
+    }
+  >();
+
+  for (const log of timeLogs) {
+    const existing = byUser.get(log.userId);
+    const hours = calculateNetHours(log);
+    if (existing) {
+      existing.hours += hours;
+      existing.logs.push(log);
+      continue;
+    }
+    byUser.set(log.userId, {
+      user: {
+        id: log.user.id,
+        firstName: log.user.firstName,
+        lastName: log.user.lastName,
+      },
+      hours,
+      logs: [log],
+    });
+  }
+
+  const primary = record.customer.contacts[0] ?? null;
+  const primaryPhase = record.phases[0] ?? null;
+  const scaffoldType =
+    measurements.find((row) => row.scaffoldType)?.scaffoldType ?? null;
+  const scaffoldHeight = measurements.reduce<number | null>((max, row) => {
+    const height = Number(row.height);
+    if (max === null || height > max) return height;
+    return max;
+  }, null);
+
+  return new MobileProjectDetailDTO(
+    record.id,
+    record.name,
+    toCoordinates(
+      decimalToNumber(record.latitude),
+      decimalToNumber(record.longitude)
+    ),
+    record.siteAccessCode,
+    record.siteAccessNotes,
+    {
+      area: decimalToNumber(record.scaffoldArea),
+      height: scaffoldHeight,
+      type: scaffoldType,
+    },
+    {
+      startDate: primaryPhase?.startDate
+        ? primaryPhase.startDate.toISOString()
+        : null,
+      endDate: primaryPhase?.endDate ? primaryPhase.endDate.toISOString() : null,
+      durationDays: primaryPhase
+        ? decimalToNumber(primaryPhase.durationDays)
+        : null,
+    },
+    nextInspection
+      ? {
+          id: nextInspection.id,
+          appointmentDate: nextInspection.appointmentDate.toISOString(),
+          siteTitle: nextInspection.siteTitle,
+          address: nextInspection.address,
+          city: nextInspection.city,
+        }
+      : null,
+    budgetedHours,
+    Number(totalLoggedHours.toFixed(2)),
+    totalLoggedHours <= budgetedHours,
+    record.phases.map((phase) => MobilePhaseDatesDTO.build(phase)),
+    {
+      id: record.customer.id,
+      name: record.customer.name,
+      category: record.customer.category,
+      primaryContact: primary
+        ? {
+            name: primary.name,
+            phone: primary.phone,
+            email: primary.email,
+          }
+        : null,
+    },
+    hoursByActivity.map(
+      (row) => new MobileHoursByActivityDTO(row.activityType, row.hours)
+    ),
+    [...byUser.values()].map(
+      (row) =>
+        new MobileCrewBreakdownDTO(
+          row.user,
+          Number(row.hours.toFixed(2)),
+          row.logs.length > 0 && row.logs.every((log) => !!log.clientSyncId)
+        )
+    ),
+    { photos: photoCount, pdfPlans: pdfCount }
+  );
+};
+
+/**
+ * Lists project attachments, optionally filtered by PHOTO / PDF_PLAN.
+ *
+ * @param {TListProjectAttachmentsServiceParams} params - Project and optional category.
+ * @returns {Promise<MobileAttachmentDTO[]>} Attachment rows.
+ */
+export const listProjectAttachmentsService = async ({
+  project,
+  query,
+}: TListProjectAttachmentsServiceParams): Promise<MobileAttachmentDTO[]> => {
+  const rows = await prisma.attachment.findMany({
+    where: {
       projectId: project.id,
-      url: payload.url,
-      fileType: payload.fileType,
-      category: payload.category,
+      ...(query.category ? { category: query.category } : {}),
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+  return rows.map((row) => MobileAttachmentDTO.build(row));
+};
+
+/**
+ * Lists project audit history newest-first.
+ *
+ * @param {TMobileProjectServiceParams} params - Trusted accessible project.
+ * @returns {Promise<MobileProjectHistoryDTO[]>} History timeline rows.
+ */
+export const listProjectHistoryService = async ({
+  project,
+}: TMobileProjectServiceParams): Promise<MobileProjectHistoryDTO[]> => {
+  const rows = await prisma.auditLog.findMany({
+    where: { projectId: project.id },
+    include: {
+      user: {
+        select: { id: true, firstName: true, lastName: true, role: true },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  return rows.map(
+    (row) =>
+      new MobileProjectHistoryDTO(
+        row.id,
+        row.action,
+        row.details,
+        row.createdAt.toISOString(),
+        {
+          id: row.user.id,
+          firstName: row.user.firstName,
+          lastName: row.user.lastName,
+          role: row.user.role,
+        }
+      )
+  );
+};
+
+/**
+ * Updates a project note category and/or content.
+ *
+ * @param {TUpdateProjectNoteServiceParams} params - Note and patch payload.
+ * @returns {Promise<MobileProjectNoteDTO>} Updated note DTO.
+ */
+export const updateProjectNoteService = async ({
+  note,
+  payload,
+}: TUpdateProjectNoteServiceParams): Promise<MobileProjectNoteDTO> => {
+  const updated = await prisma.projectNote.update({
+    where: { id: note.id },
+    data: {
+      ...(payload.category !== undefined ? { category: payload.category } : {}),
+      ...(payload.content !== undefined ? { content: payload.content } : {}),
+    },
+    include: {
+      author: { select: { id: true, firstName: true, lastName: true } },
     },
   });
-  return MobileAttachmentDTO.build(attachment);
+  return MobileProjectNoteDTO.build(updated);
+};
+
+/**
+ * Updates a measurement line item and recalculates project scaffoldArea.
+ *
+ * @param {TUpdateMeasurementServiceParams} params - Project, measurement, payload.
+ * @returns {Promise<MobileMeasurementDTO>} Updated measurement DTO.
+ */
+export const updateProjectMeasurementService = async ({
+  project,
+  measurement,
+  payload,
+}: TUpdateMeasurementServiceParams): Promise<MobileMeasurementDTO> => {
+  const length =
+    payload.length !== undefined ? payload.length : Number(measurement.length);
+  const height =
+    payload.height !== undefined ? payload.height : Number(measurement.height);
+  const quantity =
+    payload.quantity !== undefined
+      ? payload.quantity
+      : Number(measurement.quantity);
+  const area = length * height * quantity;
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const row = await tx.projectMeasurement.update({
+      where: { id: measurement.id },
+      data: {
+        ...(payload.position !== undefined ? { position: payload.position } : {}),
+        ...(payload.length !== undefined
+          ? { length: new Prisma.Decimal(payload.length) }
+          : {}),
+        ...(payload.height !== undefined
+          ? { height: new Prisma.Decimal(payload.height) }
+          : {}),
+        ...(payload.quantity !== undefined
+          ? { quantity: new Prisma.Decimal(payload.quantity) }
+          : {}),
+        ...(payload.unit !== undefined ? { unit: payload.unit } : {}),
+        ...(payload.remark !== undefined ? { remark: payload.remark } : {}),
+        area: new Prisma.Decimal(area),
+      },
+    });
+
+    const aggregate = await tx.projectMeasurement.aggregate({
+      where: { projectId: project.id },
+      _sum: { area: true },
+    });
+
+    await tx.project.update({
+      where: { id: project.id },
+      data: {
+        scaffoldArea: aggregate._sum.area ?? new Prisma.Decimal(0),
+      },
+    });
+
+    return row;
+  });
+
+  return MobileMeasurementDTO.build(updated);
 };
 
 /**

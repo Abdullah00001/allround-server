@@ -1,22 +1,4 @@
 /**
- * Extracts a city-like token from a freeform address string.
- * Uses the last comma-separated segment when present; otherwise returns the trimmed address.
- *
- * @param {string | null | undefined} address - Freeform address.
- * @returns {string | null} Normalized city token or null when empty.
- */
-export const extractCityFromAddress = (
-  address: string | null | undefined
-): string | null => {
-  if (!address) return null;
-  const trimmed = address.trim();
-  if (!trimmed) return null;
-  const parts = trimmed.split(',').map((part) => part.trim()).filter(Boolean);
-  const city = parts.length > 1 ? parts[parts.length - 1] : trimmed;
-  return city.length > 0 ? city : null;
-};
-
-/**
  * Derives a short task title from a longer description (first line, max 80 chars).
  *
  * @param {string} description - Full task description.
@@ -129,4 +111,44 @@ export const getPeriodRange = (
   }
   const start = getUtcMonthStart(reference);
   return { start, endExclusive: getUtcMonthEndExclusive(start) };
+};
+
+/**
+ * Great-circle distance in kilometers between two WGS84 points (Haversine).
+ *
+ * @param {number} lat1 - Origin latitude.
+ * @param {number} lng1 - Origin longitude.
+ * @param {number} lat2 - Destination latitude.
+ * @param {number} lng2 - Destination longitude.
+ * @returns {number} Distance in kilometers.
+ */
+export const haversineKm = (
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number
+): number => {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const earthRadiusKm = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * earthRadiusKm * Math.asin(Math.min(1, Math.sqrt(a)));
+};
+
+/**
+ * Builds a `{ lat, lng }` coordinates object from optional decimal fields.
+ *
+ * @param {number | null} latitude - Latitude.
+ * @param {number | null} longitude - Longitude.
+ * @returns {{ lat: number; lng: number } | null} Coordinates object or null when either is missing.
+ */
+export const toCoordinates = (
+  latitude: number | null,
+  longitude: number | null
+): { lat: number; lng: number } | null => {
+  if (latitude === null || longitude === null) return null;
+  return { lat: latitude, lng: longitude };
 };

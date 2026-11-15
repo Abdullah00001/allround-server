@@ -65,16 +65,76 @@ export class MobileUpcomingTaskDTO {
 }
 
 /**
+ * Planned vs running counts for one phase type on the home dashboard.
+ */
+export class MobilePhaseTypeStatsDTO {
+  /**
+   * @param {number} planned - Phases scheduled but not yet `IN_PROGRESS`.
+   * @param {number} running - Phases with status `IN_PROGRESS`.
+   */
+  constructor(
+    public planned: number,
+    public running: number
+  ) {}
+}
+
+/**
  * Dashboard home stats.
  */
 export class MobileDashboardStatsDTO {
   /**
    * @param {number} pendingInspections - Pending inspections assigned to the user.
    * @param {number} assignedProjects - Distinct projects the user is assigned to.
+   * @param {number} standingActiveSites - Distinct projects with an active STANDING phase.
+   * @param {MobilePhaseTypeStatsDTO} erection - Planned/running ERECTION counts.
+   * @param {MobilePhaseTypeStatsDTO} dismantling - Planned/running DISMANTLING counts.
    */
   constructor(
     public pendingInspections: number,
-    public assignedProjects: number
+    public assignedProjects: number,
+    public standingActiveSites: number,
+    public erection: MobilePhaseTypeStatsDTO,
+    public dismantling: MobilePhaseTypeStatsDTO
+  ) {}
+}
+
+/**
+ * Phase-centric project list card (one row per phase).
+ */
+export class MobileProjectPhaseCardDTO {
+  /**
+   * @param {string} phaseId - Phase UUID.
+   * @param {PhaseType} type - Phase type.
+   * @param {PhaseStatus} status - Phase status.
+   * @param {Priority} priority - Phase priority.
+   * @param {string | null} startDate - ISO start date.
+   * @param {string | null} endDate - ISO end date.
+   * @param {number | null} durationDays - Phase duration in days.
+   * @param {string} projectId - Parent project UUID.
+   * @param {string} projectName - Project name.
+   * @param {{ lat: number; lng: number } | null} coordinates - Project geo coordinates.
+   * @param {{ id: string; name: string; category: CustomerCategory }} customer - Customer summary.
+   * @param {string | null} assigneeName - Primary project manager display name.
+   * @param {number} [budgetedHours] - Budget hours (site managers only).
+   * @param {number} [totalLoggedHours] - Approved logged hours (site managers only).
+   * @param {boolean} [isProfitable] - Logged hours within budget (site managers only).
+   */
+  constructor(
+    public phaseId: string,
+    public type: PhaseType,
+    public status: PhaseStatus,
+    public priority: Priority,
+    public startDate: string | null,
+    public endDate: string | null,
+    public durationDays: number | null,
+    public projectId: string,
+    public projectName: string,
+    public coordinates: { lat: number; lng: number } | null,
+    public customer: { id: string; name: string; category: CustomerCategory },
+    public assigneeName: string | null,
+    public budgetedHours?: number,
+    public totalLoggedHours?: number,
+    public isProfitable?: boolean
   ) {}
 }
 
@@ -85,15 +145,13 @@ export class MobileMapPinDTO {
   /**
    * @param {string} id - Project UUID.
    * @param {string} name - Project name.
-   * @param {number | null} latitude - Project latitude.
-   * @param {number | null} longitude - Project longitude.
+   * @param {{ lat: number; lng: number } | null} coordinates - Project geo coordinates.
    * @param {PhaseType} activePhaseType - Active phase type for the pin badge.
    */
   constructor(
     public id: string,
     public name: string,
-    public latitude: number | null,
-    public longitude: number | null,
+    public coordinates: { lat: number; lng: number } | null,
     public activePhaseType: PhaseType
   ) {}
 }
@@ -285,15 +343,13 @@ export class MobileMapProjectDTO {
   /**
    * @param {string} id - Project UUID.
    * @param {string} name - Project name.
-   * @param {number | null} latitude - Project latitude.
-   * @param {number | null} longitude - Project longitude.
+   * @param {{ lat: number; lng: number } | null} coordinates - Project geo coordinates.
    * @param {PhaseType} activePhaseType - Active phase type badge.
    */
   constructor(
     public id: string,
     public name: string,
-    public latitude: number | null,
-    public longitude: number | null,
+    public coordinates: { lat: number; lng: number } | null,
     public activePhaseType: PhaseType
   ) {}
 }
@@ -532,7 +588,8 @@ export class MobileInspectionDTO {
    * @param {string | null} siteAccessInstructions - Site access notes from survey.
    * @param {string | null} specialRequirements - Special requirements from survey.
    * @param {InspectionStatus} status - Inspection status.
-   * @param {{ id: string; name: string }} customer - Customer id/name.
+   * @param {string | null} projectId - Linked project after convert.
+   * @param {{ id: string; name: string; category?: CustomerCategory }} customer - Customer summary.
    * @param {string} createdAt - ISO creation timestamp.
    * @param {string} updatedAt - ISO update timestamp.
    * @param {{ id: string; name: string } | undefined} [convertedProject] - Project created when convertToProject ran.
@@ -550,7 +607,8 @@ export class MobileInspectionDTO {
     public siteAccessInstructions: string | null,
     public specialRequirements: string | null,
     public status: InspectionStatus,
-    public customer: { id: string; name: string },
+    public projectId: string | null,
+    public customer: { id: string; name: string; category?: CustomerCategory },
     public createdAt: string,
     public updatedAt: string,
     public convertedProject?: { id: string; name: string }
@@ -559,14 +617,22 @@ export class MobileInspectionDTO {
   /**
    * Builds a mobile inspection DTO.
    *
-   * @param {Inspection & { customer: { id: string; name: string } }} inspection - Inspection with customer.
+   * @param {Inspection & { customer: { id: string; name: string; category?: CustomerCategory } }} inspection - Inspection with customer.
    * @param {{ id: string; name: string } | undefined} [convertedProject] - Optional converted project summary.
    * @returns {MobileInspectionDTO} API-safe inspection object.
    */
   static build(
-    inspection: Inspection & { customer: { id: string; name: string } },
+    inspection: Inspection & {
+      customer: { id: string; name: string; category?: CustomerCategory };
+    },
     convertedProject?: { id: string; name: string }
   ) {
+    const linkedProject =
+      convertedProject ??
+      (inspection.projectId
+        ? { id: inspection.projectId, name: inspection.siteTitle }
+        : undefined);
+
     return new MobileInspectionDTO(
       inspection.id,
       inspection.siteTitle,
@@ -580,10 +646,17 @@ export class MobileInspectionDTO {
       inspection.siteAccessInstructions ?? null,
       inspection.specialRequirements ?? null,
       inspection.status,
-      { id: inspection.customer.id, name: inspection.customer.name },
+      inspection.projectId ?? null,
+      {
+        id: inspection.customer.id,
+        name: inspection.customer.name,
+        ...(inspection.customer.category
+          ? { category: inspection.customer.category }
+          : {}),
+      },
       inspection.createdAt.toISOString(),
       inspection.updatedAt.toISOString(),
-      convertedProject
+      linkedProject
     );
   }
 }
@@ -643,26 +716,6 @@ export class MobileConfigDTO {
     public enabledLanguages: Language[],
     public allowEmployeeManualTime: boolean,
     public legalContents: MobileLegalContentDTO[]
-  ) {}
-}
-
-/**
- * Filter-modal option bags for Site Manager project list.
- */
-export class MobileProjectFilterOptionsDTO {
-  /**
-   * @param {PhaseType[]} phases - Available phase types.
-   * @param {string[]} cities - Distinct cities derived from project/customer addresses.
-   * @param {Priority[]} priorities - Available priorities.
-   * @param {CustomerCategory[]} categories - Customer categories.
-   * @param {Array<'newest' | 'nextInspectionDate' | 'nameAZ'>} sortBy - Allowed sort keys.
-   */
-  constructor(
-    public phases: PhaseType[],
-    public cities: string[],
-    public priorities: Priority[],
-    public categories: CustomerCategory[],
-    public sortBy: Array<'newest' | 'nextInspectionDate' | 'nameAZ'>
   ) {}
 }
 
@@ -774,6 +827,20 @@ export class MobileProjectTasksListDTO {
 }
 
 /**
+ * Measurement list wrapper with total calculated area.
+ */
+export class MobileMeasurementsListDTO {
+  /**
+   * @param {MobileMeasurementDTO[]} items - Measurement line items.
+   * @param {number} totalArea - Sum of line-item areas (matches Project.scaffoldArea when in sync).
+   */
+  constructor(
+    public items: MobileMeasurementDTO[],
+    public totalArea: number
+  ) {}
+}
+
+/**
  * Measurement line-item DTO.
  */
 export class MobileMeasurementDTO {
@@ -875,63 +942,6 @@ export class MobileProjectNoteDTO {
 }
 
 /**
- * Project settings / detail DTO after patch.
- */
-export class MobileProjectSettingsDTO {
-  /**
-   * @param {string} id - Project UUID.
-   * @param {string} name - Project name.
-   * @param {string} address - Project address.
-   * @param {string | null} contactName - Site contact name.
-   * @param {string | null} contactPhone - Site contact phone.
-   * @param {string | null} contactEmail - Site contact email.
-   * @param {number | null} scaffoldArea - Aggregated scaffold area.
-   * @param {MobileProjectPhaseDTO[]} phases - Project phases.
-   */
-  constructor(
-    public id: string,
-    public name: string,
-    public address: string,
-    public contactName: string | null,
-    public contactPhone: string | null,
-    public contactEmail: string | null,
-    public scaffoldArea: number | null,
-    public phases: MobileProjectPhaseDTO[]
-  ) {}
-
-  /**
-   * Builds settings DTO from project + phases.
-   *
-   * @param {Project & { phases: ProjectPhase[] }} project - Project with phases.
-   * @returns {MobileProjectSettingsDTO} Settings projection.
-   */
-  static build(
-    project: Project & { phases: ProjectPhase[] }
-  ): MobileProjectSettingsDTO {
-    return new MobileProjectSettingsDTO(
-      project.id,
-      project.name,
-      project.address,
-      project.contactName,
-      project.contactPhone,
-      project.contactEmail,
-      decimalToNumber(project.scaffoldArea),
-      project.phases.map(
-        (phase) =>
-          new MobileProjectPhaseDTO(
-            phase.id,
-            phase.type,
-            phase.status,
-            phase.priority,
-            phase.startDate ? phase.startDate.toISOString() : null,
-            phase.endDate ? phase.endDate.toISOString() : null
-          )
-      )
-    );
-  }
-}
-
-/**
  * Phase dates DTO including safety inspection flag.
  */
 export class MobilePhaseDatesDTO {
@@ -978,6 +988,56 @@ export class MobilePhaseDatesDTO {
     );
   }
 }
+/**
+ * Project settings DTO after elaborate patch (excludes customer + redundant contacts).
+ * Contact info comes from `customer.primaryContact` on detail; location from `coordinates`.
+ */
+export class MobileProjectSettingsDTO {
+  /**
+   * @param {string} id - Project UUID.
+   * @param {string} name - Project name.
+   * @param {{ lat: number; lng: number } | null} coordinates - Geo coordinates.
+   * @param {number} budgetedHours - Labor budget hours.
+   * @param {number | null} scaffoldArea - Aggregated scaffold area.
+   * @param {string | null} siteAccessCode - Gate / access code.
+   * @param {string | null} siteAccessNotes - Access notes.
+   * @param {MobilePhaseDatesDTO[]} phases - Project phases with dates/safety.
+   */
+  constructor(
+    public id: string,
+    public name: string,
+    public coordinates: { lat: number; lng: number } | null,
+    public budgetedHours: number,
+    public scaffoldArea: number | null,
+    public siteAccessCode: string | null,
+    public siteAccessNotes: string | null,
+    public phases: MobilePhaseDatesDTO[]
+  ) {}
+
+  /**
+   * Builds settings DTO from project + phases.
+   *
+   * @param {Project & { phases: ProjectPhase[] }} project - Project with phases.
+   * @returns {MobileProjectSettingsDTO} Settings projection.
+   */
+  static build(
+    project: Project & { phases: ProjectPhase[] }
+  ): MobileProjectSettingsDTO {
+    const lat = decimalToNumber(project.latitude);
+    const lng = decimalToNumber(project.longitude);
+    return new MobileProjectSettingsDTO(
+      project.id,
+      project.name,
+      lat !== null && lng !== null ? { lat, lng } : null,
+      Number(project.budgetedHours),
+      decimalToNumber(project.scaffoldArea),
+      project.siteAccessCode,
+      project.siteAccessNotes,
+      project.phases.map((phase) => MobilePhaseDatesDTO.build(phase))
+    );
+  }
+}
+
 
 /**
  * Project attachment DTO.
@@ -987,6 +1047,9 @@ export class MobileAttachmentDTO {
    * @param {string} id - Attachment UUID.
    * @param {string} url - Public S3 URL.
    * @param {string} fileType - MIME / file type string.
+   * @param {string | null} fileName - Original file name.
+   * @param {number | null} fileSize - File size in bytes.
+   * @param {boolean} isCover - Whether this photo is the project cover image.
    * @param {AttachmentCategory} category - Attachment category.
    * @param {string | null} projectId - Linked project id.
    * @param {string | null} inspectionId - Linked inspection id.
@@ -996,6 +1059,9 @@ export class MobileAttachmentDTO {
     public id: string,
     public url: string,
     public fileType: string,
+    public fileName: string | null,
+    public fileSize: number | null,
+    public isCover: boolean,
     public category: AttachmentCategory,
     public projectId: string | null,
     public inspectionId: string | null,
@@ -1013,12 +1079,106 @@ export class MobileAttachmentDTO {
       attachment.id,
       attachment.url,
       attachment.fileType,
+      attachment.fileName,
+      attachment.fileSize,
+      attachment.isCover,
       attachment.category,
       attachment.projectId,
       attachment.inspectionId,
       attachment.createdAt.toISOString()
     );
   }
+}
+
+/**
+ * Project detail hub payload for Overview and header badges.
+ * Location via `coordinates`; contacts via `customer.primaryContact` (not duplicated).
+ */
+export class MobileProjectDetailDTO {
+  /**
+   * @param {string} id - Project UUID.
+   * @param {string} name - Project name.
+   * @param {{ lat: number; lng: number } | null} coordinates - Geo coordinates object.
+   * @param {string | null} siteAccessCode - Gate / access code.
+   * @param {string | null} siteAccessNotes - Access notes.
+   * @param {{ area: number | null; height: number | null; type: string | null }} scaffoldSpecification - Scaffold area/height/type.
+   * @param {{ startDate: string | null; endDate: string | null; durationDays: number | null }} schedule - Primary phase schedule summary.
+   * @param {{ id: string; appointmentDate: string; siteTitle: string; address: string; city: string | null } | null} nextSafetyInspection - Next pending customer inspection.
+   * @param {number} budgetedHours - Labor budget hours.
+   * @param {number} totalLoggedHours - Approved logged hours.
+   * @param {boolean} isProfitable - Whether logged hours are within budget.
+   * @param {MobilePhaseDatesDTO[]} phases - Project phases with dates/safety.
+   * @param {{ id: string; name: string; category: CustomerCategory; primaryContact: { name: string; phone: string | null; email: string | null } | null }} customer - Customer + primary contact.
+   * @param {MobileHoursByActivityDTO[]} hoursByActivity - Hours grouped by activity.
+   * @param {MobileCrewBreakdownDTO[]} crewBreakdown - Per-crew logged hours.
+   * @param {{ photos: number; pdfPlans: number }} attachmentCounts - Attachment tab badges.
+   */
+  constructor(
+    public id: string,
+    public name: string,
+    public coordinates: { lat: number; lng: number } | null,
+    public siteAccessCode: string | null,
+    public siteAccessNotes: string | null,
+    public scaffoldSpecification: {
+      area: number | null;
+      height: number | null;
+      type: string | null;
+    },
+    public schedule: {
+      startDate: string | null;
+      endDate: string | null;
+      durationDays: number | null;
+    },
+    public nextSafetyInspection: {
+      id: string;
+      appointmentDate: string;
+      siteTitle: string;
+      address: string;
+      city: string | null;
+    } | null,
+    public budgetedHours: number,
+    public totalLoggedHours: number,
+    public isProfitable: boolean,
+    public phases: MobilePhaseDatesDTO[],
+    public customer: {
+      id: string;
+      name: string;
+      category: CustomerCategory;
+      primaryContact: {
+        name: string;
+        phone: string | null;
+        email: string | null;
+      } | null;
+    },
+    public hoursByActivity: MobileHoursByActivityDTO[],
+    public crewBreakdown: MobileCrewBreakdownDTO[],
+    public attachmentCounts: { photos: number; pdfPlans: number }
+  ) {}
+}
+
+/**
+ * Project history / audit timeline row.
+ */
+export class MobileProjectHistoryDTO {
+  /**
+   * @param {string} id - Audit log UUID.
+   * @param {string} action - Action key.
+   * @param {string} details - Human-readable or JSON details.
+   * @param {string} createdAt - ISO timestamp.
+   * @param {{ id: string; firstName: string; lastName: string; role: Role }} user - Actor.
+   */
+  constructor(
+    public id: string,
+    public action: string,
+    public details: string,
+    public createdAt: string,
+    public user: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      role: Role;
+    }
+  ) {}
 }
 
 export { decimalToNumber };
