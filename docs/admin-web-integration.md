@@ -291,17 +291,37 @@ Status tabs map to the same Prisma enums the app uses: `PENDING` (Awaiting Surve
 
 Convert/delete errors: `INSPECTION_NOT_FOUND`, `INSPECTION_ALREADY_CONVERTED`.
 
-### 3.2 Projects & Kanban (phase status)
+### 3.2 Projects CRM (parity with mobile)
 
-| Method | Path | Body / query |
+Admin Projects reuses the same Prisma graph and mobile services for detail hub + child tabs. No synthetic `PRJ-…` codes — use UUID `id` / `projectId`.
+
+| Method | Path | Notes |
 | --- | --- | --- |
-| `GET` | `/admin/projects` | `page`, `limit`, optional `search` |
-| `GET` | `/admin/projects/:id` | — |
-| `PATCH` | `/admin/projects/:id` | optional `name`, `address`, `budgetedHours`, `siteAccessCode`, `siteAccessNotes` |
-| `POST` | `/admin/projects/:id/phases` | `type` (`PhaseType`), optional `priority`, `startDate`, `endDate` |
-| `PATCH` | `/admin/phases/:phaseId/status` | `status` (`ENQUIRY` \| `QUOTATION` \| `ORDER_CONFIRMED` \| `IN_PROGRESS` \| `COMPLETED` \| `POSTPONED`), optional dates/priority |
+| `GET` | `/admin/projects` | Phase cards + `tabCounts`. Query: `page`, `limit`, `search`, `tab` (`ALL` \| `ACTIVE` \| `INSPECTION` \| `URGENT` \| `COMPLETED`), optional `phaseType` / `status` / `priority` |
+| `POST` | `/admin/projects` | Same body as mobile create; **`siteManagerId` required**. Returns `MobileProjectDetailDTO` |
+| `GET` | `/admin/projects/:id` | Mobile hub DTO (Overview): `scheduleData`, `scaffoldSpecification`, hours, crew, `attachmentCounts`, `nextSafetyInspection` |
+| `PATCH` | `/admin/projects/:id` | Edit Master Data: `name`, `address`, `city`, `coordinates`, budget/scaffold/site access, optional primary-phase fields + `safetyInspectionComplete` |
+| `DELETE` | `/admin/projects/:id` | Soft delete (`deletedAt`) |
+| `POST` | `/admin/projects/:id/phases` | Kanban phase create |
+| `PATCH` | `/admin/phases/:phaseId/status` | Kanban drag-and-drop; optional `safetyInspectionComplete` |
+| `PATCH` | `/admin/projects/:projectId/phases/:phaseId/dates` | Dates tab (same body as mobile) |
+| `GET`/`POST` | `/admin/projects/:projectId/tasks` | Tasks tab; query `status=OPEN\|COMPLETED` optional |
+| `PATCH` | `/admin/tasks/:taskId/toggle` | Complete / reopen |
+| `DELETE` | `/admin/tasks/:taskId` | Delete task |
+| `GET`/`POST` | `/admin/projects/:projectId/measurements` | Measurement lines; area = L×H×qty |
+| `PATCH`/`DELETE` | `/admin/projects/:projectId/measurements/:id` | Edit / delete line |
+| `GET`/`POST` | `/admin/projects/:projectId/notes` | Notes (categories: Site Access, …) |
+| `PATCH`/`DELETE` | `/admin/projects/:projectId/notes/:id` | Edit / delete note |
+| `GET`/`POST` | `/admin/projects/:projectId/attachments` | Photos / PDF plans (`category`, `isCover`) |
+| `PATCH` | `/admin/projects/:projectId/attachments/:id/cover` | Set cover photo |
+| `DELETE` | `/admin/projects/:projectId/attachments/:id` | Delete attachment |
+| `GET` | `/admin/projects/:projectId/history` | Audit timeline |
 
-Use `PATCH /admin/phases/:phaseId/status` as the Kanban drag-and-drop commit.
+**List `data`:** `{ items: AdminProjectPhaseCardDTO[], tabCounts: { all, active, inspection, urgent, completed } }`.
+
+**Card fields:** phase + project identity, address/city, customer `{ id, name, category }`, `coverUrl`, `assignedCrew[]` (initials), `budgetedHours` / `totalLoggedHours` / `isProfitable` (APPROVED hours).
+
+Child list/create bodies match mobile (`docs/flutter-mobile-integration.md` project hub). Upload files via `POST /media` then register with attachment `url`.
 
 ### 3.3 Daily Planning (crew & vehicles)
 

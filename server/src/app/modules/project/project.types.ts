@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { Project, ProjectPhase, User } from '@prisma/client';
 import {
+  createAdminProjectSchema,
   createPhaseSchema,
   getProjectsQuerySchema,
   updatePhaseStatusSchema,
@@ -16,6 +17,11 @@ export type TGetProjectsQuery = z.infer<typeof getProjectsQuerySchema>;
  * Validated update-project request body.
  */
 export type TUpdateProjectPayload = z.infer<typeof updateProjectSchema>;
+
+/**
+ * Validated admin create-project body.
+ */
+export type TCreateAdminProjectPayload = z.infer<typeof createAdminProjectSchema>;
 
 /**
  * Validated create-phase request body.
@@ -67,6 +73,14 @@ export type TUpdateProjectServiceParams = {
   project: Project;
   /** Validated partial update payload. */
   payload: TUpdateProjectPayload;
+};
+
+/**
+ * Service params for soft-deleting a project.
+ */
+export type TDeleteProjectServiceParams = {
+  /** Trusted project from existence middleware. */
+  project: Project;
 };
 
 /**

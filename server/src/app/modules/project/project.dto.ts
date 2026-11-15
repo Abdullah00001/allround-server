@@ -1,5 +1,6 @@
 import {
   ActivityType,
+  CustomerCategory,
   PhaseStatus,
   PhaseType,
   Priority,
@@ -326,4 +327,104 @@ export class ProjectSummaryDTO {
       project.updatedAt
     );
   }
+}
+
+/**
+ * Compact assignee chip for admin project cards.
+ */
+export class AdminProjectAssigneeDTO {
+  /**
+   * @param {string} id - User UUID.
+   * @param {string} firstName - First name.
+   * @param {string} lastName - Last name.
+   * @param {string} initials - Two-letter avatar initials.
+   */
+  constructor(
+    public id: string,
+    public firstName: string,
+    public lastName: string,
+    public initials: string
+  ) {}
+}
+
+/**
+ * Admin Projects card-view row (one card per phase, matching mobile phase cards + admin extras).
+ */
+export class AdminProjectPhaseCardDTO {
+  /**
+   * @param {string} phaseId - Phase UUID.
+   * @param {PhaseType} type - Phase type.
+   * @param {PhaseStatus} status - Phase status.
+   * @param {Priority} priority - Phase priority.
+   * @param {string | null} startDate - ISO start date.
+   * @param {string | null} endDate - ISO end date.
+   * @param {number | null} durationDays - Phase duration in days.
+   * @param {string} projectId - Parent project UUID.
+   * @param {string} projectName - Project name.
+   * @param {string} address - Project street address.
+   * @param {string | null} city - Optional city.
+   * @param {{ lat: number; lng: number } | null} coordinates - Geo coordinates.
+   * @param {{ id: string; name: string; category: CustomerCategory }} customer - Customer summary.
+   * @param {string | null} assigneeName - Primary site-manager display name.
+   * @param {AdminProjectAssigneeDTO[]} assignedCrew - Crew chips for the card footer.
+   * @param {string | null} coverUrl - Cover PHOTO url when set.
+   * @param {number} budgetedHours - Labor budget hours.
+   * @param {number} totalLoggedHours - Approved logged hours.
+   * @param {boolean} isProfitable - Logged hours within budget.
+   */
+  constructor(
+    public phaseId: string,
+    public type: PhaseType,
+    public status: PhaseStatus,
+    public priority: Priority,
+    public startDate: string | null,
+    public endDate: string | null,
+    public durationDays: number | null,
+    public projectId: string,
+    public projectName: string,
+    public address: string,
+    public city: string | null,
+    public coordinates: { lat: number; lng: number } | null,
+    public customer: { id: string; name: string; category: CustomerCategory },
+    public assigneeName: string | null,
+    public assignedCrew: AdminProjectAssigneeDTO[],
+    public coverUrl: string | null,
+    public budgetedHours: number,
+    public totalLoggedHours: number,
+    public isProfitable: boolean
+  ) {}
+}
+
+/**
+ * Tab badge counts for the admin Projects filter strip.
+ */
+export class AdminProjectTabCountsDTO {
+  /**
+   * @param {number} all - All phase cards.
+   * @param {number} active - Active (in progress / order confirmed).
+   * @param {number} inspection - Projects with a pending customer inspection.
+   * @param {number} urgent - High-priority phases.
+   * @param {number} completed - Completed phases.
+   */
+  constructor(
+    public all: number,
+    public active: number,
+    public inspection: number,
+    public urgent: number,
+    public completed: number
+  ) {}
+}
+
+/**
+ * Paginated admin projects list payload with tab counts.
+ */
+export class AdminProjectListDTO {
+  /**
+   * @param {AdminProjectPhaseCardDTO[]} items - Page of phase cards.
+   * @param {AdminProjectTabCountsDTO} tabCounts - Filter-strip badges.
+   */
+  constructor(
+    public items: AdminProjectPhaseCardDTO[],
+    public tabCounts: AdminProjectTabCountsDTO
+  ) {}
 }

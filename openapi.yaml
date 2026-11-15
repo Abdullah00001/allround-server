@@ -3437,7 +3437,12 @@ paths:
     get:
       tags: [Project]
       summary: List projects
-      description: Returns paginated non-deleted projects with customer name and all phases ordered by createdAt desc. Optional case-insensitive name search.
+      description: >
+        Returns paginated phase-centric project cards for the admin Projects UI
+        (cover, address, customer category, assignee chips, logged hours) plus
+        `tabCounts` for All / Active / Inspection Due / Urgent / Completed.
+        Multi-field search covers name, address, city, contact, customer, and site manager.
+        Same underlying Project graph as mobile `GET /mobile/projects`.
       operationId: listProjects
       security:
         - adminAuth: []
@@ -3464,6 +3469,27 @@ paths:
           name: search
           schema:
             type: string
+        - in: query
+          name: tab
+          schema:
+            type: string
+            enum: [ALL, ACTIVE, INSPECTION, URGENT, COMPLETED]
+            default: ALL
+        - in: query
+          name: phaseType
+          schema:
+            type: string
+            enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [ENQUIRY, QUOTATION, ORDER_CONFIRMED, IN_PROGRESS, COMPLETED, POSTPONED]
+        - in: query
+          name: priority
+          schema:
+            type: string
+            enum: [HIGH, MEDIUM, LOW]
       responses:
         '200':
           description: Projects fetched successfully
@@ -3520,11 +3546,74 @@ paths:
                 message: 'Internal Server Error'
                 errorType: 'SERVER_ERROR'
                 traceId: '123e4567-e89b-12d3-a456-426614174000'
+    post:
+      tags: [Project]
+      summary: Create project
+      description: >
+        Creates a project using the same payload and service as mobile
+        `POST /mobile/projects`. Admin must supply `siteManagerId` (assignee PM).
+        Customer mode EXISTING|NEW, scheduleData, optional note/photos supported.
+      operationId: createAdminProject
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMobileProjectRequest'
+      responses:
+        '201':
+          description: Project created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetProjectResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Customer or site manager not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
   /api/v1/admin/projects/{id}:
     get:
       tags: [Project]
       summary: Get project by id
-      description: Returns project master data, customer, all phases, totalLoggedHours, hoursByActivity, and assignedCrew (crew assignments + project managers). Relies on checkProjectExistenceMiddleware for 404.
+      description: >
+        Returns the mobile project hub DTO (`MobileProjectDetailDTO`) used by
+        Overview / header badges — scheduleData, scaffoldSpecification,
+        hoursByActivity, crewBreakdown, attachmentCounts, nextSafetyInspection.
+        Same shape as `GET /mobile/projects/{projectId}`.
       operationId: getProjectById
       security:
         - adminAuth: []
@@ -3710,6 +3799,72 @@ paths:
                 message: 'Internal Server Error'
                 errorType: 'SERVER_ERROR'
                 traceId: '123e4567-e89b-12d3-a456-426614174000'
+    delete:
+      tags: [Project]
+      summary: Soft-delete project
+      description: Sets `deletedAt` on the project. Child CRM rows are retained for audit.
+      operationId: deleteAdminProject
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Project deleted successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    required: [data]
+                    properties:
+                      message: { type: string, example: 'Project deleted successfully.' }
+                      data:
+                        type: object
+                        required: [id]
+                        properties:
+                          id: { type: string, format: uuid }
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Request params validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
   /api/v1/admin/projects/{id}/phases:
     post:
       tags: [Project]
@@ -9824,9 +9979,22 @@ components:
         address:
           type: string
           example: 'Hauptstr. 10, 10115 Berlin'
+        city:
+          type: string
+          nullable: true
+          example: 'Berlin'
+        coordinates:
+          type: object
+          nullable: true
+          properties:
+            lat: { type: number }
+            lng: { type: number }
         budgetedHours:
           type: number
           example: 120
+        scaffoldArea:
+          type: number
+          nullable: true
         siteAccessCode:
           type: string
           nullable: true
@@ -9835,7 +10003,29 @@ components:
           type: string
           nullable: true
           example: 'Call site manager on arrival'
-      description: At least one field is required.
+        phaseType:
+          type: string
+          enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
+        status:
+          type: string
+          enum: [ENQUIRY, QUOTATION, ORDER_CONFIRMED, IN_PROGRESS, COMPLETED, POSTPONED]
+        priority:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+        startDate:
+          type: string
+          format: date-time
+          nullable: true
+        endDate:
+          type: string
+          format: date-time
+          nullable: true
+        durationDays:
+          type: number
+          nullable: true
+        safetyInspectionComplete:
+          type: boolean
+      description: At least one field is required (Edit Master Data).
     CreatePhaseRequest:
       type: object
       required: [type]
@@ -9873,6 +10063,9 @@ components:
         priority:
           type: string
           enum: [HIGH, MEDIUM, LOW]
+        safetyInspectionComplete:
+          type: boolean
+          description: Mark next safety inspection complete (Dates tab).
     ProjectCustomerDTO:
       type: object
       required: [id, name]
@@ -10065,6 +10258,97 @@ components:
         updatedAt:
           type: string
           format: date-time
+    AdminProjectAssigneeDTO:
+      type: object
+      required: [id, firstName, lastName, initials]
+      properties:
+        id: { type: string, format: uuid }
+        firstName: { type: string }
+        lastName: { type: string }
+        initials: { type: string, example: 'MY' }
+    AdminProjectPhaseCardDTO:
+      type: object
+      required:
+        - phaseId
+        - type
+        - status
+        - priority
+        - startDate
+        - endDate
+        - durationDays
+        - projectId
+        - projectName
+        - address
+        - city
+        - coordinates
+        - customer
+        - assigneeName
+        - assignedCrew
+        - coverUrl
+        - budgetedHours
+        - totalLoggedHours
+        - isProfitable
+      properties:
+        phaseId: { type: string, format: uuid }
+        type:
+          type: string
+          enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
+        status:
+          type: string
+          enum: [ENQUIRY, QUOTATION, ORDER_CONFIRMED, IN_PROGRESS, COMPLETED, POSTPONED]
+        priority:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+        startDate: { type: string, format: date-time, nullable: true }
+        endDate: { type: string, format: date-time, nullable: true }
+        durationDays: { type: number, nullable: true }
+        projectId: { type: string, format: uuid }
+        projectName: { type: string }
+        address: { type: string }
+        city: { type: string, nullable: true }
+        coordinates:
+          type: object
+          nullable: true
+          properties:
+            lat: { type: number }
+            lng: { type: number }
+        customer:
+          type: object
+          required: [id, name, category]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            category:
+              type: string
+              enum: [COMMERCIAL, PRIVATE, PUBLIC]
+        assigneeName: { type: string, nullable: true }
+        assignedCrew:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminProjectAssigneeDTO'
+        coverUrl: { type: string, nullable: true }
+        budgetedHours: { type: number }
+        totalLoggedHours: { type: number }
+        isProfitable: { type: boolean }
+    AdminProjectTabCountsDTO:
+      type: object
+      required: [all, active, inspection, urgent, completed]
+      properties:
+        all: { type: integer }
+        active: { type: integer }
+        inspection: { type: integer }
+        urgent: { type: integer }
+        completed: { type: integer }
+    AdminProjectListDTO:
+      type: object
+      required: [items, tabCounts]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminProjectPhaseCardDTO'
+        tabCounts:
+          $ref: '#/components/schemas/AdminProjectTabCountsDTO'
     ListProjectsResponse:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
@@ -10077,9 +10361,7 @@ components:
             meta:
               $ref: '#/components/schemas/PaginationMeta'
             data:
-              type: array
-              items:
-                $ref: '#/components/schemas/ProjectListItemDTO'
+              $ref: '#/components/schemas/AdminProjectListDTO'
     GetProjectResponse:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
@@ -10090,7 +10372,7 @@ components:
               type: string
               example: 'Project fetched successfully.'
             data:
-              $ref: '#/components/schemas/ProjectDetailDTO'
+              $ref: '#/components/schemas/MobileProjectDetailDTO'
     UpdateProjectResponse:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
