@@ -1,10 +1,14 @@
 import {
+  AbsenceType,
   CrewAssignment,
+  Customer,
+  CustomerCategory,
   PhaseStatus,
   PhaseType,
   Priority,
   Project,
   ProjectPhase,
+  Role,
   User,
   Vehicle,
   VehicleAssignment,
@@ -166,6 +170,30 @@ export class DailyPlanVehicleAssignmentDTO {
 }
 
 /**
+ * Customer reference nested under a daily plan project.
+ */
+export class DailyPlanCustomerDTO {
+  /**
+   * @param {string} id - Customer UUID.
+   * @param {string} name - Customer name.
+   * @param {CustomerCategory} category - Customer category.
+   */
+  constructor(
+    public id: string,
+    public name: string,
+    public category: CustomerCategory
+  ) {}
+
+  static build(customer: Pick<Customer, 'id' | 'name' | 'category'>) {
+    return new DailyPlanCustomerDTO(
+      customer.id,
+      customer.name,
+      customer.category
+    );
+  }
+}
+
+/**
  * Project summary nested under a daily plan phase.
  */
 export class DailyPlanProjectDTO {
@@ -173,21 +201,48 @@ export class DailyPlanProjectDTO {
    * @param {string} id - Project UUID.
    * @param {string} name - Project name.
    * @param {string} address - Project address.
+   * @param {DailyPlanCustomerDTO | null} customer - Linked customer.
+   * @param {PlanningUserDTO | null} siteManager - Assigned site manager.
+   * @param {string} workingHours - Operating working hours.
    */
   constructor(
     public id: string,
     public name: string,
-    public address: string
+    public address: string,
+    public customer: DailyPlanCustomerDTO | null = null,
+    public siteManager: PlanningUserDTO | null = null,
+    public workingHours: string = '07:30 am - 04:30 pm'
   ) {}
 
   /**
    * Builds a project summary DTO.
    *
-   * @param {Pick<Project, 'id' | 'name' | 'address'>} project - Project fields.
+   * @param {Pick<Project, 'id' | 'name' | 'address'> & { customer?: Pick<Customer, 'id' | 'name' | 'category'> | null; projectManagers?: Array<{ manager: Pick<User, 'id' | 'firstName' | 'lastName' | 'avatarUrl'> }> }} project - Project fields with relations.
    * @returns {DailyPlanProjectDTO} API-safe project summary.
    */
-  static build(project: Pick<Project, 'id' | 'name' | 'address'>) {
-    return new DailyPlanProjectDTO(project.id, project.name, project.address);
+  static build(
+    project: Pick<Project, 'id' | 'name' | 'address'> & {
+      customer?: Pick<Customer, 'id' | 'name' | 'category'> | null;
+      projectManagers?: Array<{
+        user: Pick<User, 'id' | 'firstName' | 'lastName' | 'avatarUrl'>;
+      }>;
+    }
+  ) {
+    const siteManager = project.projectManagers?.[0]?.user
+      ? PlanningUserDTO.build(project.projectManagers[0].user)
+      : null;
+    const customer = project.customer
+      ? DailyPlanCustomerDTO.build(project.customer)
+      : null;
+
+    return new DailyPlanProjectDTO(
+      project.id,
+      project.name,
+      project.address,
+      customer,
+      siteManager,
+      '07:30 am - 04:30 pm'
+    );
   }
 }
 
@@ -221,12 +276,17 @@ export class DailyPlanPhaseDTO {
   /**
    * Builds a daily plan phase DTO from Prisma phase + day-scoped assignments.
    *
-   * @param {ProjectPhase & { project: Pick<Project, 'id' | 'name' | 'address'>; crewAssignments: Array<CrewAssignment & { user: Pick<User, 'id' | 'firstName' | 'lastName' | 'avatarUrl'> }>; vehicleAssignments: Array<VehicleAssignment & { vehicle: Pick<Vehicle, 'id' | 'name' | 'plateNumber' | 'imageUrl'>; user: Pick<User, 'id' | 'firstName' | 'lastName' | 'avatarUrl'> }> }} phase - Phase with nested data.
+   * @param {ProjectPhase & { project: Pick<Project, 'id' | 'name' | 'address'> & { customer?: Pick<Customer, 'id' | 'name' | 'category'> | null; projectManagers?: Array<{ manager: Pick<User, 'id' | 'firstName' | 'lastName' | 'avatarUrl'> }> }; crewAssignments: Array<CrewAssignment & { user: Pick<User, 'id' | 'firstName' | 'lastName' | 'avatarUrl'> }>; vehicleAssignments: Array<VehicleAssignment & { vehicle: Pick<Vehicle, 'id' | 'name' | 'plateNumber' | 'imageUrl'>; user: Pick<User, 'id' | 'firstName' | 'lastName' | 'avatarUrl'> }> }} phase - Phase with nested data.
    * @returns {DailyPlanPhaseDTO} API-safe daily plan phase card.
    */
   static build(
     phase: ProjectPhase & {
-      project: Pick<Project, 'id' | 'name' | 'address'>;
+      project: Pick<Project, 'id' | 'name' | 'address'> & {
+        customer?: Pick<Customer, 'id' | 'name' | 'category'> | null;
+        projectManagers?: Array<{
+          user: Pick<User, 'id' | 'firstName' | 'lastName' | 'avatarUrl'>;
+        }>;
+      };
       crewAssignments: Array<
         CrewAssignment & {
           user: Pick<User, 'id' | 'firstName' | 'lastName' | 'avatarUrl'>;
@@ -255,34 +315,248 @@ export class DailyPlanPhaseDTO {
 }
 
 /**
+ * Detailed employee resource status for the assign modal.
+ */
+export class AvailableEmployeeResourceDTO {
+  /**
+   * @param {string} id - User UUID.
+   * @param {string} firstName - First name.
+   * @param {string} lastName - Last name.
+   * @param {string | null} avatarUrl - Avatar URL or null.
+   * @param {Role} role - User role (EMPLOYEE or SITE_MANAGER).
+   * @param {'AVAILABLE' | 'ASSIGNED' | 'PARTIALLY_ASSIGNED' | 'VACATION' | 'SICK_LEAVE'} status - Daily status key.
+   * @param {string} statusLabel - Human-readable label (e.g. 'Available', 'Assigned', 'Vacation', 'Available - also on other tasks (4h)').
+   * @param {boolean} isAssignedToPhase - True when worker already assigned to target phase.
+   * @param {number | null} assignedHoursOnPhase - Planned hours on target phase if already added.
+   * @param {number} totalAssignedHours - Total hours planned across all tasks on date.
+   */
+  constructor(
+    public id: string,
+    public firstName: string,
+    public lastName: string,
+    public avatarUrl: string | null,
+    public role: Role,
+    public status:
+      | 'AVAILABLE'
+      | 'ASSIGNED'
+      | 'PARTIALLY_ASSIGNED'
+      | 'VACATION'
+      | 'SICK_LEAVE',
+    public statusLabel: string,
+    public isAssignedToPhase: boolean,
+    public assignedHoursOnPhase: number | null,
+    public totalAssignedHours: number
+  ) {}
+}
+
+/**
+ * Detailed vehicle resource status for the assign modal.
+ */
+export class AvailableVehicleResourceDTO {
+  /**
+   * @param {string} id - Vehicle UUID.
+   * @param {string} name - Vehicle name.
+   * @param {string} plateNumber - License plate.
+   * @param {string | null} imageUrl - Vehicle image URL.
+   * @param {'AVAILABLE' | 'ASSIGNED' | 'MAINTENANCE'} status - Status key.
+   * @param {boolean} isAssignedToPhase - True when vehicle assigned to target phase.
+   * @param {string | null} assignedProjectName - Other project name if assigned elsewhere.
+   */
+  constructor(
+    public id: string,
+    public name: string,
+    public plateNumber: string,
+    public imageUrl: string | null,
+    public status: 'AVAILABLE' | 'ASSIGNED' | 'MAINTENANCE',
+    public isAssignedToPhase: boolean,
+    public assignedProjectName: string | null
+  ) {}
+}
+
+/**
  * Available resources payload for the assign modal.
  */
 export class AvailableResourcesDTO {
   /**
-   * @param {PlanningUserDTO[]} employees - Available employees/site managers.
-   * @param {PlanningVehicleDTO[]} vehicles - Available vehicles for the date.
+   * @param {AvailableEmployeeResourceDTO[]} employees - Workforce list with status.
+   * @param {AvailableVehicleResourceDTO[]} vehicles - Fleet list with status.
    */
   constructor(
-    public employees: PlanningUserDTO[],
-    public vehicles: PlanningVehicleDTO[]
+    public employees: AvailableEmployeeResourceDTO[],
+    public vehicles: AvailableVehicleResourceDTO[]
   ) {}
+}
 
+/**
+ * Summary metrics cards across the top of the daily planning board.
+ */
+export class DailyPlanSummaryDTO {
   /**
-   * Builds the available-resources DTO.
-   *
-   * @param {Array<Pick<User, 'id' | 'firstName' | 'lastName' | 'avatarUrl'>>} employees - Eligible users.
-   * @param {Array<Pick<Vehicle, 'id' | 'name' | 'plateNumber' | 'imageUrl'>>} vehicles - Eligible vehicles.
-   * @returns {AvailableResourcesDTO} API-safe resources payload.
+   * @param {number} totalWorkers - Total active workers.
+   * @param {number} availableWorkers - Active workers with capacity.
+   * @param {number} assignedWorkers - Workers assigned to at least one phase today.
+   * @param {number} absentWorkers - Workers on vacation or sick leave today.
    */
-  static build(
-    employees: Array<Pick<User, 'id' | 'firstName' | 'lastName' | 'avatarUrl'>>,
-    vehicles: Array<Pick<Vehicle, 'id' | 'name' | 'plateNumber' | 'imageUrl'>>
-  ) {
-    return new AvailableResourcesDTO(
-      employees.map(PlanningUserDTO.build),
-      vehicles.map(PlanningVehicleDTO.build)
-    );
-  }
+  constructor(
+    public totalWorkers: number,
+    public availableWorkers: number,
+    public assignedWorkers: number,
+    public absentWorkers: number
+  ) {}
+}
+
+/**
+ * Employee entry in the daily planning right sidebar.
+ */
+export class DailyPlanSidebarEmployeeDTO {
+  /**
+   * @param {string} id - User UUID.
+   * @param {string} firstName - First name.
+   * @param {string} lastName - Last name.
+   * @param {string | null} avatarUrl - Avatar URL.
+   * @param {Role} role - Worker role.
+   * @param {'ASSIGNED' | 'UNASSIGNED' | 'VACATION' | 'SICK_LEAVE'} status - Daily status.
+   * @param {number} totalHours - Total hours assigned on date.
+   */
+  constructor(
+    public id: string,
+    public firstName: string,
+    public lastName: string,
+    public avatarUrl: string | null,
+    public role: Role,
+    public status: 'ASSIGNED' | 'UNASSIGNED' | 'VACATION' | 'SICK_LEAVE',
+    public totalHours: number
+  ) {}
+}
+
+/**
+ * Vehicle entry in the daily planning right sidebar.
+ */
+export class DailyPlanSidebarVehicleDTO {
+  /**
+   * @param {string} id - Vehicle UUID.
+   * @param {string} name - Vehicle name.
+   * @param {string} plateNumber - License plate.
+   * @param {string | null} imageUrl - Vehicle image.
+   * @param {'FREE' | 'ASSIGNED'} status - Daily availability.
+   * @param {string | null} assignedProjectName - Project name if assigned today.
+   */
+  constructor(
+    public id: string,
+    public name: string,
+    public plateNumber: string,
+    public imageUrl: string | null,
+    public status: 'FREE' | 'ASSIGNED',
+    public assignedProjectName: string | null
+  ) {}
+}
+
+/**
+ * Sidebar data for the daily planning board.
+ */
+export class DailyPlanSidebarDTO {
+  /**
+   * @param {DailyPlanSidebarEmployeeDTO[]} employees - Workforce list.
+   * @param {DailyPlanSidebarVehicleDTO[]} vehicles - Fleet list.
+   */
+  constructor(
+    public employees: DailyPlanSidebarEmployeeDTO[],
+    public vehicles: DailyPlanSidebarVehicleDTO[]
+  ) {}
+}
+
+/**
+ * Complete daily plan response board.
+ */
+export class DailyPlanBoardDTO {
+  /**
+   * @param {DailyPlanSummaryDTO} summary - Top KPI metric cards.
+   * @param {DailyPlanPhaseDTO[]} phases - Main phase cards.
+   * @param {DailyPlanSidebarDTO} sidebar - Right sidebar lists.
+   */
+  constructor(
+    public summary: DailyPlanSummaryDTO,
+    public phases: DailyPlanPhaseDTO[],
+    public sidebar: DailyPlanSidebarDTO
+  ) {}
+}
+
+/**
+ * Day cell representation for weekly staff planning grid.
+ */
+export class WeeklyPlanDayCellDTO {
+  /**
+   * @param {string} date - Date string YYYY-MM-DD.
+   * @param {string} dayName - Day of week (e.g. 'Monday').
+   * @param {number} assignedHours - Planned hours for the day.
+   * @param {number} maxHours - Standard work day capacity (8).
+   * @param {string} utilization - Utilization level key.
+   * @param {string} color - Guidelines progress bar color.
+   * @param {AbsenceType | null} absenceType - Absence type if absent.
+   */
+  constructor(
+    public date: string,
+    public dayName: string,
+    public assignedHours: number,
+    public maxHours: number,
+    public utilization:
+      | 'AVAILABLE'
+      | 'PARTIALLY_ASSIGNED'
+      | 'HIGHLY_UTILIZED'
+      | 'FULLY_ASSIGNED'
+      | 'VACATION'
+      | 'SICK_LEAVE'
+      | 'OTHER_ABSENCE',
+    public color:
+      | 'GREEN'
+      | 'YELLOW'
+      | 'ORANGE'
+      | 'RED'
+      | 'PURPLE'
+      | 'BLUE'
+      | 'GRAY',
+    public absenceType: AbsenceType | null
+  ) {}
+}
+
+/**
+ * Worker row in weekly staff planning grid.
+ */
+export class WeeklyPlanEmployeeDTO {
+  /**
+   * @param {string} id - Worker UUID.
+   * @param {string} firstName - First name.
+   * @param {string} lastName - Last name.
+   * @param {string | null} avatarUrl - Avatar URL.
+   * @param {Role} role - Worker role.
+   * @param {WeeklyPlanDayCellDTO[]} days - Matrix of daily cells.
+   */
+  constructor(
+    public id: string,
+    public firstName: string,
+    public lastName: string,
+    public avatarUrl: string | null,
+    public role: Role,
+    public days: WeeklyPlanDayCellDTO[]
+  ) {}
+}
+
+/**
+ * Complete weekly staff planning overview payload.
+ */
+export class WeeklyPlanDTO {
+  /**
+   * @param {string} startDate - Range start date YYYY-MM-DD.
+   * @param {string} endDate - Range end date YYYY-MM-DD.
+   * @param {string[]} days - List of calendar dates in the grid.
+   * @param {WeeklyPlanEmployeeDTO[]} employees - Worker rows with daily cells.
+   */
+  constructor(
+    public startDate: string,
+    public endDate: string,
+    public days: string[],
+    public employees: WeeklyPlanEmployeeDTO[]
+  ) {}
 }
 
 /**

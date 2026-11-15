@@ -30,3 +30,45 @@ export const toUtcDayEnd = (dateStr: string): Date => {
 export const formatUtcDay = (date: Date): string => {
   return date.toISOString().slice(0, 10);
 };
+
+/**
+ * Returns the day name (e.g. 'Monday', 'Tuesday') for a YYYY-MM-DD date in UTC.
+ *
+ * @param {string} dateStr - Calendar date in `YYYY-MM-DD` format.
+ * @returns {string} English day name.
+ */
+export const getDayName = (dateStr: string): string => {
+  const days = [
+    'Sunday',
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+  ];
+  const d = toUtcDayDate(dateStr);
+  return days[d.getUTCDay()];
+};
+
+/**
+ * Generates an array of `YYYY-MM-DD` strings for all calendar days in range [startDate, endDate].
+ *
+ * @param {string} startDateStr - Start date string.
+ * @param {string} endDateStr - End date string.
+ * @returns {string[]} Array of date strings inclusive.
+ */
+export const getDatesInRange = (
+  startDateStr: string,
+  endDateStr: string
+): string[] => {
+  const dates: string[] = [];
+  const current = toUtcDayDate(startDateStr);
+  const end = toUtcDayDate(endDateStr);
+  while (current <= end) {
+    dates.push(formatUtcDay(current));
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+  return dates;
+};
+

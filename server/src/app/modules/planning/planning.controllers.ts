@@ -1,5 +1,11 @@
 import { Request, Response } from 'express';
-import { ProjectPhase, User, Vehicle } from '@prisma/client';
+import {
+  CrewAssignment,
+  ProjectPhase,
+  User,
+  Vehicle,
+  VehicleAssignment,
+} from '@prisma/client';
 import { getTraceId } from '@/app/configs/requestContext.configs';
 import { asyncHandler } from '@/app/utils/system.utils';
 import {
@@ -7,12 +13,16 @@ import {
   assignVehicleService,
   getAvailableResourcesService,
   getDailyPlanService,
+  getWeeklyPlanService,
+  unassignCrewService,
+  unassignVehicleService,
 } from '@/app/modules/planning/planning.services';
 import {
   TAssignCrewPayload,
   TAssignVehiclePayload,
   TGetAvailableResourcesQuery,
   TGetDailyPlanQuery,
+  TGetWeeklyPlanQuery,
 } from '@/app/modules/planning/planning.types';
 
 /**
@@ -119,3 +129,74 @@ export const getAvailableResourcesController = asyncHandler(
     return;
   }
 );
+
+/**
+ * Handles `DELETE /admin/plannings/crew-assignments/:id`.
+ *
+ * @param {Request} req - Express request with trusted `req.crewAssignment`.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const unassignCrewController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const crewAssignment = req.crewAssignment as CrewAssignment;
+    const data = await unassignCrewService({ crewAssignment });
+
+    res.status(200).json({
+      success: true,
+      message: 'Crew assignment removed successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `DELETE /admin/plannings/vehicle-assignments/:id`.
+ *
+ * @param {Request} req - Express request with trusted `req.vehicleAssignment`.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const unassignVehicleController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const vehicleAssignment = req.vehicleAssignment as VehicleAssignment;
+    const data = await unassignVehicleService({ vehicleAssignment });
+
+    res.status(200).json({
+      success: true,
+      message: 'Vehicle assignment removed successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `GET /admin/plannings/weekly`.
+ * Returns the weekly workforce utilization grid.
+ *
+ * @param {Request} req - Express request with validated query.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const getWeeklyPlanController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const query = req.validatedQuery as TGetWeeklyPlanQuery;
+    const data = await getWeeklyPlanService({ query });
+
+    res.status(200).json({
+      success: true,
+      message: 'Weekly plan fetched successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+

@@ -1,4 +1,5 @@
 import {
+  AbsenceType,
   NotificationType,
   PhaseStatus,
   Prisma,
@@ -9,10 +10,23 @@ import prisma from '@/app/configs/db.configs';
 import {
   AssignCrewDTO,
   AssignVehicleDTO,
+  AvailableEmployeeResourceDTO,
   AvailableResourcesDTO,
+  AvailableVehicleResourceDTO,
+  DailyPlanBoardDTO,
   DailyPlanPhaseDTO,
+  DailyPlanSidebarDTO,
+  DailyPlanSidebarEmployeeDTO,
+  DailyPlanSidebarVehicleDTO,
+  DailyPlanSummaryDTO,
+  WeeklyPlanDayCellDTO,
+  WeeklyPlanDTO,
+  WeeklyPlanEmployeeDTO,
 } from '@/app/modules/planning/planning.dto';
 import {
+  formatUtcDay,
+  getDatesInRange,
+  getDayName,
   toUtcDayDate,
   toUtcDayEnd,
 } from '@/app/modules/planning/planning.helpers';
@@ -21,6 +35,9 @@ import {
   TAssignVehicleServiceParams,
   TGetAvailableResourcesServiceParams,
   TGetDailyPlanServiceParams,
+  TGetWeeklyPlanServiceParams,
+  TUnassignCrewServiceParams,
+  TUnassignVehicleServiceParams,
 } from '@/app/modules/planning/planning.types';
 import { triggerPushNotification } from '@/app/utils/notification.utils';
 
@@ -40,60 +57,195 @@ const vehicleSelect = {
 
 /**
  * Loads the daily planning board for a calendar date.
- * Includes IN_PROGRESS / ORDER_CONFIRMED phases whose schedule overlaps the day
- * or that already have crew assigned that day, with day-scoped crew/vehicles.
+ * Returns top KPI metric cards, IN_PROGRESS / ORDER_CONFIRMED phase cards
+ * with customer and site manager info, and sidebar workforce and fleet status.
  *
  * @param {TGetDailyPlanServiceParams} params - Validated query wrapper.
- * @returns {Promise<DailyPlanPhaseDTO[]>} Phase cards grouped for the UI board.
+ * @returns {Promise<DailyPlanBoardDTO>} Complete daily planning board.
  */
 export const getDailyPlanService = async ({
   query,
-}: TGetDailyPlanServiceParams): Promise<DailyPlanPhaseDTO[]> => {
+}: TGetDailyPlanServiceParams): Promise<DailyPlanBoardDTO> => {
   const dayStart = toUtcDayDate(query.date);
   const dayEnd = toUtcDayEnd(query.date);
 
-  const phases = await prisma.projectPhase.findMany({
-    where: {
-      status: {
-        in: [PhaseStatus.IN_PROGRESS, PhaseStatus.ORDER_CONFIRMED],
-      },
-      project: { deletedAt: null },
-      OR: [
-        {
-          AND: [
-            { startDate: { not: null, lte: dayEnd } },
-            { endDate: { not: null, gte: dayStart } },
-          ],
+  const [phases, allWorkers, allVehicles] = await Promise.all([
+    prisma.projectPhase.findMany({
+      where: {
+        status: {
+          in: [PhaseStatus.IN_PROGRESS, PhaseStatus.ORDER_CONFIRMED],
         },
-        {
-          crewAssignments: {
-            some: { date: dayStart },
+        project: { deletedAt: null },
+        OR: [
+          {
+            AND: [
+              { startDate: { not: null, lte: dayEnd } },
+              { endDate: { not: null, gte: dayStart } },
+            ],
+          },
+          {
+            crewAssignments: {
+              some: { date: dayStart },
+            },
+          },
+        ],
+      },
+      include: {
+        project: {
+          select: {
+            id: true,
+            name: true,
+            address: true,
+            customer: {
+              select: {
+                id: true,
+                name: true,
+                category: true,
+              },
+            },
+            projectManagers: {
+              take: 1,
+              include: {
+                user: { select: userSelect },
+              },
+            },
           },
         },
-      ],
-    },
-    include: {
-      project: {
-        select: { id: true, name: true, address: true },
-      },
-      crewAssignments: {
-        where: { date: dayStart },
-        include: { user: { select: userSelect } },
-        orderBy: { createdAt: 'asc' },
-      },
-      vehicleAssignments: {
-        where: { date: dayStart },
-        include: {
-          vehicle: { select: vehicleSelect },
-          user: { select: userSelect },
+        crewAssignments: {
+          where: { date: dayStart },
+          include: { user: { select: userSelect } },
+          orderBy: { createdAt: 'asc' },
         },
-        orderBy: { assignedAt: 'asc' },
+        vehicleAssignments: {
+          where: { date: dayStart },
+          include: {
+            vehicle: { select: vehicleSelect },
+            user: { select: userSelect },
+          },
+          orderBy: { assignedAt: 'asc' },
+        },
       },
-    },
-    orderBy: [{ priority: 'asc' }, { createdAt: 'desc' }],
-  });
+      orderBy: [{ priority: 'asc' }, { createdAt: 'desc' }],
+    }),
+    prisma.user.findMany({
+      where: {
+        deletedAt: null,
+        status: UserStatus.ACTIVE,
+        role: { in: [Role.EMPLOYEE, Role.SITE_MANAGER] },
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        avatarUrl: true,
+        role: true,
+        absences: {
+          where: {
+            startDate: { lte: dayEnd },
+            endDate: { gte: dayStart },
+          },
+          select: { type: true },
+        },
+        crewAssignments: {
+          where: { date: dayStart },
+          select: { hours: true },
+        },
+      },
+      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+    }),
+    prisma.vehicle.findMany({
+      where: { deletedAt: null },
+      select: {
+        id: true,
+        name: true,
+        plateNumber: true,
+        imageUrl: true,
+        assignments: {
+          where: { date: dayStart },
+          select: {
+            phase: {
+              select: {
+                project: { select: { name: true } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { name: 'asc' },
+    }),
+  ]);
 
-  return phases.map(DailyPlanPhaseDTO.build);
+  let totalWorkers = allWorkers.length;
+  let availableWorkers = 0;
+  let assignedWorkers = 0;
+  let absentWorkers = 0;
+
+  const sidebarEmployees: DailyPlanSidebarEmployeeDTO[] = allWorkers.map(
+    (worker) => {
+      const isAbsent = worker.absences.length > 0;
+      const totalHours = worker.crewAssignments.reduce(
+        (sum, a) => sum + Number(a.hours),
+        0
+      );
+
+      let status: 'ASSIGNED' | 'UNASSIGNED' | 'VACATION' | 'SICK_LEAVE';
+      if (isAbsent) {
+        absentWorkers++;
+        status =
+          worker.absences[0].type === AbsenceType.VACATION
+            ? 'VACATION'
+            : 'SICK_LEAVE';
+      } else {
+        if (totalHours > 0) {
+          assignedWorkers++;
+          status = 'ASSIGNED';
+        } else {
+          status = 'UNASSIGNED';
+        }
+        if (totalHours < 8) {
+          availableWorkers++;
+        }
+      }
+
+      return new DailyPlanSidebarEmployeeDTO(
+        worker.id,
+        worker.firstName,
+        worker.lastName,
+        worker.avatarUrl,
+        worker.role,
+        status,
+        totalHours
+      );
+    }
+  );
+
+  const sidebarVehicles: DailyPlanSidebarVehicleDTO[] = allVehicles.map(
+    (vehicle) => {
+      const assignment = vehicle.assignments[0];
+      const isAssigned = Boolean(assignment);
+      return new DailyPlanSidebarVehicleDTO(
+        vehicle.id,
+        vehicle.name,
+        vehicle.plateNumber,
+        vehicle.imageUrl,
+        isAssigned ? 'ASSIGNED' : 'FREE',
+        assignment?.phase?.project?.name ?? null
+      );
+    }
+  );
+
+  const summary = new DailyPlanSummaryDTO(
+    totalWorkers,
+    availableWorkers,
+    assignedWorkers,
+    absentWorkers
+  );
+
+  return new DailyPlanBoardDTO(
+    summary,
+    phases.map((phase) => DailyPlanPhaseDTO.build(phase)),
+    new DailyPlanSidebarDTO(sidebarEmployees, sidebarVehicles)
+  );
 };
 
 /**
@@ -184,11 +336,12 @@ export const assignVehicleService = async ({
 };
 
 /**
- * Lists employees/site managers and vehicles available for a calendar date.
- * Excludes users with an overlapping Absence and vehicles already assigned that day.
+ * Lists employees/site managers and vehicles for the resource assignment modal.
+ * Returns comprehensive status for each worker and vehicle on the date,
+ * including absence reasons, other project assignments, and phase membership.
  *
  * @param {TGetAvailableResourcesServiceParams} params - Validated query wrapper.
- * @returns {Promise<AvailableResourcesDTO>} Available employees and vehicles.
+ * @returns {Promise<AvailableResourcesDTO>} Available workforce and vehicles with status.
  */
 export const getAvailableResourcesService = async ({
   query,
@@ -202,27 +355,294 @@ export const getAvailableResourcesService = async ({
         deletedAt: null,
         status: UserStatus.ACTIVE,
         role: { in: [Role.EMPLOYEE, Role.SITE_MANAGER] },
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        avatarUrl: true,
+        role: true,
         absences: {
-          none: {
+          where: {
             startDate: { lte: dayEnd },
             endDate: { gte: dayStart },
           },
+          select: { type: true },
+        },
+        crewAssignments: {
+          where: { date: dayStart },
+          select: { phaseId: true, hours: true },
         },
       },
-      select: userSelect,
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
     }),
     prisma.vehicle.findMany({
-      where: {
-        deletedAt: null,
+      where: { deletedAt: null },
+      select: {
+        id: true,
+        name: true,
+        plateNumber: true,
+        imageUrl: true,
         assignments: {
-          none: { date: dayStart },
+          where: { date: dayStart },
+          select: {
+            phaseId: true,
+            phase: {
+              select: {
+                project: { select: { name: true } },
+              },
+            },
+          },
         },
       },
-      select: vehicleSelect,
       orderBy: { name: 'asc' },
     }),
   ]);
 
-  return AvailableResourcesDTO.build(employees, vehicles);
+  const employeeDtos: AvailableEmployeeResourceDTO[] = employees.map(
+    (worker) => {
+      const isAbsent = worker.absences.length > 0;
+      const totalAssignedHours = worker.crewAssignments.reduce(
+        (sum, a) => sum + Number(a.hours),
+        0
+      );
+      const phaseAssignment = query.phaseId
+        ? worker.crewAssignments.find((a) => a.phaseId === query.phaseId)
+        : undefined;
+      const isAssignedToPhase = Boolean(phaseAssignment);
+      const assignedHoursOnPhase = phaseAssignment
+        ? Number(phaseAssignment.hours)
+        : null;
+
+      let status:
+        | 'AVAILABLE'
+        | 'ASSIGNED'
+        | 'PARTIALLY_ASSIGNED'
+        | 'VACATION'
+        | 'SICK_LEAVE';
+      let statusLabel: string;
+
+      if (isAbsent) {
+        status =
+          worker.absences[0].type === AbsenceType.VACATION
+            ? 'VACATION'
+            : 'SICK_LEAVE';
+        statusLabel =
+          worker.absences[0].type === AbsenceType.VACATION
+            ? 'Vacation'
+            : 'Sick Leave';
+      } else if (totalAssignedHours === 0) {
+        status = 'AVAILABLE';
+        statusLabel = 'Available';
+      } else if (totalAssignedHours >= 8) {
+        status = 'ASSIGNED';
+        statusLabel = 'Assigned';
+      } else {
+        status = 'PARTIALLY_ASSIGNED';
+        statusLabel = `Available - also on other tasks (${totalAssignedHours}h)`;
+      }
+
+      return new AvailableEmployeeResourceDTO(
+        worker.id,
+        worker.firstName,
+        worker.lastName,
+        worker.avatarUrl,
+        worker.role,
+        status,
+        statusLabel,
+        isAssignedToPhase,
+        assignedHoursOnPhase,
+        totalAssignedHours
+      );
+    }
+  );
+
+  const vehicleDtos: AvailableVehicleResourceDTO[] = vehicles.map((vehicle) => {
+    const assignment = vehicle.assignments[0];
+    const isAssigned = Boolean(assignment);
+    const isAssignedToPhase = query.phaseId
+      ? assignment?.phaseId === query.phaseId
+      : false;
+
+    let status: 'AVAILABLE' | 'ASSIGNED' | 'MAINTENANCE' = isAssigned
+      ? 'ASSIGNED'
+      : 'AVAILABLE';
+    let assignedProjectName: string | null = null;
+
+    if (isAssigned && !isAssignedToPhase) {
+      assignedProjectName = assignment?.phase?.project?.name
+        ? `On ${assignment.phase.project.name}`
+        : 'Assigned';
+    }
+
+    return new AvailableVehicleResourceDTO(
+      vehicle.id,
+      vehicle.name,
+      vehicle.plateNumber,
+      vehicle.imageUrl,
+      status,
+      isAssignedToPhase,
+      assignedProjectName
+    );
+  });
+
+  return new AvailableResourcesDTO(employeeDtos, vehicleDtos);
 };
+
+/**
+ * Deletes a crew assignment row.
+ *
+ * @param {TUnassignCrewServiceParams} params - Trusted crew assignment.
+ * @returns {Promise<{ id: string }>} Deleted assignment id.
+ */
+export const unassignCrewService = async ({
+  crewAssignment,
+}: TUnassignCrewServiceParams): Promise<{ id: string }> => {
+  await prisma.crewAssignment.delete({ where: { id: crewAssignment.id } });
+  return { id: crewAssignment.id };
+};
+
+/**
+ * Deletes a vehicle assignment row.
+ *
+ * @param {TUnassignVehicleServiceParams} params - Trusted vehicle assignment.
+ * @returns {Promise<{ id: string }>} Deleted assignment id.
+ */
+export const unassignVehicleService = async ({
+  vehicleAssignment,
+}: TUnassignVehicleServiceParams): Promise<{ id: string }> => {
+  await prisma.vehicleAssignment.delete({
+    where: { id: vehicleAssignment.id },
+  });
+  return { id: vehicleAssignment.id };
+};
+
+/**
+ * Computes the weekly workforce capacity and utilization grid matching UI guidelines.
+ *
+ * @param {TGetWeeklyPlanServiceParams} params - Validated date range query wrapper.
+ * @returns {Promise<WeeklyPlanDTO>} Weekly matrix for all workers.
+ */
+export const getWeeklyPlanService = async ({
+  query,
+}: TGetWeeklyPlanServiceParams): Promise<WeeklyPlanDTO> => {
+  const startDateStr = query.startDate;
+  // Default to 4 days after startDate (Monday - Friday 5-day week) if endDate not supplied
+  const endDateStr =
+    query.endDate ??
+    formatUtcDay(
+      new Date(toUtcDayDate(startDateStr).getTime() + 4 * 24 * 60 * 60 * 1000)
+    );
+
+  const rangeDates = getDatesInRange(startDateStr, endDateStr);
+  const rangeStartUtc = toUtcDayDate(startDateStr);
+  const rangeEndUtc = toUtcDayEnd(endDateStr);
+
+  const workers = await prisma.user.findMany({
+    where: {
+      deletedAt: null,
+      status: UserStatus.ACTIVE,
+      role: { in: [Role.EMPLOYEE, Role.SITE_MANAGER] },
+    },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      avatarUrl: true,
+      role: true,
+      absences: {
+        where: {
+          startDate: { lte: rangeEndUtc },
+          endDate: { gte: rangeStartUtc },
+        },
+        select: {
+          type: true,
+          startDate: true,
+          endDate: true,
+        },
+      },
+      crewAssignments: {
+        where: {
+          date: { gte: rangeStartUtc, lte: rangeEndUtc },
+        },
+        select: {
+          date: true,
+          hours: true,
+        },
+      },
+    },
+    orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+  });
+
+  const employeeRows: WeeklyPlanEmployeeDTO[] = workers.map((worker) => {
+    const days: WeeklyPlanDayCellDTO[] = rangeDates.map((dateStr) => {
+      const dayStart = toUtcDayDate(dateStr);
+      const dayEnd = toUtcDayEnd(dateStr);
+      const dayName = getDayName(dateStr);
+
+      const matchingAbsence = worker.absences.find(
+        (abs) => abs.startDate <= dayEnd && abs.endDate >= dayStart
+      );
+
+      if (matchingAbsence) {
+        const isVacation = matchingAbsence.type === AbsenceType.VACATION;
+        return new WeeklyPlanDayCellDTO(
+          dateStr,
+          dayName,
+          0,
+          8,
+          isVacation ? 'VACATION' : 'SICK_LEAVE',
+          isVacation ? 'PURPLE' : 'BLUE',
+          matchingAbsence.type
+        );
+      }
+
+      const assignedHours = worker.crewAssignments
+        .filter((a) => formatUtcDay(a.date) === dateStr)
+        .reduce((sum, a) => sum + Number(a.hours), 0);
+
+      let utilization:
+        | 'AVAILABLE'
+        | 'PARTIALLY_ASSIGNED'
+        | 'HIGHLY_UTILIZED'
+        | 'FULLY_ASSIGNED';
+      let color: 'GREEN' | 'YELLOW' | 'ORANGE' | 'RED';
+
+      if (assignedHours === 0) {
+        utilization = 'AVAILABLE';
+        color = 'GREEN';
+      } else if (assignedHours <= 4) {
+        utilization = 'PARTIALLY_ASSIGNED';
+        color = 'YELLOW';
+      } else if (assignedHours < 8) {
+        utilization = 'HIGHLY_UTILIZED';
+        color = 'ORANGE';
+      } else {
+        utilization = 'FULLY_ASSIGNED';
+        color = 'RED';
+      }
+
+      return new WeeklyPlanDayCellDTO(
+        dateStr,
+        dayName,
+        assignedHours,
+        8,
+        utilization,
+        color,
+        null
+      );
+    });
+
+    return new WeeklyPlanEmployeeDTO(
+      worker.id,
+      worker.firstName,
+      worker.lastName,
+      worker.avatarUrl,
+      worker.role,
+      days
+    );
+  });
+
+  return new WeeklyPlanDTO(startDateStr, endDateStr, rangeDates, employeeRows);
+};
+

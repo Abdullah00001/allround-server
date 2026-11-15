@@ -4474,6 +4474,190 @@ paths:
               schema:
                 $ref: '#/components/schemas/SystemErrorResponse'
 
+  /api/v1/admin/plannings/weekly:
+    get:
+      tags: [Planning]
+      summary: Get weekly staff planning overview
+      description: Returns workforce utilization matrix from Monday to Friday (or custom date range) with planned hours, color coding, and absence indicators.
+      operationId: getWeeklyPlan
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema: {type: string}
+        - in: query
+          name: startDate
+          required: true
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+            example: '2026-05-12'
+          description: Start of the work week (YYYY-MM-DD)
+        - in: query
+          name: endDate
+          required: false
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+            example: '2026-05-16'
+          description: End of the work week (YYYY-MM-DD); defaults to 4 days after startDate
+      responses:
+        '200':
+          description: Weekly plan fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetWeeklyPlanResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Forbidden or CSRF validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
+  /api/v1/admin/plannings/crew-assignments/{id}:
+    delete:
+      tags: [Planning]
+      summary: Remove crew assignment
+      description: Unassigns a crew member from a phase for the specified assignment ID.
+      operationId: unassignCrew
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema: {type: string}
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: CrewAssignment UUID
+      responses:
+        '200':
+          description: Crew assignment removed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnassignResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Forbidden or CSRF validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Crew assignment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Crew assignment not found'
+                errorType: 'CREW_ASSIGNMENT_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request params validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
+  /api/v1/admin/plannings/vehicle-assignments/{id}:
+    delete:
+      tags: [Planning]
+      summary: Remove vehicle assignment
+      description: Unassigns a vehicle from a phase for the specified assignment ID.
+      operationId: unassignVehicle
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema: {type: string}
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: VehicleAssignment UUID
+      responses:
+        '200':
+          description: Vehicle assignment removed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnassignResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Forbidden or CSRF validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Vehicle assignment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Vehicle assignment not found'
+                errorType: 'VEHICLE_ASSIGNMENT_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request params validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
   /api/v1/admin/time-logs:
     get:
       tags: [TimeLog]
@@ -10732,6 +10916,20 @@ components:
           $ref: '#/components/schemas/PlanningVehicleDTO'
         user:
           $ref: '#/components/schemas/PlanningUserDTO'
+    DailyPlanCustomerDTO:
+      type: object
+      required: [id, name, category]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: 'Hochtief AG'
+        category:
+          type: string
+          enum: [COMMERCIAL, MUNICIPALITY, ARCHITECT, PRIVATE]
+          example: 'COMMERCIAL'
     DailyPlanProjectDTO:
       type: object
       required: [id, name, address]
@@ -10741,8 +10939,23 @@ components:
           format: uuid
         name:
           type: string
+          example: 'Prj-0842 . Goltsteints.Complex'
         address:
           type: string
+          example: 'Goltsteinstraße 12, 50968 Köln'
+        customer:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/DailyPlanCustomerDTO'
+        siteManager:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/PlanningUserDTO'
+        workingHours:
+          type: string
+          example: '07:30 am - 04:30 pm'
     DailyPlanPhaseDTO:
       type: object
       required: [id, type, status, priority, startDate, endDate, project, crewAssignments, vehicleAssignments]
@@ -10777,6 +10990,153 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DailyPlanVehicleAssignmentDTO'
+    DailyPlanSummaryDTO:
+      type: object
+      required: [totalWorkers, availableWorkers, assignedWorkers, absentWorkers]
+      properties:
+        totalWorkers:
+          type: integer
+          example: 24
+        availableWorkers:
+          type: integer
+          example: 14
+        assignedWorkers:
+          type: integer
+          example: 8
+        absentWorkers:
+          type: integer
+          example: 2
+    DailyPlanSidebarEmployeeDTO:
+      type: object
+      required: [id, firstName, lastName, avatarUrl, role, status, totalHours]
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+          example: 'Laura'
+        lastName:
+          type: string
+          example: 'Schmidt'
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+        role:
+          type: string
+          enum: [ADMIN, SITE_MANAGER, EMPLOYEE]
+        status:
+          type: string
+          enum: [ASSIGNED, UNASSIGNED, VACATION, SICK_LEAVE]
+          example: 'UNASSIGNED'
+        totalHours:
+          type: number
+          example: 0
+    DailyPlanSidebarVehicleDTO:
+      type: object
+      required: [id, name, plateNumber, imageUrl, status, assignedProjectName]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: 'Tower Crane Transporter'
+        plateNumber:
+          type: string
+          example: 'H-TC 1043'
+        imageUrl:
+          type: string
+          format: uri
+          nullable: true
+        status:
+          type: string
+          enum: [FREE, ASSIGNED]
+          example: 'FREE'
+        assignedProjectName:
+          type: string
+          nullable: true
+          example: null
+    DailyPlanSidebarDTO:
+      type: object
+      required: [employees, vehicles]
+      properties:
+        employees:
+          type: array
+          items:
+            $ref: '#/components/schemas/DailyPlanSidebarEmployeeDTO'
+        vehicles:
+          type: array
+          items:
+            $ref: '#/components/schemas/DailyPlanSidebarVehicleDTO'
+    DailyPlanBoardDTO:
+      type: object
+      required: [summary, phases, sidebar]
+      properties:
+        summary:
+          $ref: '#/components/schemas/DailyPlanSummaryDTO'
+        phases:
+          type: array
+          items:
+            $ref: '#/components/schemas/DailyPlanPhaseDTO'
+        sidebar:
+          $ref: '#/components/schemas/DailyPlanSidebarDTO'
+    AvailableEmployeeResourceDTO:
+      type: object
+      required: [id, firstName, lastName, avatarUrl, role, status, statusLabel, isAssignedToPhase, assignedHoursOnPhase, totalAssignedHours]
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+        role:
+          type: string
+          enum: [ADMIN, SITE_MANAGER, EMPLOYEE]
+        status:
+          type: string
+          enum: [AVAILABLE, ASSIGNED, PARTIALLY_ASSIGNED, VACATION, SICK_LEAVE]
+        statusLabel:
+          type: string
+          example: 'Available - also on other tasks (4h)'
+        isAssignedToPhase:
+          type: boolean
+        assignedHoursOnPhase:
+          type: number
+          nullable: true
+        totalAssignedHours:
+          type: number
+    AvailableVehicleResourceDTO:
+      type: object
+      required: [id, name, plateNumber, imageUrl, status, isAssignedToPhase, assignedProjectName]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        plateNumber:
+          type: string
+        imageUrl:
+          type: string
+          format: uri
+          nullable: true
+        status:
+          type: string
+          enum: [AVAILABLE, ASSIGNED, MAINTENANCE]
+        isAssignedToPhase:
+          type: boolean
+        assignedProjectName:
+          type: string
+          nullable: true
+          example: 'On Prj-0843 . Rheinpark Tower'
     AvailableResourcesDTO:
       type: object
       required: [employees, vehicles]
@@ -10784,11 +11144,11 @@ components:
         employees:
           type: array
           items:
-            $ref: '#/components/schemas/PlanningUserDTO'
+            $ref: '#/components/schemas/AvailableEmployeeResourceDTO'
         vehicles:
           type: array
           items:
-            $ref: '#/components/schemas/PlanningVehicleDTO'
+            $ref: '#/components/schemas/AvailableVehicleResourceDTO'
     AssignCrewDTO:
       type: object
       required: [id, phaseId, userId, date, hours, user]
@@ -10830,6 +11190,73 @@ components:
           $ref: '#/components/schemas/PlanningUserDTO'
         vehicle:
           $ref: '#/components/schemas/PlanningVehicleDTO'
+    WeeklyPlanDayCellDTO:
+      type: object
+      required: [date, dayName, assignedHours, maxHours, utilization, color, absenceType]
+      properties:
+        date:
+          type: string
+          example: '2026-05-12'
+        dayName:
+          type: string
+          example: 'Monday'
+        assignedHours:
+          type: number
+          example: 4
+        maxHours:
+          type: number
+          example: 8
+        utilization:
+          type: string
+          enum: [AVAILABLE, PARTIALLY_ASSIGNED, HIGHLY_UTILIZED, FULLY_ASSIGNED, VACATION, SICK_LEAVE, OTHER_ABSENCE]
+        color:
+          type: string
+          enum: [GREEN, YELLOW, ORANGE, RED, PURPLE, BLUE, GRAY]
+        absenceType:
+          type: string
+          enum: [VACATION, SICK_LEAVE]
+          nullable: true
+    WeeklyPlanEmployeeDTO:
+      type: object
+      required: [id, firstName, lastName, avatarUrl, role, days]
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        avatarUrl:
+          type: string
+          format: uri
+          nullable: true
+        role:
+          type: string
+          enum: [ADMIN, SITE_MANAGER, EMPLOYEE]
+        days:
+          type: array
+          items:
+            $ref: '#/components/schemas/WeeklyPlanDayCellDTO'
+    WeeklyPlanDTO:
+      type: object
+      required: [startDate, endDate, days, employees]
+      properties:
+        startDate:
+          type: string
+          example: '2026-05-12'
+        endDate:
+          type: string
+          example: '2026-05-16'
+        days:
+          type: array
+          items:
+            type: string
+          example: ['2026-05-12', '2026-05-13', '2026-05-14', '2026-05-15', '2026-05-16']
+        employees:
+          type: array
+          items:
+            $ref: '#/components/schemas/WeeklyPlanEmployeeDTO'
     GetDailyPlanResponse:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
@@ -10840,9 +11267,7 @@ components:
               type: string
               example: 'Daily plan fetched successfully.'
             data:
-              type: array
-              items:
-                $ref: '#/components/schemas/DailyPlanPhaseDTO'
+              $ref: '#/components/schemas/DailyPlanBoardDTO'
     GetAvailableResourcesResponse:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
@@ -10876,6 +11301,33 @@ components:
               example: 'Vehicle assigned successfully.'
             data:
               $ref: '#/components/schemas/AssignVehicleDTO'
+    GetWeeklyPlanResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Weekly plan fetched successfully.'
+            data:
+              $ref: '#/components/schemas/WeeklyPlanDTO'
+    UnassignResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Assignment removed successfully.'
+            data:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: string
+                  format: uuid
 
 
     CreateTimeLogRequest:
@@ -13295,6 +13747,8 @@ components:
                 - TIMELOG_NOT_FOUND
                 - ACTIVE_TIMER_EXISTS
                 - ABSENCE_NOT_FOUND
+                - CREW_ASSIGNMENT_NOT_FOUND
+                - VEHICLE_ASSIGNMENT_NOT_FOUND
                 - INVALID_DEVICE_CONTEXT
                 - DEVICE_NOT_FOUND
                 - DEVICE_NOT_OWNED

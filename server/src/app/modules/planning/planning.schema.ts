@@ -53,3 +53,24 @@ export const getAvailableResourcesQuerySchema = z
     phaseId: z.string().uuid({ error: 'Invalid phase id' }).optional(),
   })
   .strict();
+
+/**
+ * Path parameter schema for unassigning crew or vehicle assignments by UUID.
+ */
+export const unassignParamsSchema = z
+  .object({
+    id: z.string().uuid({ error: 'Invalid assignment id' }),
+  })
+  .strict();
+
+/**
+ * Query schema for `GET /admin/plannings/weekly`.
+ * Requires `startDate` (e.g. Monday); optional `endDate` (defaults to Friday / 5-day work week).
+ */
+export const getWeeklyPlanQuerySchema = z
+  .object({
+    startDate: calendarDateSchema,
+    endDate: calendarDateSchema.optional(),
+  })
+  .strict();
+

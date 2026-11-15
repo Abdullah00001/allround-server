@@ -1,10 +1,18 @@
 import { z } from 'zod';
-import { ProjectPhase, User, Vehicle } from '@prisma/client';
+import {
+  CrewAssignment,
+  ProjectPhase,
+  User,
+  Vehicle,
+  VehicleAssignment,
+} from '@prisma/client';
 import {
   assignCrewSchema,
   assignVehicleSchema,
   getAvailableResourcesQuerySchema,
   getDailyPlanQuerySchema,
+  getWeeklyPlanQuerySchema,
+  unassignParamsSchema,
 } from '@/app/modules/planning/planning.schema';
 
 /**
@@ -68,3 +76,38 @@ export type TGetAvailableResourcesServiceParams = {
   /** Validated available-resources query. */
   query: TGetAvailableResourcesQuery;
 };
+
+/**
+ * Validated unassign route params.
+ */
+export type TUnassignParams = z.infer<typeof unassignParamsSchema>;
+
+/**
+ * Validated weekly-plan query.
+ */
+export type TGetWeeklyPlanQuery = z.infer<typeof getWeeklyPlanQuerySchema>;
+
+/**
+ * Service params for unassigning a crew member.
+ */
+export type TUnassignCrewServiceParams = {
+  /** Trusted crew assignment verified by middleware. */
+  crewAssignment: CrewAssignment;
+};
+
+/**
+ * Service params for unassigning a vehicle.
+ */
+export type TUnassignVehicleServiceParams = {
+  /** Trusted vehicle assignment verified by middleware. */
+  vehicleAssignment: VehicleAssignment;
+};
+
+/**
+ * Service params for loading the weekly plan.
+ */
+export type TGetWeeklyPlanServiceParams = {
+  /** Validated weekly plan query containing startDate and optional endDate. */
+  query: TGetWeeklyPlanQuery;
+};
+

@@ -1,6 +1,7 @@
 import {
   Absence,
   Attachment,
+  CrewAssignment,
   Customer,
   Inspection,
   Notification,
@@ -13,6 +14,7 @@ import {
   TimeLog,
   User,
   Vehicle,
+  VehicleAssignment,
   Device,
   ServiceCharge,
   ClubPackage,
@@ -45,6 +47,8 @@ declare global {
       attachment?: Attachment;
       vehicle?: Vehicle;
       planningUser?: User;
+      crewAssignment?: CrewAssignment;
+      vehicleAssignment?: VehicleAssignment;
       targetUser?: User;
       managedUser?: User;
       timeLog?: TimeLog;

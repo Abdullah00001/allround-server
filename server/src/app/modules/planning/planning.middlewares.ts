@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
-import { User } from '@prisma/client';
+import { CrewAssignment, User, VehicleAssignment } from '@prisma/client';
 import { getTraceId } from '@/app/configs/requestContext.configs';
 import { asyncHandler } from '@/app/utils/system.utils';
 import prisma from '@/app/configs/db.configs';
@@ -119,3 +119,70 @@ export const checkOptionalPhaseQueryMiddleware = asyncHandler(
     next();
   }
 );
+
+/**
+ * Verifies that `req.params.id` references an existing crew assignment.
+ * Attaches the assignment to `req.crewAssignment`.
+ *
+ * @param {Request} req - Express request with validated params `id`.
+ * @param {Response} res - Express response for the 404 envelope.
+ * @param {NextFunction} next - Continues when found.
+ * @returns {Promise<void>}
+ */
+export const checkCrewAssignmentExistenceMiddleware = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const traceId = getTraceId();
+    const { id } = req.params as { id: string };
+
+    const assignment = await prisma.crewAssignment.findUnique({
+      where: { id },
+    });
+
+    if (!assignment) {
+      res.status(404).json({
+        success: false,
+        message: 'Crew assignment not found',
+        errorType: AuthErrorType.CREW_ASSIGNMENT_NOT_FOUND,
+        traceId,
+      });
+      return;
+    }
+
+    req.crewAssignment = assignment as CrewAssignment;
+    next();
+  }
+);
+
+/**
+ * Verifies that `req.params.id` references an existing vehicle assignment.
+ * Attaches the assignment to `req.vehicleAssignment`.
+ *
+ * @param {Request} req - Express request with validated params `id`.
+ * @param {Response} res - Express response for the 404 envelope.
+ * @param {NextFunction} next - Continues when found.
+ * @returns {Promise<void>}
+ */
+export const checkVehicleAssignmentExistenceMiddleware = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const traceId = getTraceId();
+    const { id } = req.params as { id: string };
+
+    const assignment = await prisma.vehicleAssignment.findUnique({
+      where: { id },
+    });
+
+    if (!assignment) {
+      res.status(404).json({
+        success: false,
+        message: 'Vehicle assignment not found',
+        errorType: AuthErrorType.VEHICLE_ASSIGNMENT_NOT_FOUND,
+        traceId,
+      });
+      return;
+    }
+
+    req.vehicleAssignment = assignment as VehicleAssignment;
+    next();
+  }
+);
+
