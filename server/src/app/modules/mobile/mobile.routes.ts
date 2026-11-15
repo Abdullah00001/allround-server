@@ -55,6 +55,7 @@ import {
   getMyTimeLogsController,
   getProfileController,
   getScheduleController,
+  listMobileCustomersController,
   listMobileInspectionsController,
   listMobilePhasesController,
   listProjectAttachmentsController,
@@ -83,6 +84,7 @@ import {
   getCrewTimeQuerySchema,
   getDashboardQuerySchema,
   getMapQuerySchema,
+  getMobileCustomersQuerySchema,
   getMobileInspectionsQuerySchema,
   getMobilePhasesQuerySchema,
   getMyProjectsQuerySchema,
@@ -137,6 +139,14 @@ const siteManagerProjectAccess = [
 ] as const;
 
 router.route('/mobile/config').get(...mobileAuth, getMobileConfigController);
+
+router
+  .route('/mobile/customers')
+  .get(
+    ...mobileAuth,
+    validateReqQuery(getMobileCustomersQuerySchema),
+    listMobileCustomersController
+  );
 
 router
   .route('/mobile/dashboard')

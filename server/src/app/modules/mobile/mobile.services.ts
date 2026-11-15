@@ -26,6 +26,7 @@ import {
   MobileConfigDTO,
   MobileCrewBreakdownDTO,
   MobileCrewTimeDTO,
+  MobileCustomerListItemDTO,
   MobileDashboardDTO,
   MobileDashboardStatsDTO,
   MobileEnumsDTO,
@@ -86,6 +87,7 @@ import {
   TGetMyProjectsServiceParams,
   TGetMyTimeLogsServiceParams,
   TGetScheduleServiceParams,
+  TListMobileCustomersServiceParams,
   TListMobileInspectionsServiceParams,
   TListMobilePhasesServiceParams,
   TListProjectAttachmentsServiceParams,
@@ -2961,3 +2963,58 @@ export const deleteProjectAttachmentService = async ({
   await prisma.attachment.delete({ where: { id: attachment.id } });
   return { id: attachment.id };
 };
+
+/**
+ * Lists non-deleted customers with pagination, optional search and category filter.
+ * Includes primary contact for mobile customer discovery and project creation.
+ *
+ * @param {TListMobileCustomersServiceParams} params - Validated query parameter wrapper.
+ * @returns {Promise<{ items: MobileCustomerListItemDTO[]; total: number; page: number; limit: number }>}
+ */
+export const listMobileCustomersService = async ({
+  query,
+}: TListMobileCustomersServiceParams): Promise<{
+  items: MobileCustomerListItemDTO[];
+  total: number;
+  page: number;
+  limit: number;
+}> => {
+  const { page, limit, search, category } = query;
+
+  const where: Prisma.CustomerWhereInput = {
+    deletedAt: null,
+    ...(category ? { category } : {}),
+    ...(search
+      ? {
+          name: {
+            contains: search,
+            mode: 'insensitive',
+          },
+        }
+      : {}),
+  };
+
+  const [total, customers] = await Promise.all([
+    prisma.customer.count({ where }),
+    prisma.customer.findMany({
+      where,
+      skip: (page - 1) * limit,
+      take: limit,
+      orderBy: { name: 'asc' },
+      include: {
+        contacts: {
+          where: { isPrimary: true },
+          take: 1,
+        },
+      },
+    }),
+  ]);
+
+  return {
+    items: customers.map(MobileCustomerListItemDTO.build),
+    total,
+    page,
+    limit,
+  };
+};
+

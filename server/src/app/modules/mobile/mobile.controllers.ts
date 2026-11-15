@@ -35,6 +35,7 @@ import {
   getMyTimeLogsService,
   getProfileStatsService,
   getScheduleService,
+  listMobileCustomersService,
   listMobileInspectionsService,
   listMobilePhasesService,
   listProjectAttachmentsService,
@@ -63,6 +64,7 @@ import {
   TGetCrewTimeQuery,
   TGetDashboardQuery,
   TGetMapQuery,
+  TGetMobileCustomersQuery,
   TGetMobileInspectionsQuery,
   TGetMobilePhasesQuery,
   TGetMyProjectsQuery,
@@ -1106,3 +1108,32 @@ export const setProjectAttachmentCoverController = asyncHandler(
     return;
   }
 );
+
+/**
+ * Handles `GET /mobile/customers`.
+ * Returns paginated existing customers with primary contact for mobile discovery and project creation.
+ *
+ * @param {Request} req - Express request with validated query.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const listMobileCustomersController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const query = req.validatedQuery as TGetMobileCustomersQuery;
+    const { items, total, page, limit } = await listMobileCustomersService({
+      query,
+    });
+    const meta = buildPaginationMeta({ total, page, limit, req });
+
+    res.status(200).json({
+      success: true,
+      message: 'Customers fetched successfully.',
+      meta,
+      data: items,
+      traceId,
+    });
+    return;
+  }
+);
+

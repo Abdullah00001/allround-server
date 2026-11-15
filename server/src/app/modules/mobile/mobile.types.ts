@@ -21,6 +21,7 @@ import {
   getCrewTimeQuerySchema,
   getDashboardQuerySchema,
   getMapQuerySchema,
+  getMobileCustomersQuerySchema,
   getMobileInspectionsQuerySchema,
   getMobilePhasesQuerySchema,
   getMyProjectsQuerySchema,
@@ -533,3 +534,19 @@ export type TDeleteProjectAttachmentServiceParams = {
   /** Trusted attachment belonging to the project. */
   attachment: Attachment;
 };
+
+/**
+ * Validated query params for `GET /mobile/customers`.
+ */
+export type TGetMobileCustomersQuery = z.infer<
+  typeof getMobileCustomersQuerySchema
+>;
+
+/**
+ * Service params for fetching customer directory on mobile.
+ */
+export type TListMobileCustomersServiceParams = {
+  /** Validated pagination and filter query. */
+  query: TGetMobileCustomersQuery;
+};
+

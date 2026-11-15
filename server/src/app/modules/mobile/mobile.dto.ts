@@ -2,7 +2,9 @@ import {
   ActivityType,
   Attachment,
   AttachmentCategory,
+  Customer,
   CustomerCategory,
+  CustomerContact,
   Inspection,
   InspectionStatus,
   Language,
@@ -1223,6 +1225,69 @@ export class MobileProjectHistoryDTO {
       role: Role;
     }
   ) {}
+}
+
+/**
+ * Primary contact summary attached to a mobile customer card.
+ */
+export class MobileCustomerPrimaryContactDTO {
+  /**
+   * @param {string} id - Contact UUID.
+   * @param {string} name - Contact full name.
+   * @param {string} role - Contact role/title.
+   * @param {string | null} phone - Phone number.
+   * @param {string | null} email - Email address.
+   */
+  constructor(
+    public id: string,
+    public name: string,
+    public role: string,
+    public phone: string | null,
+    public email: string | null
+  ) {}
+
+  static build(contact: CustomerContact): MobileCustomerPrimaryContactDTO {
+    return new MobileCustomerPrimaryContactDTO(
+      contact.id,
+      contact.name,
+      contact.role,
+      contact.phone,
+      contact.email
+    );
+  }
+}
+
+/**
+ * Mobile customer directory item.
+ */
+export class MobileCustomerListItemDTO {
+  /**
+   * @param {string} id - Customer UUID.
+   * @param {string} name - Customer company or display name.
+   * @param {CustomerCategory} category - Category enum (B2B, B2C, PUBLIC).
+   * @param {string} address - Street / billing address.
+   * @param {MobileCustomerPrimaryContactDTO | null} primaryContact - Primary contact person if available.
+   */
+  constructor(
+    public id: string,
+    public name: string,
+    public category: CustomerCategory,
+    public address: string,
+    public primaryContact: MobileCustomerPrimaryContactDTO | null
+  ) {}
+
+  static build(
+    customer: Customer & { contacts?: CustomerContact[] }
+  ): MobileCustomerListItemDTO {
+    const primary = customer.contacts?.[0] ?? null;
+    return new MobileCustomerListItemDTO(
+      customer.id,
+      customer.name,
+      customer.category,
+      customer.address,
+      primary ? MobileCustomerPrimaryContactDTO.build(primary) : null
+    );
+  }
 }
 
 export { decimalToNumber };

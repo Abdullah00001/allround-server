@@ -48,6 +48,8 @@ tags:
     description: Site Manager project management (filters, tasks, measurements, notes, attachments, settings)
   - name: MobileConfig
     description: Mobile app configuration, languages, and legal content
+  - name: MobileCustomer
+    description: Mobile customer directory and selection endpoints
   - name: Notification
     description: In-app notification list and read-state endpoints for Mobile and Admin
 
@@ -6176,6 +6178,102 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/mobile/customers:
+    get:
+      tags: [MobileCustomer]
+      summary: List customers for mobile
+      description: Returns paginated directory of non-deleted customers with primary contact for mobile selection and project creation.
+      operationId: listMobileCustomers
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: 1-based page number
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Page size
+        - in: query
+          name: search
+          schema:
+            type: string
+          description: Case-insensitive search on customer name
+        - in: query
+          name: category
+          schema:
+            type: string
+            enum: [COMMERCIAL, MUNICIPALITY, ARCHITECT, PRIVATE]
+          description: Filter by customer category
+      responses:
+        '200':
+          description: Customers fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListMobileCustomersResponse'
+        '401':
+          description: Authentication or device session failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                tokenInvalid:
+                  value:
+                    success: false
+                    message: 'Token not found'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                sessionRevoked:
+                  value:
+                    success: false
+                    message: 'Your session has ended. Please log in again.'
+                    errorType: 'SESSION_REVOKED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Account inactive or suspended
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Your account is not active. Please verify your email or contact support.'
+                errorType: 'ACCOUNT_INACTIVE'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Request query validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+              example:
+                success: false
+                message: 'Request query validation failed'
+                errors:
+                  - field: page
+                    message: 'Expected number, received string'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+              example:
+                success: false
+                message: 'Internal Server Error'
+                errorType: 'SERVER_ERROR'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
   /api/v1/mobile/dashboard:
     get:
       tags: [MobileDashboard]
@@ -12870,6 +12968,80 @@ components:
               example: 'Phase status updated successfully.'
             data:
               $ref: '#/components/schemas/MobileManagedPhaseDTO'
+
+    ListMobileCustomersResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [meta, data]
+          properties:
+            message:
+              type: string
+              example: 'Customers fetched successfully.'
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/MobileCustomerListItemDTO'
+
+    MobileCustomerPrimaryContactDTO:
+      type: object
+      required:
+        - id
+        - name
+        - role
+        - phone
+        - email
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: '123e4567-e89b-12d3-a456-426614174000'
+        name:
+          type: string
+          example: 'Jane Doe'
+        role:
+          type: string
+          example: 'Site Manager'
+        phone:
+          type: string
+          nullable: true
+          example: '+491701234567'
+        email:
+          type: string
+          nullable: true
+          format: email
+          example: 'jane.doe@example.com'
+
+    MobileCustomerListItemDTO:
+      type: object
+      required:
+        - id
+        - name
+        - category
+        - address
+        - primaryContact
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: '123e4567-e89b-12d3-a456-426614174000'
+        name:
+          type: string
+          example: 'Acme Corporation'
+        category:
+          type: string
+          enum: [COMMERCIAL, MUNICIPALITY, ARCHITECT, PRIVATE]
+          example: 'COMMERCIAL'
+        address:
+          type: string
+          example: 'Musterstraße 12, 10115 Berlin'
+        primaryContact:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/MobileCustomerPrimaryContactDTO'
 
 
     MobileLegalContentDTO:

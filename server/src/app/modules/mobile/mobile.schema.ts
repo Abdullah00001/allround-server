@@ -738,3 +738,16 @@ export const createProjectAttachmentSchema = z
     }),
   })
   .strict();
+
+/**
+ * Query schema for `GET /mobile/customers`.
+ * Coerces pagination values and optionally filters by search text or category.
+ */
+export const getMobileCustomersQuerySchema = z
+  .object({
+    ...paginationQueryFields,
+    search: z.string().trim().optional(),
+    category: z.enum(CustomerCategory).optional(),
+  })
+  .strict();
+
