@@ -1,15 +1,32 @@
 import { z } from 'zod';
-import { Inspection, Project, ProjectPhase, TimeLog, User } from '@prisma/client';
+import {
+  Attachment,
+  Inspection,
+  Project,
+  ProjectMeasurement,
+  ProjectNote,
+  ProjectPhase,
+  ProjectTask,
+  TimeLog,
+  User,
+} from '@prisma/client';
 import {
   completeInspectionSchema,
+  createMeasurementSchema,
+  createProjectAttachmentSchema,
+  createProjectNoteSchema,
+  createProjectTaskSchema,
   getCrewTimeQuerySchema,
   getMapQuerySchema,
+  getMyProjectsQuerySchema,
   getMyTimeLogsQuerySchema,
   getScheduleQuerySchema,
   manualTimeSchema,
   startTimerSchema,
   stopTimerSchema,
   syncTimeLogsSchema,
+  updateMobileProjectSchema,
+  updatePhaseDatesSchema,
   updatePhaseStatusSchema,
 } from '@/app/modules/mobile/mobile.schema';
 
@@ -61,6 +78,45 @@ export type TGetMapQuery = z.infer<typeof getMapQuerySchema>;
  * Validated project crew-time query.
  */
 export type TGetCrewTimeQuery = z.infer<typeof getCrewTimeQuerySchema>;
+
+/**
+ * Validated deep project-list filters.
+ */
+export type TGetMyProjectsQuery = z.infer<typeof getMyProjectsQuerySchema>;
+
+/**
+ * Validated create-task request body.
+ */
+export type TCreateProjectTaskPayload = z.infer<typeof createProjectTaskSchema>;
+
+/**
+ * Validated create-measurement request body.
+ */
+export type TCreateMeasurementPayload = z.infer<typeof createMeasurementSchema>;
+
+/**
+ * Validated create-note request body.
+ */
+export type TCreateProjectNotePayload = z.infer<typeof createProjectNoteSchema>;
+
+/**
+ * Validated project-settings patch body.
+ */
+export type TUpdateMobileProjectPayload = z.infer<
+  typeof updateMobileProjectSchema
+>;
+
+/**
+ * Validated phase-dates patch body.
+ */
+export type TUpdatePhaseDatesPayload = z.infer<typeof updatePhaseDatesSchema>;
+
+/**
+ * Validated project-attachment create body.
+ */
+export type TCreateProjectAttachmentPayload = z.infer<
+  typeof createProjectAttachmentSchema
+>;
 
 /**
  * Service params for starting a timer.
@@ -204,4 +260,122 @@ export type TUpdateMobilePhaseStatusServiceParams = {
   phase: ProjectPhase;
   /** Validated status payload. */
   payload: TUpdateMobilePhaseStatusPayload;
+};
+
+/**
+ * Service params for listing projects with optional deep filters.
+ */
+export type TGetMyProjectsServiceParams = {
+  /** Authenticated mobile user. */
+  user: User;
+  /** Validated list filters / sort. */
+  query: TGetMyProjectsQuery;
+};
+
+/**
+ * Service params for project-scoped SM management reads/writes.
+ */
+export type TMobileProjectServiceParams = {
+  /** Authenticated site manager. */
+  user: User;
+  /** Trusted accessible project. */
+  project: Project;
+};
+
+/**
+ * Service params for creating a project task.
+ */
+export type TCreateProjectTaskServiceParams = {
+  /** Authenticated site manager (audit actor). */
+  user: User;
+  /** Trusted accessible project. */
+  project: Project;
+  /** Validated create payload. */
+  payload: TCreateProjectTaskPayload;
+};
+
+/**
+ * Service params for toggling or deleting a task.
+ */
+export type TProjectTaskServiceParams = {
+  /** Trusted project task. */
+  task: ProjectTask;
+};
+
+/**
+ * Service params for creating a measurement line item.
+ */
+export type TCreateMeasurementServiceParams = {
+  /** Trusted accessible project. */
+  project: Project;
+  /** Validated create payload. */
+  payload: TCreateMeasurementPayload;
+};
+
+/**
+ * Service params for deleting a measurement.
+ */
+export type TDeleteMeasurementServiceParams = {
+  /** Trusted accessible project. */
+  project: Project;
+  /** Trusted measurement belonging to the project. */
+  measurement: ProjectMeasurement;
+};
+
+/**
+ * Service params for creating a project note.
+ */
+export type TCreateProjectNoteServiceParams = {
+  /** Authenticated author. */
+  user: User;
+  /** Trusted accessible project. */
+  project: Project;
+  /** Validated create payload. */
+  payload: TCreateProjectNotePayload;
+};
+
+/**
+ * Service params for deleting a project note.
+ */
+export type TDeleteProjectNoteServiceParams = {
+  /** Trusted note belonging to the project. */
+  note: ProjectNote;
+};
+
+/**
+ * Service params for patching project settings.
+ */
+export type TUpdateMobileProjectServiceParams = {
+  /** Trusted accessible project. */
+  project: Project;
+  /** Validated patch payload. */
+  payload: TUpdateMobileProjectPayload;
+};
+
+/**
+ * Service params for patching phase dates.
+ */
+export type TUpdatePhaseDatesServiceParams = {
+  /** Trusted phase belonging to the accessible project. */
+  phase: ProjectPhase;
+  /** Validated dates payload. */
+  payload: TUpdatePhaseDatesPayload;
+};
+
+/**
+ * Service params for creating a project attachment row.
+ */
+export type TCreateProjectAttachmentServiceParams = {
+  /** Trusted accessible project. */
+  project: Project;
+  /** Validated attachment payload. */
+  payload: TCreateProjectAttachmentPayload;
+};
+
+/**
+ * Service params for deleting a project attachment.
+ */
+export type TDeleteProjectAttachmentServiceParams = {
+  /** Trusted attachment belonging to the project. */
+  attachment: Attachment;
 };

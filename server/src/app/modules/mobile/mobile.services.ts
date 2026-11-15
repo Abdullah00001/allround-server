@@ -1,8 +1,11 @@
 import {
+  AttachmentCategory,
+  CustomerCategory,
   InspectionStatus,
   Language,
   PhaseStatus,
   PhaseType,
+  Priority,
   Prisma,
   Role,
   TimeLogStatus,
@@ -16,6 +19,7 @@ import {
 import { calculateNetHours } from '@/app/modules/timelog/timelog.helpers';
 import {
   getProjectDto,
+  MobileAttachmentDTO,
   MobileConfigDTO,
   MobileCrewBreakdownDTO,
   MobileCrewTimeDTO,
@@ -27,7 +31,14 @@ import {
   MobileManagedPhaseDTO,
   MobileMapPinDTO,
   MobileMapProjectDTO,
+  MobileMeasurementDTO,
+  MobilePhaseDatesDTO,
   MobileProjectDTO,
+  MobileProjectFilterOptionsDTO,
+  MobileProjectNoteDTO,
+  MobileProjectSettingsDTO,
+  MobileProjectTaskDTO,
+  MobileProjectTasksListDTO,
   MobileProfileDTO,
   MobileScheduleDayDTO,
   MobileSchedulePhaseDTO,
@@ -38,6 +49,8 @@ import {
   decimalToNumber,
 } from '@/app/modules/mobile/mobile.dto';
 import {
+  deriveTaskTitle,
+  extractCityFromAddress,
   getPeriodRange,
   getUtcDayEndExclusive,
   getUtcDayStart,
@@ -46,19 +59,31 @@ import {
 } from '@/app/modules/mobile/mobile.helpers';
 import {
   TCompleteInspectionServiceParams,
+  TCreateMeasurementServiceParams,
+  TCreateProjectAttachmentServiceParams,
+  TCreateProjectNoteServiceParams,
+  TCreateProjectTaskServiceParams,
+  TDeleteMeasurementServiceParams,
+  TDeleteProjectAttachmentServiceParams,
+  TDeleteProjectNoteServiceParams,
   TGetCrewTimeServiceParams,
   TGetMapServiceParams,
   TGetMobileInspectionServiceParams,
+  TGetMyProjectsServiceParams,
   TGetMyTimeLogsServiceParams,
   TGetScheduleServiceParams,
   TListMobileInspectionsServiceParams,
   TListMobilePhasesServiceParams,
   TManualTimeServiceParams,
+  TMobileProjectServiceParams,
   TMobileUserServiceParams,
+  TProjectTaskServiceParams,
   TStartTimerServiceParams,
   TStopTimerServiceParams,
   TSyncTimeLogsServiceParams,
   TUpdateMobilePhaseStatusServiceParams,
+  TUpdateMobileProjectServiceParams,
+  TUpdatePhaseDatesServiceParams,
 } from '@/app/modules/mobile/mobile.types';
 
 const timeLogInclude = {
@@ -369,91 +394,166 @@ export const getDashboardDataService = async ({
 };
 
 /**
- * Lists projects for the mobile Projects tab.
+ * Builds Prisma `where` filters for deep project list filtering.
+ *
+ * @param {TGetMyProjectsServiceParams['query']} query - Validated list filters.
+ * @returns {Prisma.ProjectWhereInput} Additional where clauses (AND-merged by caller).
+ */
+const buildProjectListFilters = (
+  query: TGetMyProjectsServiceParams['query']
+): Prisma.ProjectWhereInput => {
+  const and: Prisma.ProjectWhereInput[] = [];
+
+  if (query.phaseType) {
+    and.push({ phases: { some: { type: query.phaseType } } });
+  }
+  if (query.priority) {
+    and.push({ phases: { some: { priority: query.priority } } });
+  }
+  if (query.category) {
+    and.push({ customer: { category: query.category, deletedAt: null } });
+  }
+  if (query.city) {
+    and.push({
+      OR: [
+        { address: { contains: query.city, mode: 'insensitive' } },
+        {
+          customer: {
+            address: { contains: query.city, mode: 'insensitive' },
+            deletedAt: null,
+          },
+        },
+      ],
+    });
+  }
+
+  return and.length > 0 ? { AND: and } : {};
+};
+
+/**
+ * Earliest non-null phase startDate used as a next-inspection proxy for sorting.
+ *
+ * @param {{ startDate: Date | null }[]} phases - Project phases.
+ * @returns {number} Epoch ms or `Number.POSITIVE_INFINITY` when none set.
+ */
+const nextInspectionSortKey = (
+  phases: Array<{ startDate: Date | null }>
+): number => {
+  const timestamps = phases
+    .map((phase) => phase.startDate?.getTime())
+    .filter((value): value is number => typeof value === 'number');
+  if (timestamps.length === 0) return Number.POSITIVE_INFINITY;
+  return Math.min(...timestamps);
+};
+
+/**
+ * Lists projects for the mobile Projects tab with optional deep filters.
  * SITE_MANAGER + `GLOBAL_ACCESS` returns every non-deleted project with all
  * phases. Otherwise returns assignment-scoped projects (PM → all phases on
  * managed projects; crew → only assigned phases).
  * Project rows are built via `getProjectDto` so site managers receive
  * budget/logged/profitability fields while employees do not.
  *
- * @param {TMobileUserServiceParams} params - Authenticated user wrapper.
+ * @param {TGetMyProjectsServiceParams} params - Authenticated user and filters.
  * @returns {Promise<MobileProjectDTO[]>} Role-aware mobile project rows.
  */
 export const getMyProjectsService = async ({
   user,
-}: TMobileUserServiceParams): Promise<MobileProjectDTO[]> => {
+  query,
+}: TGetMyProjectsServiceParams): Promise<MobileProjectDTO[]> => {
   const userId = user.id;
   const globalAccess = await hasSiteManagerGlobalAccess(user);
+  const filterWhere = buildProjectListFilters(query);
+  const sortBy = query.sortBy ?? 'newest';
+
+  type TProjectListRow = {
+    id: string;
+    name: string;
+    address: string;
+    budgetedHours: Prisma.Decimal | number;
+    updatedAt: Date;
+    customer: { id: string; name: string };
+    phases: Array<{
+      id: string;
+      type: PhaseType;
+      status: PhaseStatus;
+      priority: Priority;
+      startDate: Date | null;
+      endDate: Date | null;
+    }>;
+  };
+
+  let scopedProjects: TProjectListRow[] = [];
 
   if (globalAccess) {
-    const projects = await prisma.project.findMany({
-      where: { deletedAt: null },
+    scopedProjects = await prisma.project.findMany({
+      where: { deletedAt: null, ...filterWhere },
       include: {
         customer: { select: { id: true, name: true } },
         phases: {
           orderBy: { createdAt: 'desc' },
         },
       },
-      orderBy: { updatedAt: 'desc' },
+    });
+  } else {
+    const assignedProjectIds = await getAssignedProjectIds(userId);
+    if (assignedProjectIds.length === 0) return [];
+
+    const managedProjectIds = new Set(
+      (
+        await prisma.projectManagerAssignment.findMany({
+          where: { userId, projectId: { in: assignedProjectIds } },
+          select: { projectId: true },
+        })
+      ).map((row) => row.projectId)
+    );
+
+    const crewPhaseIds = new Set(
+      (
+        await prisma.crewAssignment.findMany({
+          where: {
+            userId,
+            phase: { projectId: { in: assignedProjectIds } },
+          },
+          select: { phaseId: true },
+        })
+      ).map((row) => row.phaseId)
+    );
+
+    const projects = await prisma.project.findMany({
+      where: {
+        id: { in: assignedProjectIds },
+        deletedAt: null,
+        ...filterWhere,
+      },
+      include: {
+        customer: { select: { id: true, name: true } },
+        phases: {
+          orderBy: { createdAt: 'desc' },
+        },
+      },
     });
 
-    const loggedByProject = await getLoggedHoursByProjectId(
-      projects.map((project) => project.id)
-    );
-
-    return projects.map((project) =>
-      getProjectDto(
-        project,
-        user.role,
-        loggedByProject.get(project.id) ?? 0
-      )
-    );
+    scopedProjects = projects.map((project) => ({
+      ...project,
+      phases: managedProjectIds.has(project.id)
+        ? project.phases
+        : project.phases.filter((phase) => crewPhaseIds.has(phase.id)),
+    }));
   }
 
-  const assignedProjectIds = await getAssignedProjectIds(userId);
-  if (assignedProjectIds.length === 0) return [];
-
-  const managedProjectIds = new Set(
-    (
-      await prisma.projectManagerAssignment.findMany({
-        where: { userId, projectId: { in: assignedProjectIds } },
-        select: { projectId: true },
-      })
-    ).map((row) => row.projectId)
-  );
-
-  const crewPhaseIds = new Set(
-    (
-      await prisma.crewAssignment.findMany({
-        where: {
-          userId,
-          phase: { projectId: { in: assignedProjectIds } },
-        },
-        select: { phaseId: true },
-      })
-    ).map((row) => row.phaseId)
-  );
-
-  const projects = await prisma.project.findMany({
-    where: {
-      id: { in: assignedProjectIds },
-      deletedAt: null,
-    },
-    include: {
-      customer: { select: { id: true, name: true } },
-      phases: {
-        orderBy: { createdAt: 'desc' },
-      },
-    },
-    orderBy: { updatedAt: 'desc' },
-  });
-
-  const scopedProjects = projects.map((project) => ({
-    ...project,
-    phases: managedProjectIds.has(project.id)
-      ? project.phases
-      : project.phases.filter((phase) => crewPhaseIds.has(phase.id)),
-  }));
+  if (sortBy === 'nameAZ') {
+    scopedProjects.sort((a, b) => a.name.localeCompare(b.name));
+  } else if (sortBy === 'nextInspectionDate') {
+    scopedProjects.sort(
+      (a, b) =>
+        nextInspectionSortKey(a.phases) - nextInspectionSortKey(b.phases)
+    );
+  } else {
+    scopedProjects.sort(
+      (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()
+    );
+  }
 
   const loggedByProject = await getLoggedHoursByProjectId(
     scopedProjects.map((project) => project.id)
@@ -1031,7 +1131,7 @@ export const listMobileInspectionsService = async ({
     orderBy: { appointmentDate: 'asc' },
   });
 
-  return inspections.map(MobileInspectionDTO.build);
+  return inspections.map((inspection) => MobileInspectionDTO.build(inspection));
 };
 
 /**
@@ -1055,30 +1155,115 @@ export const getMobileInspectionByIdService = async ({
 };
 
 /**
- * Completes an inspection survey: saves scaffold specs and sets `SURVEY_DONE`.
+ * Completes an inspection survey: saves scaffold specs, optional access notes,
+ * survey photos as `Attachment` rows, and optionally converts to a Project.
+ * When `convertToProject` is true the inspection ends as `CONVERTED`; otherwise `SURVEY_DONE`.
  * Assumes pending + assignment middlewares already passed.
  *
  * @param {TCompleteInspectionServiceParams} params - Trusted inspection and payload.
- * @returns {Promise<MobileInspectionDTO>} Updated inspection DTO.
+ * @returns {Promise<MobileInspectionDTO>} Updated inspection DTO (optional converted project).
  */
 export const completeMobileInspectionService = async ({
   inspection,
   payload,
 }: TCompleteInspectionServiceParams): Promise<MobileInspectionDTO> => {
-  const updated = await prisma.inspection.update({
-    where: { id: inspection.id },
-    data: {
-      scaffoldArea: new Prisma.Decimal(payload.scaffoldArea),
-      scaffoldHeight: new Prisma.Decimal(payload.scaffoldHeight),
-      scaffoldType: payload.scaffoldType,
-      status: InspectionStatus.SURVEY_DONE,
-    },
-    include: {
-      customer: { select: { id: true, name: true } },
-    },
+  const convert = payload.convertToProject === true;
+  const projectName = payload.projectName?.trim() || inspection.siteTitle;
+  const phaseType = payload.phaseType ?? PhaseType.ERECTION;
+
+  const result = await prisma.$transaction(async (tx) => {
+    if (payload.photos && payload.photos.length > 0) {
+      await tx.attachment.createMany({
+        data: payload.photos.map((photo) => ({
+          url: photo.url,
+          fileType: photo.fileType,
+          category: AttachmentCategory.PHOTO,
+          inspectionId: inspection.id,
+        })),
+      });
+    }
+
+    if (!convert) {
+      const updated = await tx.inspection.update({
+        where: { id: inspection.id },
+        data: {
+          scaffoldArea: new Prisma.Decimal(payload.scaffoldArea),
+          scaffoldHeight: new Prisma.Decimal(payload.scaffoldHeight),
+          scaffoldType: payload.scaffoldType,
+          siteAccessInstructions: payload.siteAccessInstructions,
+          specialRequirements: payload.specialRequirements,
+          status: InspectionStatus.SURVEY_DONE,
+        },
+        include: {
+          customer: { select: { id: true, name: true } },
+        },
+      });
+      return { inspection: updated, project: null as { id: string; name: string } | null };
+    }
+
+    const project = await tx.project.create({
+      data: {
+        customerId: inspection.customerId,
+        name: projectName,
+        address: inspection.address,
+        scaffoldArea: new Prisma.Decimal(payload.scaffoldArea),
+        siteAccessNotes: payload.siteAccessInstructions,
+      },
+    });
+
+    await tx.projectMeasurement.create({
+      data: {
+        projectId: project.id,
+        length: new Prisma.Decimal(0),
+        height: new Prisma.Decimal(payload.scaffoldHeight),
+        quantity: new Prisma.Decimal(1),
+        area: new Prisma.Decimal(payload.scaffoldArea),
+        scaffoldType: payload.scaffoldType,
+      },
+    });
+
+    await tx.projectPhase.create({
+      data: {
+        projectId: project.id,
+        type: phaseType,
+        status: PhaseStatus.ENQUIRY,
+      },
+    });
+
+    if (inspection.siteManagerId) {
+      await tx.projectManagerAssignment.create({
+        data: {
+          projectId: project.id,
+          userId: inspection.siteManagerId,
+        },
+      });
+    }
+
+    const updated = await tx.inspection.update({
+      where: { id: inspection.id },
+      data: {
+        scaffoldArea: new Prisma.Decimal(payload.scaffoldArea),
+        scaffoldHeight: new Prisma.Decimal(payload.scaffoldHeight),
+        scaffoldType: payload.scaffoldType,
+        siteAccessInstructions: payload.siteAccessInstructions,
+        specialRequirements: payload.specialRequirements,
+        status: InspectionStatus.CONVERTED,
+      },
+      include: {
+        customer: { select: { id: true, name: true } },
+      },
+    });
+
+    return {
+      inspection: updated,
+      project: { id: project.id, name: project.name },
+    };
   });
 
-  return MobileInspectionDTO.build(updated);
+  return MobileInspectionDTO.build(
+    result.inspection,
+    result.project ?? undefined
+  );
 };
 
 /**
@@ -1185,4 +1370,414 @@ export const updateMobilePhaseStatusService = async ({
       address: updated.project.address,
     }
   );
+};
+
+/**
+ * Returns filter-modal options for the Site Manager projects list.
+ * Cities are distinct tokens parsed from project and customer addresses within
+ * the caller's accessible project scope.
+ *
+ * @param {TMobileUserServiceParams} params - Authenticated site manager.
+ * @returns {Promise<MobileProjectFilterOptionsDTO>} Filter option bags.
+ */
+export const getProjectFilterOptionsService = async ({
+  user,
+}: TMobileUserServiceParams): Promise<MobileProjectFilterOptionsDTO> => {
+  const globalAccess = await hasSiteManagerGlobalAccess(user);
+
+  const projects = await prisma.project.findMany({
+    where: globalAccess
+      ? { deletedAt: null }
+      : {
+          deletedAt: null,
+          id: { in: await getAssignedProjectIds(user.id) },
+        },
+    select: {
+      address: true,
+      customer: { select: { address: true } },
+    },
+  });
+
+  const citySet = new Set<string>();
+  for (const project of projects) {
+    const fromProject = extractCityFromAddress(project.address);
+    const fromCustomer = extractCityFromAddress(project.customer.address);
+    if (fromProject) citySet.add(fromProject);
+    if (fromCustomer) citySet.add(fromCustomer);
+  }
+
+  return new MobileProjectFilterOptionsDTO(
+    Object.values(PhaseType),
+    [...citySet].sort((a, b) => a.localeCompare(b)),
+    Object.values(Priority),
+    Object.values(CustomerCategory),
+    ['newest', 'nextInspectionDate', 'nameAZ']
+  );
+};
+
+/**
+ * Lists open and completed tasks for a project, including assignee details.
+ *
+ * @param {TMobileProjectServiceParams} params - Trusted accessible project.
+ * @returns {Promise<MobileProjectTasksListDTO>} Open and completed task lists.
+ */
+export const listProjectTasksService = async ({
+  project,
+}: TMobileProjectServiceParams): Promise<MobileProjectTasksListDTO> => {
+  const tasks = await prisma.projectTask.findMany({
+    where: { projectId: project.id },
+    include: {
+      employee: {
+        select: { id: true, firstName: true, lastName: true, avatarUrl: true },
+      },
+    },
+    orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
+  });
+
+  const open = tasks
+    .filter((task) => !task.isCompleted)
+    .map((task) => MobileProjectTaskDTO.build(task));
+  const completed = tasks
+    .filter((task) => task.isCompleted)
+    .map((task) => MobileProjectTaskDTO.build(task));
+
+  return new MobileProjectTasksListDTO(open, completed);
+};
+
+/**
+ * Creates a project task for the Site Manager task board.
+ * `title` is derived from the first line of `description`.
+ *
+ * @param {TCreateProjectTaskServiceParams} params - Project, actor, and payload.
+ * @returns {Promise<MobileProjectTaskDTO>} Created task DTO.
+ */
+export const createProjectTaskService = async ({
+  project,
+  payload,
+}: TCreateProjectTaskServiceParams): Promise<MobileProjectTaskDTO> => {
+  const task = await prisma.projectTask.create({
+    data: {
+      projectId: project.id,
+      title: deriveTaskTitle(payload.description),
+      description: payload.description,
+      employeeId: payload.employeeId,
+      priority: payload.priority,
+      dueDate: payload.dueDate,
+    },
+    include: {
+      employee: {
+        select: { id: true, firstName: true, lastName: true, avatarUrl: true },
+      },
+    },
+  });
+
+  return MobileProjectTaskDTO.build(task);
+};
+
+/**
+ * Toggles a task between completed and open.
+ *
+ * @param {TProjectTaskServiceParams} params - Trusted task.
+ * @returns {Promise<MobileProjectTaskDTO>} Updated task DTO.
+ */
+export const toggleProjectTaskService = async ({
+  task,
+}: TProjectTaskServiceParams): Promise<MobileProjectTaskDTO> => {
+  const updated = await prisma.projectTask.update({
+    where: { id: task.id },
+    data: { isCompleted: !task.isCompleted },
+    include: {
+      employee: {
+        select: { id: true, firstName: true, lastName: true, avatarUrl: true },
+      },
+    },
+  });
+
+  return MobileProjectTaskDTO.build(updated);
+};
+
+/**
+ * Deletes a project task.
+ *
+ * @param {TProjectTaskServiceParams} params - Trusted task.
+ * @returns {Promise<{ id: string }>} Deleted task id.
+ */
+export const deleteProjectTaskService = async ({
+  task,
+}: TProjectTaskServiceParams): Promise<{ id: string }> => {
+  await prisma.projectTask.delete({ where: { id: task.id } });
+  return { id: task.id };
+};
+
+/**
+ * Lists measurement line items for a project.
+ *
+ * @param {TMobileProjectServiceParams} params - Trusted accessible project.
+ * @returns {Promise<MobileMeasurementDTO[]>} Measurement rows.
+ */
+export const listProjectMeasurementsService = async ({
+  project,
+}: TMobileProjectServiceParams): Promise<MobileMeasurementDTO[]> => {
+  const rows = await prisma.projectMeasurement.findMany({
+    where: { projectId: project.id },
+    orderBy: { createdAt: 'desc' },
+  });
+  return rows.map((row) => MobileMeasurementDTO.build(row));
+};
+
+/**
+ * Creates a measurement line item, computes area, and refreshes project scaffoldArea.
+ *
+ * @param {TCreateMeasurementServiceParams} params - Project and payload.
+ * @returns {Promise<MobileMeasurementDTO>} Created measurement DTO.
+ */
+export const createProjectMeasurementService = async ({
+  project,
+  payload,
+}: TCreateMeasurementServiceParams): Promise<MobileMeasurementDTO> => {
+  const area = payload.length * payload.height * payload.quantity;
+
+  const measurement = await prisma.$transaction(async (tx) => {
+    const created = await tx.projectMeasurement.create({
+      data: {
+        projectId: project.id,
+        position: payload.position,
+        length: new Prisma.Decimal(payload.length),
+        height: new Prisma.Decimal(payload.height),
+        quantity: new Prisma.Decimal(payload.quantity),
+        unit: payload.unit,
+        remark: payload.remark,
+        area: new Prisma.Decimal(area),
+      },
+    });
+
+    const aggregate = await tx.projectMeasurement.aggregate({
+      where: { projectId: project.id },
+      _sum: { area: true },
+    });
+
+    await tx.project.update({
+      where: { id: project.id },
+      data: {
+        scaffoldArea: aggregate._sum.area ?? new Prisma.Decimal(0),
+      },
+    });
+
+    return created;
+  });
+
+  return MobileMeasurementDTO.build(measurement);
+};
+
+/**
+ * Deletes a measurement and recalculates the project's total scaffoldArea.
+ *
+ * @param {TDeleteMeasurementServiceParams} params - Project and measurement.
+ * @returns {Promise<{ id: string }>} Deleted measurement id.
+ */
+export const deleteProjectMeasurementService = async ({
+  project,
+  measurement,
+}: TDeleteMeasurementServiceParams): Promise<{ id: string }> => {
+  await prisma.$transaction(async (tx) => {
+    await tx.projectMeasurement.delete({ where: { id: measurement.id } });
+
+    const aggregate = await tx.projectMeasurement.aggregate({
+      where: { projectId: project.id },
+      _sum: { area: true },
+    });
+
+    await tx.project.update({
+      where: { id: project.id },
+      data: {
+        scaffoldArea: aggregate._sum.area ?? null,
+      },
+    });
+  });
+
+  return { id: measurement.id };
+};
+
+/**
+ * Lists project notes newest-first with author projection.
+ *
+ * @param {TMobileProjectServiceParams} params - Trusted accessible project.
+ * @returns {Promise<MobileProjectNoteDTO[]>} Note rows.
+ */
+export const listProjectNotesService = async ({
+  project,
+}: TMobileProjectServiceParams): Promise<MobileProjectNoteDTO[]> => {
+  const notes = await prisma.projectNote.findMany({
+    where: { projectId: project.id },
+    include: {
+      author: { select: { id: true, firstName: true, lastName: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+  return notes.map((note) => MobileProjectNoteDTO.build(note));
+};
+
+/**
+ * Creates a categorized project note authored by the authenticated user.
+ *
+ * @param {TCreateProjectNoteServiceParams} params - Author, project, and payload.
+ * @returns {Promise<MobileProjectNoteDTO>} Created note DTO.
+ */
+export const createProjectNoteService = async ({
+  user,
+  project,
+  payload,
+}: TCreateProjectNoteServiceParams): Promise<MobileProjectNoteDTO> => {
+  const note = await prisma.projectNote.create({
+    data: {
+      projectId: project.id,
+      authorId: user.id,
+      category: payload.category,
+      content: payload.content,
+    },
+    include: {
+      author: { select: { id: true, firstName: true, lastName: true } },
+    },
+  });
+  return MobileProjectNoteDTO.build(note);
+};
+
+/**
+ * Deletes a project note.
+ *
+ * @param {TDeleteProjectNoteServiceParams} params - Trusted note.
+ * @returns {Promise<{ id: string }>} Deleted note id.
+ */
+export const deleteProjectNoteService = async ({
+  note,
+}: TDeleteProjectNoteServiceParams): Promise<{ id: string }> => {
+  await prisma.projectNote.delete({ where: { id: note.id } });
+  return { id: note.id };
+};
+
+/**
+ * Updates project contact fields and optionally the most recently updated phase's
+ * type/status/priority (project settings screen).
+ *
+ * @param {TUpdateMobileProjectServiceParams} params - Project and patch payload.
+ * @returns {Promise<MobileProjectSettingsDTO>} Updated settings projection.
+ */
+export const updateMobileProjectService = async ({
+  project,
+  payload,
+}: TUpdateMobileProjectServiceParams): Promise<MobileProjectSettingsDTO> => {
+  const {
+    phaseType,
+    status,
+    priority,
+    contactName,
+    contactPhone,
+    contactEmail,
+  } = payload;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.project.update({
+      where: { id: project.id },
+      data: {
+        ...(contactName !== undefined ? { contactName } : {}),
+        ...(contactPhone !== undefined ? { contactPhone } : {}),
+        ...(contactEmail !== undefined ? { contactEmail } : {}),
+      },
+    });
+
+    if (
+      phaseType !== undefined ||
+      status !== undefined ||
+      priority !== undefined
+    ) {
+      const primaryPhase = await tx.projectPhase.findFirst({
+        where: { projectId: project.id },
+        orderBy: { updatedAt: 'desc' },
+      });
+
+      if (primaryPhase) {
+        await tx.projectPhase.update({
+          where: { id: primaryPhase.id },
+          data: {
+            ...(phaseType !== undefined ? { type: phaseType } : {}),
+            ...(status !== undefined ? { status } : {}),
+            ...(priority !== undefined ? { priority } : {}),
+          },
+        });
+      }
+    }
+  });
+
+  const refreshed = await prisma.project.findUniqueOrThrow({
+    where: { id: project.id },
+    include: { phases: { orderBy: { createdAt: 'desc' } } },
+  });
+
+  return MobileProjectSettingsDTO.build(refreshed);
+};
+
+/**
+ * Updates phase schedule fields and optional safety-inspection completion flag.
+ *
+ * @param {TUpdatePhaseDatesServiceParams} params - Phase and dates payload.
+ * @returns {Promise<MobilePhaseDatesDTO>} Updated phase dates DTO.
+ */
+export const updatePhaseDatesService = async ({
+  phase,
+  payload,
+}: TUpdatePhaseDatesServiceParams): Promise<MobilePhaseDatesDTO> => {
+  const updated = await prisma.projectPhase.update({
+    where: { id: phase.id },
+    data: {
+      ...(payload.startDate !== undefined ? { startDate: payload.startDate } : {}),
+      ...(payload.endDate !== undefined ? { endDate: payload.endDate } : {}),
+      ...(payload.durationDays !== undefined
+        ? {
+            durationDays:
+              payload.durationDays === null
+                ? null
+                : new Prisma.Decimal(payload.durationDays),
+          }
+        : {}),
+      ...(payload.safetyInspectionComplete !== undefined
+        ? { safetyInspectionComplete: payload.safetyInspectionComplete }
+        : {}),
+    },
+  });
+
+  return MobilePhaseDatesDTO.build(updated);
+};
+
+/**
+ * Registers a project attachment row for a previously uploaded S3 object.
+ *
+ * @param {TCreateProjectAttachmentServiceParams} params - Project and payload.
+ * @returns {Promise<MobileAttachmentDTO>} Created attachment DTO.
+ */
+export const createProjectAttachmentService = async ({
+  project,
+  payload,
+}: TCreateProjectAttachmentServiceParams): Promise<MobileAttachmentDTO> => {
+  const attachment = await prisma.attachment.create({
+    data: {
+      projectId: project.id,
+      url: payload.url,
+      fileType: payload.fileType,
+      category: payload.category,
+    },
+  });
+  return MobileAttachmentDTO.build(attachment);
+};
+
+/**
+ * Deletes a project attachment row (does not remove the S3 object).
+ *
+ * @param {TDeleteProjectAttachmentServiceParams} params - Trusted attachment.
+ * @returns {Promise<{ id: string }>} Deleted attachment id.
+ */
+export const deleteProjectAttachmentService = async ({
+  attachment,
+}: TDeleteProjectAttachmentServiceParams): Promise<{ id: string }> => {
+  await prisma.attachment.delete({ where: { id: attachment.id } });
+  return { id: attachment.id };
 };

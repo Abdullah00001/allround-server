@@ -1,8 +1,12 @@
 import { NextFunction, Request, Response } from 'express';
 import {
+  Attachment,
   Inspection,
   InspectionStatus,
   Project,
+  ProjectMeasurement,
+  ProjectNote,
+  ProjectTask,
   Role,
   TimeLog,
   User,
@@ -12,6 +16,7 @@ import { asyncHandler } from '@/app/utils/system.utils';
 import prisma from '@/app/configs/db.configs';
 import { AuthErrorType } from '@/const';
 import {
+  TCreateProjectTaskPayload,
   TGetCrewTimeQuery,
   TStopTimerPayload,
 } from '@/app/modules/mobile/mobile.types';
@@ -382,6 +387,249 @@ export const checkSiteManagerProjectAccessMiddleware = asyncHandler(
       return;
     }
 
+    next();
+  }
+);
+
+/**
+ * Loads a non-deleted project from validated `params.projectId`.
+ * Attaches the Prisma `Project` to `req.project` on success.
+ *
+ * @param {Request} req - Express request with validated `params.projectId`.
+ * @param {Response} res - Express response used for the 404 envelope.
+ * @param {NextFunction} next - Continues when the project exists.
+ * @returns {Promise<void>}
+ */
+export const checkMobileProjectExistenceMiddleware = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const traceId = getTraceId();
+    const projectId = req.params.projectId as string;
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, deletedAt: null },
+    });
+
+    if (!project) {
+      res.status(404).json({
+        success: false,
+        message: 'Project not found',
+        errorType: AuthErrorType.PROJECT_NOT_FOUND,
+        traceId,
+      });
+      return;
+    }
+
+    req.project = project as Project;
+    next();
+  }
+);
+
+/**
+ * Ensures a phase belongs to `req.project` (after both existence middlewares).
+ *
+ * @param {Request} req - Express request with trusted `req.project` and `req.phase`.
+ * @param {Response} res - Express response used for the 404 envelope.
+ * @param {NextFunction} next - Continues when the phase belongs to the project.
+ * @returns {Promise<void>}
+ */
+export const checkPhaseBelongsToProjectMiddleware = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const traceId = getTraceId();
+    const project = req.project;
+    const phase = req.phase;
+
+    if (!project || !phase || phase.projectId !== project.id) {
+      res.status(404).json({
+        success: false,
+        message: 'Phase not found',
+        errorType: AuthErrorType.PHASE_NOT_FOUND,
+        traceId,
+      });
+      return;
+    }
+
+    next();
+  }
+);
+
+/**
+ * Loads a project task by `params.taskId` and attaches parent project for access checks.
+ *
+ * @param {Request} req - Express request with validated `params.taskId`.
+ * @param {Response} res - Express response used for the 404 envelope.
+ * @param {NextFunction} next - Continues when the task (and parent project) exist.
+ * @returns {Promise<void>}
+ */
+export const checkProjectTaskExistenceMiddleware = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const traceId = getTraceId();
+    const taskId = req.params.taskId as string;
+
+    const task = await prisma.projectTask.findUnique({
+      where: { id: taskId },
+    });
+
+    if (!task) {
+      res.status(404).json({
+        success: false,
+        message: 'Task not found',
+        errorType: AuthErrorType.TASK_NOT_FOUND,
+        traceId,
+      });
+      return;
+    }
+
+    const project = await prisma.project.findFirst({
+      where: { id: task.projectId, deletedAt: null },
+    });
+
+    if (!project) {
+      res.status(404).json({
+        success: false,
+        message: 'Project not found',
+        errorType: AuthErrorType.PROJECT_NOT_FOUND,
+        traceId,
+      });
+      return;
+    }
+
+    req.projectTask = task as ProjectTask;
+    req.project = project as Project;
+    next();
+  }
+);
+
+/**
+ * Ensures `body.employeeId` references an active non-deleted workforce user.
+ *
+ * @param {Request} req - Express request with validated create-task body.
+ * @param {Response} res - Express response used for the 404 envelope.
+ * @param {NextFunction} next - Continues when the assignee exists.
+ * @returns {Promise<void>}
+ */
+export const checkTaskAssigneeExistenceMiddleware = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const traceId = getTraceId();
+    const { employeeId } = req.body as TCreateProjectTaskPayload;
+
+    const employee = await prisma.user.findFirst({
+      where: {
+        id: employeeId,
+        deletedAt: null,
+        role: { in: [Role.EMPLOYEE, Role.SITE_MANAGER] },
+      },
+      select: { id: true },
+    });
+
+    if (!employee) {
+      res.status(404).json({
+        success: false,
+        message: 'User not found',
+        errorType: AuthErrorType.USER_NOT_FOUND,
+        traceId,
+      });
+      return;
+    }
+
+    next();
+  }
+);
+
+/**
+ * Loads a measurement by `params.id` that belongs to `params.projectId`.
+ *
+ * @param {Request} req - Express request with validated project/child ids.
+ * @param {Response} res - Express response used for the 404 envelope.
+ * @param {NextFunction} next - Continues when the measurement exists on the project.
+ * @returns {Promise<void>}
+ */
+export const checkProjectMeasurementExistenceMiddleware = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const traceId = getTraceId();
+    const projectId = req.params.projectId as string;
+    const id = req.params.id as string;
+
+    const measurement = await prisma.projectMeasurement.findFirst({
+      where: { id, projectId },
+    });
+
+    if (!measurement) {
+      res.status(404).json({
+        success: false,
+        message: 'Measurement not found',
+        errorType: AuthErrorType.MEASUREMENT_NOT_FOUND,
+        traceId,
+      });
+      return;
+    }
+
+    req.projectMeasurement = measurement as ProjectMeasurement;
+    next();
+  }
+);
+
+/**
+ * Loads a note by `params.id` that belongs to `params.projectId`.
+ *
+ * @param {Request} req - Express request with validated project/child ids.
+ * @param {Response} res - Express response used for the 404 envelope.
+ * @param {NextFunction} next - Continues when the note exists on the project.
+ * @returns {Promise<void>}
+ */
+export const checkProjectNoteExistenceMiddleware = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const traceId = getTraceId();
+    const projectId = req.params.projectId as string;
+    const id = req.params.id as string;
+
+    const note = await prisma.projectNote.findFirst({
+      where: { id, projectId },
+    });
+
+    if (!note) {
+      res.status(404).json({
+        success: false,
+        message: 'Note not found',
+        errorType: AuthErrorType.NOTE_NOT_FOUND,
+        traceId,
+      });
+      return;
+    }
+
+    req.projectNote = note as ProjectNote;
+    next();
+  }
+);
+
+/**
+ * Loads an attachment by `params.id` that belongs to `params.projectId`.
+ *
+ * @param {Request} req - Express request with validated project/child ids.
+ * @param {Response} res - Express response used for the 404 envelope.
+ * @param {NextFunction} next - Continues when the attachment exists on the project.
+ * @returns {Promise<void>}
+ */
+export const checkProjectAttachmentExistenceMiddleware = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const traceId = getTraceId();
+    const projectId = req.params.projectId as string;
+    const id = req.params.id as string;
+
+    const attachment = await prisma.attachment.findFirst({
+      where: { id, projectId },
+    });
+
+    if (!attachment) {
+      res.status(404).json({
+        success: false,
+        message: 'Attachment not found',
+        errorType: AuthErrorType.ATTACHMENT_NOT_FOUND,
+        traceId,
+      });
+      return;
+    }
+
+    req.attachment = attachment as Attachment;
     next();
   }
 );

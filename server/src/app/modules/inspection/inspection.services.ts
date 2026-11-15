@@ -236,14 +236,18 @@ export const convertInspectionToProjectService = async ({
         customerId: inspection.customerId,
         name: payload.projectName,
         address: inspection.address,
+        scaffoldArea: inspection.scaffoldArea,
+        siteAccessNotes: inspection.siteAccessInstructions,
       },
     });
 
     const measurement = await tx.projectMeasurement.create({
       data: {
         projectId: project.id,
+        length: new Prisma.Decimal(0),
         area: new Prisma.Decimal(inspection.scaffoldArea ?? 0),
         height: new Prisma.Decimal(inspection.scaffoldHeight ?? 0),
+        quantity: new Prisma.Decimal(1),
         scaffoldType: inspection.scaffoldType,
       },
     });

@@ -17,16 +17,31 @@ import {
   checkEmployeeManualTimeAllowedMiddleware,
   checkInspectionAssignedToSiteManagerMiddleware,
   checkInspectionPendingForSurveyMiddleware,
+  checkMobileProjectExistenceMiddleware,
   checkNoActiveTimerMiddleware,
   checkOwnedActiveTimeLogMiddleware,
+  checkPhaseBelongsToProjectMiddleware,
+  checkProjectAttachmentExistenceMiddleware,
+  checkProjectMeasurementExistenceMiddleware,
+  checkProjectNoteExistenceMiddleware,
+  checkProjectTaskExistenceMiddleware,
   checkSiteManagerPhaseAccessMiddleware,
   checkSiteManagerProjectAccessMiddleware,
   checkSiteManagerRoleMiddleware,
+  checkTaskAssigneeExistenceMiddleware,
   mapPhaseIdFromParamsMiddleware,
 } from '@/app/modules/mobile/mobile.middlewares';
 import {
   completeMobileInspectionController,
   createManualTimeController,
+  createProjectAttachmentController,
+  createProjectMeasurementController,
+  createProjectNoteController,
+  createProjectTaskController,
+  deleteProjectAttachmentController,
+  deleteProjectMeasurementController,
+  deleteProjectNoteController,
+  deleteProjectTaskController,
   getCrewTimeController,
   getDashboardController,
   getMapController,
@@ -35,26 +50,44 @@ import {
   getMyProjectsController,
   getMyTimeLogsController,
   getProfileController,
+  getProjectFilterOptionsController,
   getScheduleController,
   listMobileInspectionsController,
   listMobilePhasesController,
+  listProjectMeasurementsController,
+  listProjectNotesController,
+  listProjectTasksController,
   startTimerController,
   stopTimerController,
   syncTimeLogsController,
+  toggleProjectTaskController,
   updateMobilePhaseStatusController,
+  updateMobileProjectController,
+  updatePhaseDatesController,
 } from '@/app/modules/mobile/mobile.controllers';
 import {
   completeInspectionSchema,
+  createMeasurementSchema,
+  createProjectAttachmentSchema,
+  createProjectNoteSchema,
+  createProjectTaskSchema,
   getCrewTimeQuerySchema,
   getMapQuerySchema,
+  getMyProjectsQuerySchema,
   getMyTimeLogsQuerySchema,
   getScheduleQuerySchema,
   manualTimeSchema,
   mobileInspectionIdParamsSchema,
   mobilePhaseIdParamsSchema,
+  mobileProjectChildIdParamsSchema,
+  mobileProjectIdParamsSchema,
+  mobileProjectPhaseDatesParamsSchema,
+  mobileTaskIdParamsSchema,
   startTimerSchema,
   stopTimerSchema,
   syncTimeLogsSchema,
+  updateMobileProjectSchema,
+  updatePhaseDatesSchema,
   updatePhaseStatusSchema,
 } from '@/app/modules/mobile/mobile.schema';
 
@@ -76,11 +109,141 @@ const mobileAuth = [
  */
 const siteManagerAuth = [...mobileAuth, checkSiteManagerRoleMiddleware] as const;
 
+/**
+ * Site-manager project access chain for `/:projectId` management routes.
+ */
+const siteManagerProjectAccess = [
+  ...siteManagerAuth,
+  validateReqParams(mobileProjectIdParamsSchema),
+  checkMobileProjectExistenceMiddleware,
+  checkSiteManagerProjectAccessMiddleware,
+] as const;
+
 router.route('/mobile/config').get(...mobileAuth, getMobileConfigController);
 
 router.route('/mobile/dashboard').get(...mobileAuth, getDashboardController);
 
-router.route('/mobile/projects').get(...mobileAuth, getMyProjectsController);
+router
+  .route('/mobile/projects/filter-options')
+  .get(...siteManagerAuth, getProjectFilterOptionsController);
+
+router
+  .route('/mobile/projects')
+  .get(
+    ...mobileAuth,
+    validateReqQuery(getMyProjectsQuerySchema),
+    getMyProjectsController
+  );
+
+router
+  .route('/mobile/projects/:projectId')
+  .patch(
+    ...siteManagerProjectAccess,
+    validateReqBody(updateMobileProjectSchema),
+    updateMobileProjectController
+  );
+
+router
+  .route('/mobile/projects/:projectId/tasks')
+  .get(...siteManagerProjectAccess, listProjectTasksController)
+  .post(
+    ...siteManagerProjectAccess,
+    validateReqBody(createProjectTaskSchema),
+    checkTaskAssigneeExistenceMiddleware,
+    createProjectTaskController
+  );
+
+router
+  .route('/mobile/tasks/:taskId/toggle')
+  .patch(
+    ...siteManagerAuth,
+    validateReqParams(mobileTaskIdParamsSchema),
+    checkProjectTaskExistenceMiddleware,
+    checkSiteManagerProjectAccessMiddleware,
+    toggleProjectTaskController
+  );
+
+router
+  .route('/mobile/tasks/:taskId')
+  .delete(
+    ...siteManagerAuth,
+    validateReqParams(mobileTaskIdParamsSchema),
+    checkProjectTaskExistenceMiddleware,
+    checkSiteManagerProjectAccessMiddleware,
+    deleteProjectTaskController
+  );
+
+router
+  .route('/mobile/projects/:projectId/measurements')
+  .get(...siteManagerProjectAccess, listProjectMeasurementsController)
+  .post(
+    ...siteManagerProjectAccess,
+    validateReqBody(createMeasurementSchema),
+    createProjectMeasurementController
+  );
+
+router
+  .route('/mobile/projects/:projectId/measurements/:id')
+  .delete(
+    ...siteManagerAuth,
+    validateReqParams(mobileProjectChildIdParamsSchema),
+    checkMobileProjectExistenceMiddleware,
+    checkSiteManagerProjectAccessMiddleware,
+    checkProjectMeasurementExistenceMiddleware,
+    deleteProjectMeasurementController
+  );
+
+router
+  .route('/mobile/projects/:projectId/notes')
+  .get(...siteManagerProjectAccess, listProjectNotesController)
+  .post(
+    ...siteManagerProjectAccess,
+    validateReqBody(createProjectNoteSchema),
+    createProjectNoteController
+  );
+
+router
+  .route('/mobile/projects/:projectId/notes/:id')
+  .delete(
+    ...siteManagerAuth,
+    validateReqParams(mobileProjectChildIdParamsSchema),
+    checkMobileProjectExistenceMiddleware,
+    checkSiteManagerProjectAccessMiddleware,
+    checkProjectNoteExistenceMiddleware,
+    deleteProjectNoteController
+  );
+
+router
+  .route('/mobile/projects/:projectId/phases/:phaseId/dates')
+  .patch(
+    ...siteManagerAuth,
+    validateReqParams(mobileProjectPhaseDatesParamsSchema),
+    checkMobileProjectExistenceMiddleware,
+    checkSiteManagerProjectAccessMiddleware,
+    checkPhaseExistenceMiddleware,
+    checkPhaseBelongsToProjectMiddleware,
+    validateReqBody(updatePhaseDatesSchema),
+    updatePhaseDatesController
+  );
+
+router
+  .route('/mobile/projects/:projectId/attachments')
+  .post(
+    ...siteManagerProjectAccess,
+    validateReqBody(createProjectAttachmentSchema),
+    createProjectAttachmentController
+  );
+
+router
+  .route('/mobile/projects/:projectId/attachments/:id')
+  .delete(
+    ...siteManagerAuth,
+    validateReqParams(mobileProjectChildIdParamsSchema),
+    checkMobileProjectExistenceMiddleware,
+    checkSiteManagerProjectAccessMiddleware,
+    checkProjectAttachmentExistenceMiddleware,
+    deleteProjectAttachmentController
+  );
 
 router.route('/mobile/profile').get(...mobileAuth, getProfileController);
 

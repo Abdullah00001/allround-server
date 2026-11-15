@@ -1,8 +1,12 @@
 import { Request, Response } from 'express';
 import {
+  Attachment,
   Inspection,
   Project,
+  ProjectMeasurement,
+  ProjectNote,
   ProjectPhase,
+  ProjectTask,
   TimeLog,
   User,
 } from '@prisma/client';
@@ -11,6 +15,14 @@ import { asyncHandler } from '@/app/utils/system.utils';
 import {
   completeMobileInspectionService,
   createManualTimeService,
+  createProjectAttachmentService,
+  createProjectMeasurementService,
+  createProjectNoteService,
+  createProjectTaskService,
+  deleteProjectAttachmentService,
+  deleteProjectMeasurementService,
+  deleteProjectNoteService,
+  deleteProjectTaskService,
   getCrewTimeService,
   getDashboardDataService,
   getMapDataService,
@@ -19,18 +31,30 @@ import {
   getMyProjectsService,
   getMyTimeLogsService,
   getProfileStatsService,
+  getProjectFilterOptionsService,
   getScheduleService,
   listMobileInspectionsService,
   listMobilePhasesService,
+  listProjectMeasurementsService,
+  listProjectNotesService,
+  listProjectTasksService,
   startTimerService,
   stopTimerService,
   syncTimeLogsService,
+  toggleProjectTaskService,
   updateMobilePhaseStatusService,
+  updateMobileProjectService,
+  updatePhaseDatesService,
 } from '@/app/modules/mobile/mobile.services';
 import {
   TCompleteInspectionPayload,
+  TCreateMeasurementPayload,
+  TCreateProjectAttachmentPayload,
+  TCreateProjectNotePayload,
+  TCreateProjectTaskPayload,
   TGetCrewTimeQuery,
   TGetMapQuery,
+  TGetMyProjectsQuery,
   TGetMyTimeLogsQuery,
   TGetScheduleQuery,
   TManualTimePayload,
@@ -38,6 +62,8 @@ import {
   TStopTimerPayload,
   TSyncTimeLogsPayload,
   TUpdateMobilePhaseStatusPayload,
+  TUpdateMobileProjectPayload,
+  TUpdatePhaseDatesPayload,
 } from '@/app/modules/mobile/mobile.types';
 
 /**
@@ -89,9 +115,9 @@ export const getDashboardController = asyncHandler(
 
 /**
  * Handles `GET /mobile/projects`.
- * Returns projects assigned to the authenticated user.
+ * Returns projects assigned to the authenticated user with optional deep filters.
  *
- * @param {Request} req - Express request with trusted `req.user`.
+ * @param {Request} req - Express request with trusted `req.user` and validated query.
  * @param {Response} res - Express response.
  * @returns {Promise<void>}
  */
@@ -99,7 +125,8 @@ export const getMyProjectsController = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const traceId = getTraceId();
     const user = req.user as User;
-    const data = await getMyProjectsService({ user });
+    const query = req.validatedQuery as TGetMyProjectsQuery;
+    const data = await getMyProjectsService({ user, query });
 
     res.status(200).json({
       success: true,
@@ -461,6 +488,367 @@ export const updateMobilePhaseStatusController = asyncHandler(
     res.status(200).json({
       success: true,
       message: 'Phase status updated successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `GET /mobile/projects/filter-options`.
+ * Returns filter-modal option bags for Site Managers.
+ *
+ * @param {Request} req - Express request with trusted site manager.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const getProjectFilterOptionsController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const data = await getProjectFilterOptionsService({ user });
+
+    res.status(200).json({
+      success: true,
+      message: 'Project filter options fetched successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `GET /mobile/projects/:projectId/tasks`.
+ *
+ * @param {Request} req - Express request with trusted project.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const listProjectTasksController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const project = req.project as Project;
+    const data = await listProjectTasksService({ user, project });
+
+    res.status(200).json({
+      success: true,
+      message: 'Project tasks fetched successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `POST /mobile/projects/:projectId/tasks`.
+ *
+ * @param {Request} req - Express request with trusted project and body.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const createProjectTaskController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const project = req.project as Project;
+    const payload = req.body as TCreateProjectTaskPayload;
+    const data = await createProjectTaskService({ user, project, payload });
+
+    res.status(201).json({
+      success: true,
+      message: 'Project task created successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `PATCH /mobile/tasks/:taskId/toggle`.
+ *
+ * @param {Request} req - Express request with trusted task.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const toggleProjectTaskController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const task = req.projectTask as ProjectTask;
+    const data = await toggleProjectTaskService({ task });
+
+    res.status(200).json({
+      success: true,
+      message: 'Project task toggled successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `DELETE /mobile/tasks/:taskId`.
+ *
+ * @param {Request} req - Express request with trusted task.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const deleteProjectTaskController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const task = req.projectTask as ProjectTask;
+    const data = await deleteProjectTaskService({ task });
+
+    res.status(200).json({
+      success: true,
+      message: 'Project task deleted successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `GET /mobile/projects/:projectId/measurements`.
+ *
+ * @param {Request} req - Express request with trusted project.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const listProjectMeasurementsController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const project = req.project as Project;
+    const data = await listProjectMeasurementsService({ user, project });
+
+    res.status(200).json({
+      success: true,
+      message: 'Project measurements fetched successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `POST /mobile/projects/:projectId/measurements`.
+ *
+ * @param {Request} req - Express request with trusted project and body.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const createProjectMeasurementController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const project = req.project as Project;
+    const payload = req.body as TCreateMeasurementPayload;
+    const data = await createProjectMeasurementService({ project, payload });
+
+    res.status(201).json({
+      success: true,
+      message: 'Project measurement created successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `DELETE /mobile/projects/:projectId/measurements/:id`.
+ *
+ * @param {Request} req - Express request with trusted project and measurement.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const deleteProjectMeasurementController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const project = req.project as Project;
+    const measurement = req.projectMeasurement as ProjectMeasurement;
+    const data = await deleteProjectMeasurementService({
+      project,
+      measurement,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Project measurement deleted successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `GET /mobile/projects/:projectId/notes`.
+ *
+ * @param {Request} req - Express request with trusted project.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const listProjectNotesController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const project = req.project as Project;
+    const data = await listProjectNotesService({ user, project });
+
+    res.status(200).json({
+      success: true,
+      message: 'Project notes fetched successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `POST /mobile/projects/:projectId/notes`.
+ *
+ * @param {Request} req - Express request with trusted user/project and body.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const createProjectNoteController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const project = req.project as Project;
+    const payload = req.body as TCreateProjectNotePayload;
+    const data = await createProjectNoteService({ user, project, payload });
+
+    res.status(201).json({
+      success: true,
+      message: 'Project note created successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `DELETE /mobile/projects/:projectId/notes/:id`.
+ *
+ * @param {Request} req - Express request with trusted note.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const deleteProjectNoteController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const note = req.projectNote as ProjectNote;
+    const data = await deleteProjectNoteService({ note });
+
+    res.status(200).json({
+      success: true,
+      message: 'Project note deleted successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `PATCH /mobile/projects/:projectId`.
+ *
+ * @param {Request} req - Express request with trusted project and body.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const updateMobileProjectController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const project = req.project as Project;
+    const payload = req.body as TUpdateMobileProjectPayload;
+    const data = await updateMobileProjectService({ project, payload });
+
+    res.status(200).json({
+      success: true,
+      message: 'Project updated successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `PATCH /mobile/projects/:projectId/phases/:phaseId/dates`.
+ *
+ * @param {Request} req - Express request with trusted phase and body.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const updatePhaseDatesController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const phase = req.phase as ProjectPhase;
+    const payload = req.body as TUpdatePhaseDatesPayload;
+    const data = await updatePhaseDatesService({ phase, payload });
+
+    res.status(200).json({
+      success: true,
+      message: 'Phase dates updated successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `POST /mobile/projects/:projectId/attachments`.
+ *
+ * @param {Request} req - Express request with trusted project and body.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const createProjectAttachmentController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const project = req.project as Project;
+    const payload = req.body as TCreateProjectAttachmentPayload;
+    const data = await createProjectAttachmentService({ project, payload });
+
+    res.status(201).json({
+      success: true,
+      message: 'Project attachment created successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `DELETE /mobile/projects/:projectId/attachments/:id`.
+ *
+ * @param {Request} req - Express request with trusted attachment.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const deleteProjectAttachmentController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const attachment = req.attachment as Attachment;
+    const data = await deleteProjectAttachmentService({ attachment });
+
+    res.status(200).json({
+      success: true,
+      message: 'Project attachment deleted successfully.',
       data,
       traceId,
     });

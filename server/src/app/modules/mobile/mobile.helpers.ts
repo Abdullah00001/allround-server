@@ -1,4 +1,34 @@
 /**
+ * Extracts a city-like token from a freeform address string.
+ * Uses the last comma-separated segment when present; otherwise returns the trimmed address.
+ *
+ * @param {string | null | undefined} address - Freeform address.
+ * @returns {string | null} Normalized city token or null when empty.
+ */
+export const extractCityFromAddress = (
+  address: string | null | undefined
+): string | null => {
+  if (!address) return null;
+  const trimmed = address.trim();
+  if (!trimmed) return null;
+  const parts = trimmed.split(',').map((part) => part.trim()).filter(Boolean);
+  const city = parts.length > 1 ? parts[parts.length - 1] : trimmed;
+  return city.length > 0 ? city : null;
+};
+
+/**
+ * Derives a short task title from a longer description (first line, max 80 chars).
+ *
+ * @param {string} description - Full task description.
+ * @returns {string} Truncated title suitable for `ProjectTask.title`.
+ */
+export const deriveTaskTitle = (description: string): string => {
+  const firstLine = description.split(/\r?\n/)[0]?.trim() || description.trim();
+  if (firstLine.length <= 80) return firstLine;
+  return `${firstLine.slice(0, 77)}...`;
+};
+
+/**
  * Returns the UTC Monday 00:00:00.000 for the ISO week containing `reference`.
  *
  * @param {Date} [reference=new Date()] - Reference instant.

@@ -19,7 +19,8 @@ Integration contract for the **Flutter iOS/Android app** against the Allround ba
 > **How to use this doc:**  
 > Sections **1–2** are shared (auth + envelopes).  
 > Then jump to **§3 Employee** or **§4 Site Manager** for role-specific screens and APIs.  
-> Sections **5–7** (offline sync, notifications/Socket/FCM, localization) apply to **both** roles.
+> Section **§5** is Site Manager–only advanced project management (filters, tasks, measurements, notes, settings, media).  
+> Sections **6–8** (offline sync, notifications/Socket/FCM, localization) apply to **both** roles.
 
 ---
 
@@ -202,8 +203,20 @@ These routes return **403** for employees (`checkSiteManagerRoleMiddleware`):
 | `PATCH /mobile/inspections/:id/complete` | Site Manager only |
 | `GET /mobile/phases` | Site Manager only |
 | `PATCH /mobile/phases/:id/status` | Site Manager only |
+| `GET /mobile/projects/filter-options` | Site Manager only |
+| `PATCH /mobile/projects/:projectId` | Site Manager only |
+| `GET` / `POST` `/mobile/projects/:projectId/tasks` | Site Manager only |
+| `PATCH /mobile/tasks/:taskId/toggle` | Site Manager only |
+| `DELETE /mobile/tasks/:taskId` | Site Manager only |
+| `GET` / `POST` `/mobile/projects/:projectId/measurements` | Site Manager only |
+| `DELETE /mobile/projects/:projectId/measurements/:id` | Site Manager only |
+| `GET` / `POST` `/mobile/projects/:projectId/notes` | Site Manager only |
+| `DELETE /mobile/projects/:projectId/notes/:id` | Site Manager only |
+| `PATCH /mobile/projects/:projectId/phases/:phaseId/dates` | Site Manager only |
+| `POST /mobile/projects/:projectId/attachments` | Site Manager only |
+| `DELETE /mobile/projects/:projectId/attachments/:id` | Site Manager only |
 
-**Do not render** Schedule, Map, Crew Time, Inspections, or Phase Board tabs for employees.
+**Do not render** Schedule, Map, Crew Time, Inspections, Phase Board, or Project Management (tasks / measurements / notes / attachments / settings) tabs for employees.
 
 ### 3.3 Employee screen flow
 
@@ -248,7 +261,7 @@ Employee project DTOs **do not** expose site-manager financial fields (`budgeted
 | `POST` | `/mobile/timer/stop` | `timeLogId`, optional GPS end |
 | `POST` | `/mobile/timer/manual` | `phaseId`, `activityType`, `startTime`, `endTime`, `breakMinutes` → status **`PENDING_APPROVAL`** |
 | `GET` | `/mobile/time-logs` | `?period=TODAY` \| `WEEK` \| `MONTH` |
-| `POST` | `/mobile/sync` | Offline batch — see **§5** |
+| `POST` | `/mobile/sync` | Offline batch — see **§6** |
 
 `activityType`: `ERECTION` \| `DISMANTLING` \| `TRANSPORT` \| `MAINTENANCE` \| `OTHER`.
 
@@ -284,9 +297,10 @@ Everything an employee can do for **their own** time tracking, **plus**:
 1. Schedule calendar  
 2. Map of projects / active phases  
 3. Crew-time overview per project  
-4. Inspection survey inbox + complete survey  
+4. Inspection survey inbox + complete survey (optional convert-to-project)  
 5. Phase board (status updates)  
-6. Richer project DTO (budget / hours / profitability fields)
+6. Richer project DTO (budget / hours / profitability fields)  
+7. **Full project management** on accessible projects — deep filters, tasks, measurements, notes, dates/settings, PHOTO / PDF_PLAN attachments (see **§5**)
 
 ### 4.2 Access rule (`siteManagerAccessRule`)
 
@@ -311,13 +325,25 @@ Login (role=SITE_MANAGER)
   → GET /mobile/dashboard          (stats include pendingInspections for this SM)
   → GET /mobile/schedule           (week view)
   → GET /mobile/map                (project pins)
-  → GET /mobile/projects           (open project)
+  → GET /mobile/projects/filter-options
+  → GET /mobile/projects?phaseType&city&priority&category&sortBy
+       → open project detail
        → GET /mobile/crew-time?projectId=...
        → GET /mobile/phases
        → PATCH /mobile/phases/:id/status
+       → GET/POST /mobile/projects/:projectId/tasks
+       → PATCH /mobile/tasks/:taskId/toggle  |  DELETE /mobile/tasks/:taskId
+       → GET/POST /mobile/projects/:projectId/measurements
+       → DELETE /mobile/projects/:projectId/measurements/:id
+       → GET/POST /mobile/projects/:projectId/notes
+       → DELETE /mobile/projects/:projectId/notes/:id
+       → PATCH /mobile/projects/:projectId
+       → PATCH /mobile/projects/:projectId/phases/:phaseId/dates
+       → POST /media  →  POST /mobile/projects/:projectId/attachments
+       → DELETE /mobile/projects/:projectId/attachments/:id
   → GET /mobile/inspections
        → GET /mobile/inspections/:id
-       → PATCH /mobile/inspections/:id/complete
+       → PATCH /mobile/inspections/:id/complete  (notes + photos + optional convertToProject)
   → Own timer / time-logs / sync   (same as employee)
   → GET /mobile/notifications
 ```
@@ -366,7 +392,7 @@ Returns `totalProjectHours`, `hoursByActivity[]`, `crewBreakdown[]`, `logs[]`.
 | --- | --- | --- |
 | `GET` | `/mobile/inspections` | List `PENDING` + `SURVEY_DONE` for `siteManagerId = me` |
 | `GET` | `/mobile/inspections/:id` | Detail (must be assigned) |
-| `PATCH` | `/mobile/inspections/:id/complete` | `scaffoldArea`, `scaffoldHeight`, `scaffoldType` (`PENDING` → `SURVEY_DONE`) |
+| `PATCH` | `/mobile/inspections/:id/complete` | See **§5.7 Survey Completion** (scaffold specs + notes + photos + optional `convertToProject`) |
 
 #### Phase board
 
@@ -375,17 +401,302 @@ Returns `totalProjectHours`, `hoursByActivity[]`, `crewBreakdown[]`, `logs[]`.
 | `GET` | `/mobile/phases` | Managed phases |
 | `PATCH` | `/mobile/phases/:id/status` | `status`: `IN_PROGRESS` \| `COMPLETED` \| `POSTPONED` |
 
+Project-management CRUD (filters, tasks, measurements, notes, settings, attachments) is documented in **§5**.
+
 ### 4.6 Site Manager checklist
 
 1. Login with `"role": "SITE_MANAGER"`.  
-2. Build **Site Manager** navigation (Schedule, Map, Crew Time, Inspections, Phases + own Timer).  
+2. Build **Site Manager** navigation (Schedule, Map, Crew Time, Inspections, Phases, Project Detail PM tabs + own Timer).  
 3. Handle 403 if assignment/global rule denies a project.  
 4. Complete inspections only when status is `PENDING`.  
-5. Use same offline sync + Socket/FCM stack as employees.  
+5. Wire project-detail tabs to **§5** (tasks / measurements / notes / dates / attachments).  
+6. Use same offline sync + Socket/FCM stack as employees.  
 
 ---
 
-## 5. Offline Sync (`POST /mobile/sync`) — Both Roles
+## 5. Site Manager: Advanced Project Management
+
+Use this section when building the **project detail** screens for `user.role === "SITE_MANAGER"`.
+
+Site Managers have **full CRUD** on these project sub-resources for every project they can access (`GLOBAL_ACCESS` **or** `ProjectManagerAssignment`). Employees must **not** call these routes (403).
+
+OpenAPI tag: **`MobileProjectManagement`**.
+
+> **Auth:** All routes below require Site Manager role + valid Bearer/device session.  
+> Project-scoped routes also require the project to exist (`deletedAt: null`) and pass `checkSiteManagerProjectAccessMiddleware`.
+
+### 5.1 Deep Filtering
+
+Populate the Filter modal from the server, then pass selected values into the projects list.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| `GET` | `/mobile/projects/filter-options` | Options for the Filter modal |
+| `GET` | `/mobile/projects` | Same list as before, plus optional query filters |
+
+#### `GET /mobile/projects/filter-options`
+
+Response `data`:
+
+| Field | Values |
+| --- | --- |
+| `phases` | `ERECTION` \| `DISMANTLING` \| `STANDING` \| `MAINTENANCE` |
+| `cities` | Distinct city tokens parsed from accessible project/customer addresses |
+| `priorities` | `HIGH` \| `MEDIUM` \| `LOW` |
+| `categories` | Customer categories: `COMMERCIAL` \| `MUNICIPALITY` \| `ARCHITECT` \| `PRIVATE` |
+| `sortBy` | `newest` \| `nextInspectionDate` \| `nameAZ` |
+
+#### `GET /mobile/projects` query params
+
+| Query | Type | Notes |
+| --- | --- | --- |
+| `phaseType` | enum | Filter projects that have at least one phase of this type |
+| `city` | string | Case-insensitive match on project or customer address |
+| `priority` | enum | Filter projects that have at least one phase with this priority |
+| `category` | enum | Filter by linked customer `CustomerCategory` |
+| `sortBy` | enum | Default `newest`. Also `nextInspectionDate`, `nameAZ` |
+
+```http
+GET /api/v1/mobile/projects?phaseType=ERECTION&city=Köln&priority=HIGH&category=COMMERCIAL&sortBy=nameAZ
+Authorization: Bearer <accessJwt>
+```
+
+Employees may still call `GET /mobile/projects` (assignment-scoped, no financial fields). Filter-options and deep filters are intended for the **Site Manager** Filter UI.
+
+### 5.2 Task Management
+
+Site Managers can list, create, toggle completion, and delete project tasks. Assignees must be an active `EMPLOYEE` or `SITE_MANAGER`.
+
+| Method | Path | Body |
+| --- | --- | --- |
+| `GET` | `/mobile/projects/:projectId/tasks` | — → `{ open: [], completed: [] }` with employee details |
+| `POST` | `/mobile/projects/:projectId/tasks` | `description`, `employeeId`, `priority`, optional `dueDate` |
+| `PATCH` | `/mobile/tasks/:taskId/toggle` | — (flips `isCompleted`) |
+| `DELETE` | `/mobile/tasks/:taskId` | — → `{ id }` |
+
+```http
+POST /api/v1/mobile/projects/<projectId>/tasks
+Authorization: Bearer <accessJwt>
+Content-Type: application/json
+
+{
+  "description": "Check scaffold anchors on north facade",
+  "employeeId": "<user-uuid>",
+  "priority": "HIGH",
+  "dueDate": "2026-11-20T17:00:00.000Z"
+}
+```
+
+`title` is derived server-side from the first line of `description` (no separate title field in the payload).
+
+List response shape:
+
+```json
+{
+  "open": [ /* MobileProjectTaskDTO */ ],
+  "completed": [ /* MobileProjectTaskDTO */ ]
+}
+```
+
+Each task includes `employee: { id, firstName, lastName, avatarUrl }` (nullable if unassigned historically).
+
+### 5.3 Measurements
+
+Line items store `length`, `height`, `quantity`, optional `position` / `remark`, and `unit` (`M` \| `M2` \| `PCS`, default `M`).
+
+**Area formula:** `area = length × height × quantity`  
+Creating or deleting a line item **recalculates** `Project.scaffoldArea` as the sum of remaining measurement areas.
+
+| Method | Path | Body |
+| --- | --- | --- |
+| `GET` | `/mobile/projects/:projectId/measurements` | — → measurement[] |
+| `POST` | `/mobile/projects/:projectId/measurements` | `length`, `height`, `quantity`, optional `position`, `unit`, `remark` |
+| `DELETE` | `/mobile/projects/:projectId/measurements/:id` | — → `{ id }` |
+
+```http
+POST /api/v1/mobile/projects/<projectId>/measurements
+Authorization: Bearer <accessJwt>
+Content-Type: application/json
+
+{
+  "position": "Facade A",
+  "length": 12.5,
+  "height": 8.0,
+  "quantity": 1,
+  "unit": "M",
+  "remark": "North wall"
+}
+```
+
+### 5.4 Project Notes
+
+Categorized notes store author + timestamp. Site Managers can list, create, and delete.
+
+| Method | Path | Body |
+| --- | --- | --- |
+| `GET` | `/mobile/projects/:projectId/notes` | — → note[] (newest first, includes author) |
+| `POST` | `/mobile/projects/:projectId/notes` | `category`, `content` |
+| `DELETE` | `/mobile/projects/:projectId/notes/:id` | — → `{ id }` |
+
+`category` enum:
+
+| Value | Typical UI label |
+| --- | --- |
+| `SITE_ACCESS` | Site Access |
+| `CUSTOMER_REQUEST` | Customer Request |
+| `SAFETY` | Safety |
+| `GENERAL` | General |
+| `INTERNAL` | Internal |
+
+```http
+POST /api/v1/mobile/projects/<projectId>/notes
+Authorization: Bearer <accessJwt>
+Content-Type: application/json
+
+{
+  "category": "SITE_ACCESS",
+  "content": "Gate code 4821. Call site contact on arrival."
+}
+```
+
+### 5.5 Dates & Project Settings
+
+#### Edit project details / primary phase fields
+
+| Method | Path | Body |
+| --- | --- | --- |
+| `PATCH` | `/mobile/projects/:projectId` | Any of: `phaseType`, `status`, `priority`, `contactName`, `contactPhone`, `contactEmail` (≥1 required) |
+
+- Contact fields update the **project**.  
+- `phaseType` / `status` / `priority` update the **most recently updated phase** on that project (settings screen “current phase”).  
+- Nullable contacts: send `null` to clear.
+
+```http
+PATCH /api/v1/mobile/projects/<projectId>
+Authorization: Bearer <accessJwt>
+Content-Type: application/json
+
+{
+  "priority": "HIGH",
+  "status": "IN_PROGRESS",
+  "phaseType": "ERECTION",
+  "contactName": "Hans Müller",
+  "contactPhone": "+491701234567",
+  "contactEmail": "hans@customer.de"
+}
+```
+
+#### Edit phase schedule / safety inspection
+
+| Method | Path | Body |
+| --- | --- | --- |
+| `PATCH` | `/mobile/projects/:projectId/phases/:phaseId/dates` | Any of: `startDate`, `endDate`, `durationDays`, `safetyInspectionComplete` (≥1 required) |
+
+```http
+PATCH /api/v1/mobile/projects/<projectId>/phases/<phaseId>/dates
+Authorization: Bearer <accessJwt>
+Content-Type: application/json
+
+{
+  "startDate": "2026-11-18T07:00:00.000Z",
+  "endDate": "2026-11-22T16:00:00.000Z",
+  "durationDays": 5,
+  "safetyInspectionComplete": true
+}
+```
+
+### 5.6 Media & PDFs (Attachments)
+
+Attachments **do not** upload binary through the mobile project routes. Follow the existing shared Media flow, then register the URL on the project.
+
+1. **Upload file(s) to S3** via `POST /api/v1/media` (multipart `files`, max 10). Response returns public URL string(s).  
+2. **Register** the URL on the project:
+
+| Method | Path | Body |
+| --- | --- | --- |
+| `POST` | `/mobile/projects/:projectId/attachments` | `url`, `fileType`, `category` |
+| `DELETE` | `/mobile/projects/:projectId/attachments/:id` | — → `{ id }` (DB row only; S3 object is not deleted) |
+
+`category` for project attachments:
+
+| Value | Use |
+| --- | --- |
+| `PHOTO` | Site / progress photos |
+| `PDF_PLAN` | Plan PDFs / drawings |
+
+```http
+POST /api/v1/mobile/projects/<projectId>/attachments
+Authorization: Bearer <accessJwt>
+Content-Type: application/json
+
+{
+  "url": "https://cdn.example.com/uploads/plan-a.pdf",
+  "fileType": "application/pdf",
+  "category": "PDF_PLAN"
+}
+```
+
+Use the same Media upload endpoint as admin (`POST /media`); then choose `PHOTO` vs `PDF_PLAN` when registering so the Flutter UI can bucket galleries vs plans.
+
+### 5.7 Survey Completion
+
+`PATCH /mobile/inspections/:id/complete` still requires a **PENDING** inspection assigned to the Site Manager. It now accepts survey notes, photo URLs, and an optional convert-to-project action (the red “Convert to Project” button).
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `scaffoldArea` | ✅ | positive number |
+| `scaffoldHeight` | ✅ | positive number |
+| `scaffoldType` | ✅ | non-empty string |
+| `siteAccessInstructions` | optional | saved on the inspection |
+| `specialRequirements` | optional | saved on the inspection |
+| `photos` | optional | `[{ url, fileType }]` — stored as `Attachment` rows linked to the **inspection** (`category: PHOTO`) |
+| `convertToProject` | optional | default `false`. When `true`, creates Project + Measurement + Phase, assigns SM as PM, sets status **`CONVERTED`** |
+| `projectName` | optional | used when converting (defaults to `siteTitle`) |
+| `phaseType` | optional | initial phase when converting (defaults to `ERECTION`) |
+
+```http
+PATCH /api/v1/mobile/inspections/<id>/complete
+Authorization: Bearer <accessJwt>
+Content-Type: application/json
+
+{
+  "scaffoldArea": 120.5,
+  "scaffoldHeight": 8.2,
+  "scaffoldType": "Fassade",
+  "siteAccessInstructions": "Gate code 1234",
+  "specialRequirements": "No weekend work",
+  "photos": [
+    {
+      "url": "https://cdn.example.com/uploads/survey-1.jpg",
+      "fileType": "image/jpeg"
+    }
+  ],
+  "convertToProject": true,
+  "projectName": "Köln Hauptbahnhof Scaffold",
+  "phaseType": "ERECTION"
+}
+```
+
+**Status outcomes:**
+
+| `convertToProject` | Resulting `status` |
+| --- | --- |
+| `false` / omitted | `SURVEY_DONE` |
+| `true` | `CONVERTED` (+ optional `data.convertedProject: { id, name }`) |
+
+Upload survey photos with `POST /media` first, then pass the returned URLs in `photos[]` (same pattern as project attachments).
+
+### 5.8 Flutter implementation notes
+
+1. Gate **all §5 routes** behind the Site Manager shell.  
+2. On project open, load tasks / measurements / notes in parallel; refresh after each create/delete/toggle.  
+3. After measurement create/delete, refresh any UI that shows total scaffold area (server owns the sum).  
+4. Treat 403 on project-scoped routes as “not assigned / no global access” — show empty state or navigate back.  
+5. Prefer OpenAPI schemas under tag `MobileProjectManagement` for codegen.
+
+---
+
+## 6. Offline Sync (`POST /mobile/sync`) — Both Roles
 
 When the device is offline, queue completed timer segments locally. On reconnect:
 
@@ -430,7 +741,7 @@ Synced rows are stored as `isManual: false`, `status: APPROVED`.
 
 ---
 
-## 6. Notifications, Socket.IO & FCM — Both Roles
+## 7. Notifications, Socket.IO & FCM — Both Roles
 
 ### REST
 
@@ -494,7 +805,7 @@ Worker data keys typically include `title`, `body`/`message`, `type`, `click_act
 
 ---
 
-## 7. Localization — Both Roles
+## 8. Localization — Both Roles
 
 1. After auth, call **`GET /mobile/config`**.  
 2. Build language settings from `enabledLanguages` / `defaultLanguage`.  
@@ -510,13 +821,17 @@ Worker data keys typically include `title`, `body`/`message`, `type`, `click_act
 | Login `role` | `EMPLOYEE` | `SITE_MANAGER` |
 | `/mobile/config` | ✅ | ✅ |
 | `/mobile/dashboard` | ✅ | ✅ (+ pending inspections count for SM) |
-| `/mobile/projects` | ✅ | ✅ (+ budget fields) |
+| `/mobile/projects` | ✅ | ✅ (+ budget fields + deep filters) |
+| `/mobile/projects/filter-options` | ❌ 403 | ✅ |
+| Project tasks / measurements / notes | ❌ 403 | ✅ full CRUD |
+| Project settings + phase dates | ❌ 403 | ✅ |
+| Project attachments (`PHOTO` / `PDF_PLAN`) | ❌ 403 | ✅ |
 | `/mobile/profile` | ✅ | ✅ |
 | Timer start/stop/manual/logs/sync | ✅ | ✅ |
 | `/mobile/schedule` | ❌ 403 | ✅ |
 | `/mobile/map` | ❌ 403 | ✅ |
 | `/mobile/crew-time` | ❌ 403 | ✅ |
-| `/mobile/inspections*` | ❌ 403 | ✅ |
+| `/mobile/inspections*` | ❌ 403 | ✅ (+ convertToProject on complete) |
 | `/mobile/phases*` | ❌ 403 | ✅ |
 | Notifications + Socket + FCM | ✅ | ✅ |
 
@@ -537,5 +852,6 @@ Worker data keys typically include `title`, `body`/`message`, `type`, `click_act
 - Never call SM-only endpoints.
 
 ### Site Manager shell
-- All employee screens **plus** Schedule, Map, Crew Time, Inspections, Phase Board.  
-- Respect assignment / `GLOBAL_ACCESS` behavior and 403s.
+- All employee screens **plus** Schedule, Map, Crew Time, Inspections, Phase Board, and Project Management tabs (filters, tasks, measurements, notes, dates/settings, media).  
+- Respect assignment / `GLOBAL_ACCESS` behavior and 403s.  
+- See **§5** for project sub-resource CRUD contracts.

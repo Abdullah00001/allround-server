@@ -1,4 +1,13 @@
-import { ActivityType, PhaseStatus, PhaseType } from '@prisma/client';
+import {
+  ActivityType,
+  AttachmentCategory,
+  CustomerCategory,
+  MeasurementUnit,
+  PhaseStatus,
+  PhaseType,
+  Priority,
+  ProjectNoteCategory,
+} from '@prisma/client';
 import { z } from 'zod';
 
 /**
@@ -136,7 +145,7 @@ export const mobilePhaseIdParamsSchema = z
 
 /**
  * Request body schema for `PATCH /mobile/inspections/:id/complete`.
- * Saves survey scaffold specs and marks the inspection `SURVEY_DONE`.
+ * Saves survey scaffold specs, optional notes/photos, and optional convert-to-project.
  */
 export const completeInspectionSchema = z
   .object({
@@ -145,6 +154,22 @@ export const completeInspectionSchema = z
       .number()
       .positive({ message: 'Scaffold height must be positive' }),
     scaffoldType: z.string().trim().min(1, { message: 'Scaffold type is required' }),
+    siteAccessInstructions: z.string().trim().min(1).optional(),
+    specialRequirements: z.string().trim().min(1).optional(),
+    photos: z
+      .array(
+        z
+          .object({
+            url: z.string().url({ message: 'Invalid photo URL' }),
+            fileType: z.string().trim().min(1, { message: 'fileType is required' }),
+          })
+          .strict()
+      )
+      .max(20)
+      .optional(),
+    convertToProject: z.boolean().optional().default(false),
+    projectName: z.string().trim().min(1).optional(),
+    phaseType: z.enum(PhaseType, { message: 'Invalid phase type' }).optional(),
   })
   .strict();
 
@@ -158,5 +183,152 @@ export const updatePhaseStatusSchema = z
       [PhaseStatus.IN_PROGRESS, PhaseStatus.COMPLETED, PhaseStatus.POSTPONED],
       { message: 'Invalid phase status' }
     ),
+  })
+  .strict();
+
+/**
+ * Query schema for `GET /mobile/projects` deep filtering.
+ */
+export const getMyProjectsQuerySchema = z
+  .object({
+    phaseType: z.enum(PhaseType, { message: 'Invalid phase type' }).optional(),
+    city: z.string().trim().min(1).optional(),
+    priority: z.enum(Priority, { message: 'Invalid priority' }).optional(),
+    category: z
+      .enum(CustomerCategory, { message: 'Invalid category' })
+      .optional(),
+    sortBy: z
+      .enum(['newest', 'nextInspectionDate', 'nameAZ'], {
+        message: 'Invalid sortBy',
+      })
+      .optional()
+      .default('newest'),
+  })
+  .strict();
+
+/**
+ * Path params for `/:projectId` mobile project routes.
+ */
+export const mobileProjectIdParamsSchema = z
+  .object({
+    projectId: z.string().uuid({ error: 'Invalid project id' }),
+  })
+  .strict();
+
+/**
+ * Path params for `/:taskId` mobile task routes.
+ */
+export const mobileTaskIdParamsSchema = z
+  .object({
+    taskId: z.string().uuid({ error: 'Invalid task id' }),
+  })
+  .strict();
+
+/**
+ * Path params for project-scoped measurement/note/attachment `/:id` deletes.
+ */
+export const mobileProjectChildIdParamsSchema = z
+  .object({
+    projectId: z.string().uuid({ error: 'Invalid project id' }),
+    id: z.string().uuid({ error: 'Invalid resource id' }),
+  })
+  .strict();
+
+/**
+ * Path params for `PATCH /mobile/projects/:projectId/phases/:phaseId/dates`.
+ */
+export const mobileProjectPhaseDatesParamsSchema = z
+  .object({
+    projectId: z.string().uuid({ error: 'Invalid project id' }),
+    phaseId: z.string().uuid({ error: 'Invalid phase id' }),
+  })
+  .strict();
+
+/**
+ * Request body for creating a project task.
+ */
+export const createProjectTaskSchema = z
+  .object({
+    description: z
+      .string()
+      .trim()
+      .min(1, { message: 'Description is required' }),
+    employeeId: z.string().uuid({ error: 'Invalid employee id' }),
+    priority: z.enum(Priority, { message: 'Invalid priority' }),
+    dueDate: z.coerce.date({ error: 'Invalid due date' }).optional(),
+  })
+  .strict();
+
+/**
+ * Request body for adding a measurement line item.
+ */
+export const createMeasurementSchema = z
+  .object({
+    position: z.string().trim().min(1).optional(),
+    length: z.number().positive({ message: 'Length must be positive' }),
+    height: z.number().positive({ message: 'Height must be positive' }),
+    quantity: z.number().positive({ message: 'Quantity must be positive' }),
+    unit: z.enum(MeasurementUnit, { message: 'Invalid unit' }).default('M'),
+    remark: z.string().trim().min(1).optional(),
+  })
+  .strict();
+
+/**
+ * Request body for creating a project note.
+ */
+export const createProjectNoteSchema = z
+  .object({
+    category: z.enum(ProjectNoteCategory, { message: 'Invalid note category' }),
+    content: z.string().trim().min(1, { message: 'Content is required' }),
+  })
+  .strict();
+
+/**
+ * Request body for patching project settings (contacts + primary phase fields).
+ */
+export const updateMobileProjectSchema = z
+  .object({
+    phaseType: z.enum(PhaseType, { message: 'Invalid phase type' }).optional(),
+    status: z.enum(PhaseStatus, { message: 'Invalid status' }).optional(),
+    priority: z.enum(Priority, { message: 'Invalid priority' }).optional(),
+    contactName: z.string().trim().min(1).nullable().optional(),
+    contactPhone: z.string().trim().min(1).nullable().optional(),
+    contactEmail: z
+      .string()
+      .trim()
+      .email({ message: 'Invalid contact email' })
+      .nullable()
+      .optional(),
+  })
+  .strict()
+  .refine((data) => Object.keys(data).length > 0, {
+    message: 'At least one field is required to update',
+  });
+
+/**
+ * Request body for updating phase dates / safety inspection flag.
+ */
+export const updatePhaseDatesSchema = z
+  .object({
+    startDate: z.coerce.date({ error: 'Invalid start date' }).nullable().optional(),
+    endDate: z.coerce.date({ error: 'Invalid end date' }).nullable().optional(),
+    durationDays: z.number().positive().nullable().optional(),
+    safetyInspectionComplete: z.boolean().optional(),
+  })
+  .strict()
+  .refine((data) => Object.keys(data).length > 0, {
+    message: 'At least one field is required to update',
+  });
+
+/**
+ * Request body for registering a project attachment (after S3 upload).
+ */
+export const createProjectAttachmentSchema = z
+  .object({
+    url: z.string().url({ message: 'Invalid attachment URL' }),
+    fileType: z.string().trim().min(1, { message: 'fileType is required' }),
+    category: z.enum([AttachmentCategory.PHOTO, AttachmentCategory.PDF_PLAN], {
+      message: 'Invalid attachment category',
+    }),
   })
   .strict();

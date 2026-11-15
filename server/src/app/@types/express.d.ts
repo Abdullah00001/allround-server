@@ -1,11 +1,15 @@
 import {
   Absence,
+  Attachment,
   Customer,
   Inspection,
   Notification,
   Profile,
   Project,
+  ProjectMeasurement,
+  ProjectNote,
   ProjectPhase,
+  ProjectTask,
   TimeLog,
   User,
   Vehicle,
@@ -35,6 +39,10 @@ declare global {
       inspection?: Inspection;
       project?: Project;
       phase?: ProjectPhase;
+      projectTask?: ProjectTask;
+      projectNote?: ProjectNote;
+      projectMeasurement?: ProjectMeasurement;
+      attachment?: Attachment;
       vehicle?: Vehicle;
       planningUser?: User;
       targetUser?: User;
