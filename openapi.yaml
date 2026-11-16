@@ -3440,9 +3440,9 @@ paths:
       tags: [Project]
       summary: List projects
       description: >
-        Returns paginated phase-centric project cards for the admin Projects UI
-        (cover, address, customer category, assignee chips, logged hours) plus
-        `tabCounts` for All / Active / Inspection Due / Urgent / Completed.
+        Returns paginated project cards for the admin Projects UI (one card per project
+        showing its primary/active phase, cover, address, customer category, assignee chips,
+        logged hours) plus `tabCounts` for All / Active / Inspection Due / Urgent / Completed.
         Multi-field search covers name, address, city, contact, customer, and site manager.
         Same underlying Project graph as mobile `GET /mobile/projects`.
       operationId: listProjects
@@ -6530,9 +6530,9 @@ paths:
   /api/v1/mobile/projects:
     get:
       tags: [MobileDashboard, MobileProjectManagement]
-      summary: List project phase cards
+      summary: List project cards
       description: >
-        Returns one row per visible phase (phase-centric cards) for projects
+        Returns one card per project (displaying its primary/active phase) for projects
         visible to the authenticated user (GLOBAL_ACCESS or assignment-scoped).
         Supports UI tabs (`tab`), filter-modal multi-selects (`phaseTypes`,
         `phaseStatuses`, `priorities`, `categories` as CSV or repeated

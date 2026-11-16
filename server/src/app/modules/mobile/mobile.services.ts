@@ -17,6 +17,7 @@ import {
 import prisma from '@/app/configs/db.configs';
 import {
   aggregateLoggedHours,
+  selectPrimaryPhase,
   TTimeLogWithBreaks,
 } from '@/app/modules/project/project.helpers';
 import { calculateNetHours } from '@/app/modules/timelog/timelog.helpers';
@@ -844,36 +845,39 @@ export const getMyProjectsService = async ({
       decimalToNumber(project.longitude)
     );
 
-    for (const phase of project.phases) {
-      if (!phaseMatchesModalFilters(phase, query)) continue;
+    const matchingPhases = project.phases.filter((phase) =>
+      phaseMatchesModalFilters(phase, query)
+    );
+    if (matchingPhases.length === 0) continue;
 
-      const card = new MobileProjectPhaseCardDTO(
-        phase.id,
-        phase.type,
-        phase.status,
-        phase.priority,
-        phase.startDate ? phase.startDate.toISOString() : null,
-        phase.endDate ? phase.endDate.toISOString() : null,
-        decimalToNumber(phase.durationDays),
-        project.id,
-        project.name,
-        coordinates,
-        {
-          id: project.customer.id,
-          name: project.customer.name,
-          category: project.customer.category,
-        },
-        assigneeName
-      );
+    const phase = selectPrimaryPhase(matchingPhases);
 
-      if (user.role === Role.SITE_MANAGER) {
-        card.budgetedHours = budgeted;
-        card.totalLoggedHours = Number(logged.toFixed(2));
-        card.isProfitable = card.totalLoggedHours <= budgeted;
-      }
+    const card = new MobileProjectPhaseCardDTO(
+      phase.id,
+      phase.type,
+      phase.status,
+      phase.priority,
+      phase.startDate ? phase.startDate.toISOString() : null,
+      phase.endDate ? phase.endDate.toISOString() : null,
+      decimalToNumber(phase.durationDays),
+      project.id,
+      project.name,
+      coordinates,
+      {
+        id: project.customer.id,
+        name: project.customer.name,
+        category: project.customer.category,
+      },
+      assigneeName
+    );
 
-      cards.push(card);
+    if (user.role === Role.SITE_MANAGER) {
+      card.budgetedHours = budgeted;
+      card.totalLoggedHours = Number(logged.toFixed(2));
+      card.isProfitable = card.totalLoggedHours <= budgeted;
     }
+
+    cards.push(card);
   }
 
   if (sortBy === 'NAME_AZ') {

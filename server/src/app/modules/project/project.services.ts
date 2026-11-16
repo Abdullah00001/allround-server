@@ -20,6 +20,7 @@ import {
 import {
   aggregateLoggedHours,
   calculateDurationDays,
+  selectPrimaryPhase,
   TTimeLogWithBreaks,
 } from '@/app/modules/project/project.helpers';
 import {
@@ -328,34 +329,35 @@ export const listProjectsService = async ({
         )
     );
 
-    for (const phase of project.phases) {
-      const card = new AdminProjectPhaseCardDTO(
-        phase.id,
-        phase.type,
-        phase.status,
-        phase.priority,
-        phase.startDate ? phase.startDate.toISOString() : null,
-        phase.endDate ? phase.endDate.toISOString() : null,
-        decimalToNumber(phase.durationDays),
-        project.id,
-        project.name,
-        project.address,
-        project.city,
-        coordinates,
-        {
-          id: project.customer.id,
-          name: project.customer.name,
-          category: project.customer.category,
-        },
-        assigneeName,
-        assignedCrew,
-        coverUrl,
-        budgeted,
-        Number(logged.toFixed(2)),
-        logged <= budgeted
-      );
-      allCards.push({ card, hasPendingInspection });
-    }
+    if (project.phases.length === 0) continue;
+
+    const phase = selectPrimaryPhase(project.phases);
+    const card = new AdminProjectPhaseCardDTO(
+      phase.id,
+      phase.type,
+      phase.status,
+      phase.priority,
+      phase.startDate ? phase.startDate.toISOString() : null,
+      phase.endDate ? phase.endDate.toISOString() : null,
+      decimalToNumber(phase.durationDays),
+      project.id,
+      project.name,
+      project.address,
+      project.city,
+      coordinates,
+      {
+        id: project.customer.id,
+        name: project.customer.name,
+        category: project.customer.category,
+      },
+      assigneeName,
+      assignedCrew,
+      coverUrl,
+      budgeted,
+      Number(logged.toFixed(2)),
+      logged <= budgeted
+    );
+    allCards.push({ card, hasPendingInspection });
   }
 
   const tabCounts = new AdminProjectTabCountsDTO(

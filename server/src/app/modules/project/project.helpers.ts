@@ -1,4 +1,53 @@
-import { ActivityType, TimeLog, TimeLogBreak } from '@prisma/client';
+import {
+  ActivityType,
+  PhaseStatus,
+  PhaseType,
+  TimeLog,
+  TimeLogBreak,
+} from '@prisma/client';
+
+export const PHASE_STATUS_PRIORITY: Record<PhaseStatus, number> = {
+  [PhaseStatus.IN_PROGRESS]: 1,
+  [PhaseStatus.ORDER_CONFIRMED]: 2,
+  [PhaseStatus.ENQUIRY]: 3,
+  [PhaseStatus.QUOTATION]: 4,
+  [PhaseStatus.POSTPONED]: 5,
+  [PhaseStatus.COMPLETED]: 6,
+};
+
+export const PHASE_TYPE_PRIORITY: Record<PhaseType, number> = {
+  [PhaseType.ERECTION]: 1,
+  [PhaseType.STANDING]: 2,
+  [PhaseType.MAINTENANCE]: 3,
+  [PhaseType.DISMANTLING]: 4,
+};
+
+/**
+ * Selects the primary/active phase for a project card display.
+ * Sorts by status priority (IN_PROGRESS > ORDER_CONFIRMED > ENQUIRY > QUOTATION > POSTPONED > COMPLETED),
+ * breaking ties by phase type (ERECTION > STANDING > MAINTENANCE > DISMANTLING).
+ *
+ * @template T
+ * @param {T[]} phases - Array of phases belonging to the project.
+ * @returns {T} The primary phase.
+ */
+export const selectPrimaryPhase = <
+  T extends { status: PhaseStatus; type: PhaseType }
+>(
+  phases: T[]
+): T => {
+  if (phases.length === 1) return phases[0];
+  return [...phases].sort((a, b) => {
+    const statusDiff =
+      (PHASE_STATUS_PRIORITY[a.status] ?? 99) -
+      (PHASE_STATUS_PRIORITY[b.status] ?? 99);
+    if (statusDiff !== 0) return statusDiff;
+    const typeDiff =
+      (PHASE_TYPE_PRIORITY[a.type] ?? 99) -
+      (PHASE_TYPE_PRIORITY[b.type] ?? 99);
+    return typeDiff;
+  })[0];
+};
 
 /**
  * Time log row with breaks included for net-hour calculations.
