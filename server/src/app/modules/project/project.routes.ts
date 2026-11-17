@@ -14,6 +14,7 @@ import {
   checkProjectExistenceMiddleware,
 } from '@/app/modules/project/project.middlewares';
 import {
+  checkCrewTimeProjectExistenceMiddleware,
   checkMobileCreateProjectRefsMiddleware,
   checkMobileProjectExistenceMiddleware,
   checkPhaseBelongsToProjectMiddleware,
@@ -36,7 +37,12 @@ import {
   deleteProjectMeasurementController,
   deleteProjectNoteController,
   deleteProjectTaskController,
+  getAdminCrewTimeController,
+  getAdminMapController,
+  getAdminScheduleController,
   getProjectByIdController,
+  listAdminPhasesController,
+  listAdminProjectEmployeesController,
   listProjectAttachmentsController,
   listProjectHistoryController,
   listProjectMeasurementsController,
@@ -57,6 +63,8 @@ import {
   adminProjectPhaseDatesParamsSchema,
   createAdminProjectSchema,
   createPhaseSchema,
+  getAdminPhasesQuerySchema,
+  getAdminProjectEmployeesQuerySchema,
   getProjectsQuerySchema,
   phaseIdParamsSchema,
   projectIdParamsSchema,
@@ -68,9 +76,12 @@ import {
   createProjectAttachmentSchema,
   createProjectNoteSchema,
   createProjectTaskSchema,
+  getCrewTimeQuerySchema,
+  getMapQuerySchema,
   getProjectAttachmentsQuerySchema,
   getProjectListQuerySchema,
   getProjectTasksQuerySchema,
+  getScheduleQuerySchema,
   mobileTaskIdParamsSchema,
   updateMeasurementSchema,
   updatePhaseDatesSchema,
@@ -144,6 +155,35 @@ router
   );
 
 router
+  .route('/admin/phases')
+  .get(
+    ...adminAuth,
+    validateReqQuery(getAdminPhasesQuerySchema),
+    listAdminPhasesController
+  );
+
+router
+  .route('/admin/schedule')
+  .get(
+    ...adminAuth,
+    validateReqQuery(getScheduleQuerySchema),
+    getAdminScheduleController
+  );
+
+router
+  .route('/admin/map')
+  .get(...adminAuth, validateReqQuery(getMapQuerySchema), getAdminMapController);
+
+router
+  .route('/admin/crew-time')
+  .get(
+    ...adminAuth,
+    validateReqQuery(getCrewTimeQuerySchema),
+    checkCrewTimeProjectExistenceMiddleware,
+    getAdminCrewTimeController
+  );
+
+router
   .route('/admin/phases/:phaseId/status')
   .patch(
     ...adminAuth,
@@ -151,6 +191,14 @@ router
     checkPhaseExistenceMiddleware,
     validateReqBody(updatePhaseStatusSchema),
     updatePhaseStatusController
+  );
+
+router
+  .route('/admin/projects/:projectId/employees')
+  .get(
+    ...adminProjectAccess,
+    validateReqQuery(getAdminProjectEmployeesQuerySchema),
+    listAdminProjectEmployeesController
   );
 
 router

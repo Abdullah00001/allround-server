@@ -25,7 +25,15 @@ tags:
   - name: Inspection
     description: Admin CRM inspection management and project conversion endpoints
   - name: Project
-    description: Admin project management and Kanban phase board endpoints
+    description: >
+      Admin project list/Kanban (create phase, phase status) plus schedule/map/crew-time.
+      Child PM tabs (tasks, measurements, notes, attachments, history, settings) are under
+      **AdminProjectManagement** — same contracts as MobileProjectManagement.
+  - name: AdminProjectManagement
+    description: >
+      Admin project management parity with MobileProjectManagement
+      (filters, tasks, measurements, notes, attachments, settings, history, employees).
+      Cookie + CSRF auth; same request/response DTOs as mobile where noted.
   - name: Planning
     description: Admin daily planning and resource assignment endpoints
   - name: TimeLog
@@ -3543,6 +3551,18 @@ paths:
           schema:
             type: string
           description: Case-insensitive customer name search
+        - in: query
+          name: startDate
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive UTC day start for appointmentDate (requires endDate)
+        - in: query
+          name: endDate
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive UTC day end for appointmentDate (requires startDate)
       responses:
         '200':
           description: Inspections fetched successfully
@@ -3951,14 +3971,16 @@ paths:
 
   /api/v1/admin/projects:
     get:
-      tags: [Project]
+      tags: [Project, AdminProjectManagement]
       summary: List projects
       description: >
         Returns paginated project cards for the admin Projects UI (one card per project
         showing its primary/active phase, cover, address, customer category, assignee chips,
         logged hours) plus `tabCounts` for All / Active / Inspection Due / Urgent / Completed.
         Multi-field search covers name, address, city, contact, customer, and site manager.
-        Same underlying Project graph as mobile `GET /mobile/projects`.
+        Filter modal parity with mobile: CSV multi-select `phaseTypes` / `phaseStatuses` /
+        `priorities` / `categories`, geo `lat`+`lng`+`radiusKm`, `sortBy`.
+        Legacy single `phaseType` / `status` / `priority` still accepted.
       operationId: listProjects
       security:
         - adminAuth: []
@@ -3996,16 +4018,66 @@ paths:
           schema:
             type: string
             enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
+          description: Legacy single phase type (prefer phaseTypes)
         - in: query
           name: status
           schema:
             type: string
             enum: [ENQUIRY, QUOTATION, ORDER_CONFIRMED, IN_PROGRESS, COMPLETED, POSTPONED]
+          description: Legacy single phase status (prefer phaseStatuses)
         - in: query
           name: priority
           schema:
             type: string
             enum: [HIGH, MEDIUM, LOW]
+          description: Legacy single priority (prefer priorities)
+        - in: query
+          name: phaseTypes
+          schema:
+            type: string
+          description: CSV multi-select PhaseType (e.g. ERECTION,DISMANTLING)
+        - in: query
+          name: phaseStatuses
+          schema:
+            type: string
+          description: CSV multi-select PhaseStatus
+        - in: query
+          name: priorities
+          schema:
+            type: string
+          description: CSV multi-select Priority
+        - in: query
+          name: categories
+          schema:
+            type: string
+          description: CSV multi-select CustomerCategory
+        - in: query
+          name: lat
+          schema:
+            type: number
+            minimum: -90
+            maximum: 90
+          description: Geo center latitude (requires lng)
+        - in: query
+          name: lng
+          schema:
+            type: number
+            minimum: -180
+            maximum: 180
+          description: Geo center longitude (requires lat)
+        - in: query
+          name: radiusKm
+          schema:
+            type: number
+            maximum: 500
+            default: 25
+          description: Geo radius in km (default 25; used with lat+lng)
+        - in: query
+          name: sortBy
+          schema:
+            type: string
+            enum: [NEWEST, NEXT_INSPECTION, NAME_AZ]
+            default: NEWEST
       responses:
         '200':
           description: Projects fetched successfully
@@ -4063,7 +4135,7 @@ paths:
                 errorType: 'SERVER_ERROR'
                 traceId: '123e4567-e89b-12d3-a456-426614174000'
     post:
-      tags: [Project]
+      tags: [Project, AdminProjectManagement]
       summary: Create project
       description: |
         Same body schema as mobile `POST /mobile/projects` (`CreateMobileProjectRequest`),
@@ -4194,7 +4266,7 @@ paths:
                 $ref: '#/components/schemas/SystemErrorResponse'
   /api/v1/admin/projects/{id}:
     get:
-      tags: [Project]
+      tags: [Project, AdminProjectManagement]
       summary: Get project by id
       description: >
         Returns the mobile project hub DTO (`MobileProjectDetailDTO`) used by
@@ -4284,7 +4356,7 @@ paths:
                 errorType: 'SERVER_ERROR'
                 traceId: '123e4567-e89b-12d3-a456-426614174000'
     patch:
-      tags: [Project]
+      tags: [Project, AdminProjectManagement]
       summary: Update project
       description: Updates project master data, budgeted hours, and site access fields. Soft-deleted projects cannot be updated.
       operationId: updateProject
@@ -4556,6 +4628,1382 @@ paths:
                 message: 'Internal Server Error'
                 errorType: 'SERVER_ERROR'
                 traceId: '123e4567-e89b-12d3-a456-426614174000'
+  /api/v1/admin/schedule:
+    get:
+      tags: [Project]
+      summary: Get admin calendar schedule
+      description: >
+        Mobile parity for `GET /mobile/schedule`. Company-wide ProjectPhases
+        overlapping the query window, grouped by UTC date (calendar dots).
+        Day-list inspections use `GET /admin/inspections` with startDate/endDate.
+      operationId: getAdminSchedule
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: startDate
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: endDate
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Schedule fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMobileScheduleResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Request query validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/map:
+    get:
+      tags: [Project]
+      summary: Get admin map project pins
+      description: >
+        Mobile parity for `GET /mobile/map`. Distinct projects with active phases
+        as map pins. Optional `type` filters by phase type.
+      operationId: getAdminMap
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: type
+          schema:
+            type: string
+            enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Map projects fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMobileMapResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Request query validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/crew-time:
+    get:
+      tags: [Project]
+      summary: Get crew time for a project
+      description: >
+        Mobile parity for `GET /mobile/crew-time`. Aggregated crew hours for a
+        project; optional UTC `date` filter. `page`/`limit` paginate `logs`.
+      operationId: getAdminCrewTime
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: date
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Crew time fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMobileCrewTimeResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Request query validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/phases:
+    get:
+      tags: [Project]
+      summary: List phases (Kanban / phase board)
+      description: >
+        Company-wide phase board list (same DTO as mobile). Optional `column`
+        maps Kanban columns: `ENQUIRY` filters `status=ENQUIRY` (Preconstruction);
+        `ERECTION`, `DISMANTLING`, `STANDING` filter by phase `type`.
+      operationId: listAdminPhases
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: column
+          schema:
+            type: string
+            enum: [ENQUIRY, ERECTION, DISMANTLING, STANDING]
+          description: Phase board column filter
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Phases fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListMobilePhasesResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Request query validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/projects/{projectId}/employees:
+    get:
+      tags: [AdminProjectManagement]
+      summary: List employees for task assignee picker
+      description: >
+        Same as mobile assignee picker. Returns ACTIVE `EMPLOYEE` and `SITE_MANAGER`
+        users. Use each row `id` as create-task `employeeId`. Optional `search`
+        filters first/last name.
+      operationId: listAdminProjectEmployees
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: projectId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: search
+          schema: { type: string, minLength: 1 }
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Employees fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMobileProjectEmployeesResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/projects/{projectId}/tasks:
+    get:
+      tags: [AdminProjectManagement]
+      summary: List project tasks
+      description: Mobile parity — open/completed tasks with assignee details.
+      operationId: listAdminProjectTasks
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: projectId
+          required: true
+          schema: {type: string, format: uuid}
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [OPEN, COMPLETED]
+          description: Optional tab filter; omit to return paginated `{ open, completed }`
+        - in: query
+          name: page
+          schema: {type: integer, minimum: 1, default: 1}
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 100, default: 10}
+      responses:
+        '200':
+          description: Project tasks fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMobileProjectTasksResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+    post:
+      tags: [AdminProjectManagement]
+      summary: Create project task
+      description: Same body as mobile (`description`, `employeeId`, `priority`, optional `dueDate`).
+      operationId: createAdminProjectTask
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: projectId
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMobileProjectTaskRequest'
+      responses:
+        '201':
+          description: Project task created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileProjectTaskResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Project or assignee not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/tasks/{taskId}/toggle:
+    patch:
+      tags: [AdminProjectManagement]
+      summary: Toggle project task completion
+      description: Marks a task as completed or open (mobile parity).
+      operationId: toggleAdminProjectTask
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: taskId
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Project task toggled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileProjectTaskResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/tasks/{taskId}:
+    delete:
+      tags: [AdminProjectManagement]
+      summary: Delete project task
+      operationId: deleteAdminProjectTask
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: taskId
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Project task deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileIdDeleteResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/projects/{projectId}/measurements:
+    get:
+      tags: [AdminProjectManagement]
+      summary: List project measurements
+      operationId: listAdminProjectMeasurements
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: projectId
+          required: true
+          schema: {type: string, format: uuid}
+        - in: query
+          name: page
+          schema: {type: integer, minimum: 1, default: 1}
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 100, default: 10}
+      responses:
+        '200':
+          description: Project measurements fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMobileMeasurementsResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+    post:
+      tags: [AdminProjectManagement]
+      summary: Create project measurement
+      description: Same body as mobile; area = length×height×quantity; updates project scaffoldArea.
+      operationId: createAdminProjectMeasurement
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: projectId
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMobileMeasurementRequest'
+      responses:
+        '201':
+          description: Project measurement created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileMeasurementResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/projects/{projectId}/measurements/{id}:
+    patch:
+      tags: [AdminProjectManagement]
+      summary: Update project measurement
+      operationId: updateAdminProjectMeasurement
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: projectId
+          required: true
+          schema: {type: string, format: uuid}
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMobileMeasurementRequest'
+      responses:
+        '200':
+          description: Project measurement updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileMeasurementResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Measurement not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+    delete:
+      tags: [AdminProjectManagement]
+      summary: Delete project measurement
+      operationId: deleteAdminProjectMeasurement
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: projectId
+          required: true
+          schema: {type: string, format: uuid}
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Project measurement deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileIdDeleteResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Measurement not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/projects/{projectId}/notes:
+    get:
+      tags: [AdminProjectManagement]
+      summary: List project notes
+      operationId: listAdminProjectNotes
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: projectId
+          required: true
+          schema: {type: string, format: uuid}
+        - in: query
+          name: page
+          schema: {type: integer, minimum: 1, default: 1}
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 100, default: 10}
+      responses:
+        '200':
+          description: Project notes fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMobileProjectNotesResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+    post:
+      tags: [AdminProjectManagement]
+      summary: Create project note
+      operationId: createAdminProjectNote
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: projectId
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMobileProjectNoteRequest'
+      responses:
+        '201':
+          description: Project note created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileProjectNoteResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/projects/{projectId}/notes/{id}:
+    patch:
+      tags: [AdminProjectManagement]
+      summary: Update project note
+      operationId: updateAdminProjectNote
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: projectId
+          required: true
+          schema: {type: string, format: uuid}
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMobileProjectNoteRequest'
+      responses:
+        '200':
+          description: Project note updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileProjectNoteResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Note not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+    delete:
+      tags: [AdminProjectManagement]
+      summary: Delete project note
+      operationId: deleteAdminProjectNote
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: projectId
+          required: true
+          schema: {type: string, format: uuid}
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Project note deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileIdDeleteResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Note not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/projects/{projectId}/phases/{phaseId}/dates:
+    patch:
+      tags: [AdminProjectManagement]
+      summary: Update phase dates
+      description: Same body as mobile (`startDate`, `endDate`, `durationDays`, `safetyInspectionComplete`).
+      operationId: updateAdminPhaseDates
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: projectId
+          required: true
+          schema: {type: string, format: uuid}
+        - in: path
+          name: phaseId
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMobilePhaseDatesRequest'
+      responses:
+        '200':
+          description: Phase dates updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateMobilePhaseDatesResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Project or phase not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/projects/{projectId}/attachments:
+    get:
+      tags: [AdminProjectManagement]
+      summary: List project attachments
+      description: Lists PHOTO / PDF_PLAN attachments (Photos and PDF Plan tabs).
+      operationId: listAdminProjectAttachments
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: projectId
+          required: true
+          schema: {type: string, format: uuid}
+        - in: query
+          name: category
+          schema:
+            type: string
+            enum: [PHOTO, PDF_PLAN]
+        - in: query
+          name: page
+          schema: {type: integer, minimum: 1, default: 1}
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 100, default: 10}
+      responses:
+        '200':
+          description: Project attachments fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMobileProjectAttachmentsResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+    post:
+      tags: [AdminProjectManagement]
+      summary: Register project attachment
+      description: Creates an Attachment row for a previously uploaded S3 URL (PHOTO or PDF_PLAN).
+      operationId: createAdminProjectAttachment
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: projectId
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMobileProjectAttachmentRequest'
+      responses:
+        '201':
+          description: Project attachment created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileAttachmentResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/projects/{projectId}/history:
+    get:
+      tags: [AdminProjectManagement]
+      summary: List project history
+      description: AuditLog timeline for the History tab (newest first).
+      operationId: listAdminProjectHistory
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: projectId
+          required: true
+          schema: {type: string, format: uuid}
+        - in: query
+          name: page
+          schema: {type: integer, minimum: 1, default: 1}
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 100, default: 10}
+      responses:
+        '200':
+          description: Project history fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMobileProjectHistoryResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/projects/{projectId}/attachments/{id}/cover:
+    patch:
+      tags: [AdminProjectManagement]
+      summary: Set project cover photo
+      description: Marks a PHOTO as cover; clears isCover on other project photos.
+      operationId: setAdminProjectAttachmentCover
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: projectId
+          required: true
+          schema: {type: string, format: uuid}
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Cover photo updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileAttachmentResponse'
+        '400':
+          description: Attachment is not a PHOTO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Attachment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/projects/{projectId}/attachments/{id}:
+    delete:
+      tags: [AdminProjectManagement]
+      summary: Delete project attachment
+      operationId: deleteAdminProjectAttachment
+      security: [{adminAuth: []}]
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: projectId
+          required: true
+          schema: {type: string, format: uuid}
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Project attachment deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileIdDeleteResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Attachment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
   /api/v1/admin/phases/{phaseId}/status:
     patch:
       tags: [Project]

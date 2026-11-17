@@ -23,6 +23,10 @@ import {
   TUpdateInspectionServiceParams,
 } from '@/app/modules/inspection/inspection.types';
 import { triggerPushNotification } from '@/app/utils/notification.utils';
+import {
+  getUtcDayEndExclusive,
+  getUtcDayStart,
+} from '@/app/modules/mobile/mobile.helpers';
 
 const photoInclude = {
   where: { category: AttachmentCategory.PHOTO },
@@ -89,7 +93,7 @@ const loadSiteManagersMap = async (
 const buildInspectionBaseWhere = (
   query: TListInspectionsServiceParams['query']
 ): Prisma.InspectionWhereInput => {
-  const { customerId, search } = query;
+  const { customerId, search, startDate, endDate } = query;
   return {
     deletedAt: null,
     ...(customerId ? { customerId } : {}),
@@ -98,6 +102,14 @@ const buildInspectionBaseWhere = (
           customer: {
             name: { contains: search, mode: 'insensitive' },
             deletedAt: null,
+          },
+        }
+      : {}),
+    ...(startDate !== undefined && endDate !== undefined
+      ? {
+          appointmentDate: {
+            gte: getUtcDayStart(startDate),
+            lt: getUtcDayEndExclusive(getUtcDayStart(endDate)),
           },
         }
       : {}),

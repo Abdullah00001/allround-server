@@ -3,15 +3,35 @@ import { Project, ProjectPhase, User } from '@prisma/client';
 import {
   createAdminProjectSchema,
   createPhaseSchema,
+  getAdminPhasesQuerySchema,
   getProjectsQuerySchema,
   updatePhaseStatusSchema,
   updateProjectSchema,
 } from '@/app/modules/project/project.schema';
+import {
+  getMapQuerySchema,
+  getScheduleQuerySchema,
+} from '@/app/modules/mobile/mobile.schema';
 
 /**
  * Validated list-projects query string.
  */
 export type TGetProjectsQuery = z.infer<typeof getProjectsQuerySchema>;
+
+/**
+ * Validated admin phase-board list query.
+ */
+export type TGetAdminPhasesQuery = z.infer<typeof getAdminPhasesQuerySchema>;
+
+/**
+ * Validated admin schedule window query (mobile parity).
+ */
+export type TGetAdminScheduleQuery = z.infer<typeof getScheduleQuerySchema>;
+
+/**
+ * Validated admin map query (mobile parity).
+ */
+export type TGetAdminMapQuery = z.infer<typeof getMapQuerySchema>;
 
 /**
  * Validated update-project request body.
@@ -55,6 +75,30 @@ export type TProjectCrewMemberRef = Pick<
 export type TListProjectsServiceParams = {
   /** Validated list query. */
   query: TGetProjectsQuery;
+};
+
+/**
+ * Service params for listing admin phase-board rows.
+ */
+export type TListAdminPhasesServiceParams = {
+  /** Validated column / pagination query. */
+  query: TGetAdminPhasesQuery;
+};
+
+/**
+ * Service params for admin calendar schedule.
+ */
+export type TGetAdminScheduleServiceParams = {
+  /** Inclusive startDate/endDate window. */
+  query: TGetAdminScheduleQuery;
+};
+
+/**
+ * Service params for admin map pins.
+ */
+export type TGetAdminMapServiceParams = {
+  /** Optional phase type filter. */
+  query: TGetAdminMapQuery;
 };
 
 /**

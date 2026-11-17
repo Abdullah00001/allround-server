@@ -14,12 +14,18 @@ import { buildPaginationMeta } from '@/app/utils/pagination.utils';
 import {
   createPhaseService,
   deleteProjectService,
+  getAdminMapService,
+  getAdminScheduleService,
+  listAdminPhasesService,
   listProjectsService,
   updatePhaseStatusService,
   updateProjectService,
 } from '@/app/modules/project/project.services';
 import {
   TCreatePhasePayload,
+  TGetAdminMapQuery,
+  TGetAdminPhasesQuery,
+  TGetAdminScheduleQuery,
   TGetProjectsQuery,
   TUpdatePhaseStatusPayload,
   TUpdateProjectPayload,
@@ -34,8 +40,10 @@ import {
   deleteProjectMeasurementService,
   deleteProjectNoteService,
   deleteProjectTaskService,
+  getCrewTimeService,
   getMobileProjectByIdService,
   listProjectAttachmentsService,
+  listProjectEmployeesService,
   listProjectHistoryService,
   listProjectMeasurementsService,
   listProjectNotesService,
@@ -52,7 +60,9 @@ import {
   TCreateProjectAttachmentPayload,
   TCreateProjectNotePayload,
   TCreateProjectTaskPayload,
+  TGetCrewTimeQuery,
   TGetProjectAttachmentsQuery,
+  TGetProjectEmployeesQuery,
   TGetProjectListQuery,
   TGetProjectTasksQuery,
   TUpdateMeasurementPayload,
@@ -78,6 +88,149 @@ export const listProjectsController = asyncHandler(
     res.status(200).json({
       success: true,
       message: 'Projects fetched successfully.',
+      meta,
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `GET /admin/projects/:projectId/employees`.
+ * Task-creation assignee picker (same service as mobile).
+ *
+ * @param {Request} req - Express request with trusted project and query.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const listAdminProjectEmployeesController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const project = req.project as Project;
+    const query = req.validatedQuery as TGetProjectEmployeesQuery;
+    const { items, total, page, limit } = await listProjectEmployeesService({
+      user,
+      project,
+      query,
+    });
+    const meta = buildPaginationMeta({ total, page, limit, req });
+
+    res.status(200).json({
+      success: true,
+      message: 'Employees fetched successfully.',
+      meta,
+      data: items,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `GET /admin/phases`.
+ * Company-wide phase board columns (mobile DTO shape).
+ *
+ * @param {Request} req - Express request with validated query.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const listAdminPhasesController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const query = req.validatedQuery as TGetAdminPhasesQuery;
+    const { items, total, page, limit } = await listAdminPhasesService({
+      query,
+    });
+    const meta = buildPaginationMeta({ total, page, limit, req });
+
+    res.status(200).json({
+      success: true,
+      message: 'Phases fetched successfully.',
+      meta,
+      data: items,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `GET /admin/schedule` (mobile calendar schedule parity).
+ *
+ * @param {Request} req - Express request with date window query.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const getAdminScheduleController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const query = req.validatedQuery as TGetAdminScheduleQuery;
+    const { items, total, page, limit } = await getAdminScheduleService({
+      query,
+    });
+    const meta = buildPaginationMeta({ total, page, limit, req });
+
+    res.status(200).json({
+      success: true,
+      message: 'Schedule fetched successfully.',
+      meta,
+      data: items,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `GET /admin/map` (mobile map pins parity).
+ *
+ * @param {Request} req - Express request with optional type filter.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const getAdminMapController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const query = req.validatedQuery as TGetAdminMapQuery;
+    const { items, total, page, limit } = await getAdminMapService({ query });
+    const meta = buildPaginationMeta({ total, page, limit, req });
+
+    res.status(200).json({
+      success: true,
+      message: 'Map projects fetched successfully.',
+      meta,
+      data: items,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `GET /admin/crew-time` (mobile crew-time parity).
+ *
+ * @param {Request} req - Express request with trusted project and query.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const getAdminCrewTimeController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const project = req.project as Project;
+    const query = req.validatedQuery as TGetCrewTimeQuery;
+    const { data, total, page, limit } = await getCrewTimeService({
+      user,
+      project,
+      query,
+    });
+    const meta = buildPaginationMeta({ total, page, limit, req });
+
+    res.status(200).json({
+      success: true,
+      message: 'Crew time fetched successfully.',
       meta,
       data,
       traceId,

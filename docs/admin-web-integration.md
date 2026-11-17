@@ -263,7 +263,7 @@ Status tabs map to the same Prisma enums the app uses: `PENDING` (Awaiting Surve
 | Method | Path | Body / query |
 | --- | --- | --- |
 | `POST` | `/admin/inspections` | See create body below → **201** |
-| `GET` | `/admin/inspections` | `page`, `limit`, optional `status`, `customerId`, `search` (customer name) |
+| `GET` | `/admin/inspections` | `page`, `limit`, optional `status`, `customerId`, `search` (customer name), optional `startDate`+`endDate` (appointmentDate window; Calendar day panel) |
 | `GET` | `/admin/inspections/:id` | — |
 | `PATCH` | `/admin/inspections/:id` | optional site/scaffold/notes; `photos` replaces PHOTO attachments (max 6); optional `contact` |
 | `DELETE` | `/admin/inspections/:id` | soft delete; **409** if `CONVERTED` |
@@ -300,16 +300,23 @@ Convert/delete errors: `INSPECTION_NOT_FOUND`, `INSPECTION_ALREADY_CONVERTED`.
 
 Admin Projects reuses the same Prisma graph and mobile services for detail hub + child tabs. No synthetic `PRJ-…` codes — use UUID `id` / `projectId`.
 
+OpenAPI tag: **`AdminProjectManagement`** — same surface as mobile **`MobileProjectManagement`** (list/create/detail/settings, employees, tasks, measurements, notes, phase dates, attachments, history). Auth is cookie + `x-csrf-token` instead of Bearer.
+
 | Method | Path | Notes |
 | --- | --- | --- |
-| `GET` | `/admin/projects` | Phase cards + `tabCounts`. Query: `page`, `limit`, `search`, `tab` (`ALL` \| `ACTIVE` \| `INSPECTION` \| `URGENT` \| `COMPLETED`), optional `phaseType` / `status` / `priority` |
+| `GET` | `/admin/projects` | Phase cards + `tabCounts`. Tabs: `ALL` \| `ACTIVE` \| `INSPECTION` \| `URGENT` \| `COMPLETED`. Mobile-parity filters: `phaseTypes` / `phaseStatuses` / `priorities` / `categories` (CSV), `lat`+`lng`+`radiusKm`, `sortBy=NEWEST\|NEXT_INSPECTION\|NAME_AZ`. Legacy single `phaseType` / `status` / `priority` still work. |
 | `POST` | `/admin/projects` | Same body as mobile create; **`siteManagerId` required**. Returns `MobileProjectDetailDTO` |
 | `GET` | `/admin/projects/:id` | Mobile hub DTO (Overview): `scheduleData`, `scaffoldSpecification`, hours, crew, `attachmentCounts`, `nextSafetyInspection` |
-| `PATCH` | `/admin/projects/:id` | Edit Master Data: `name`, `address`, `city`, `coordinates`, budget/scaffold/site access, optional primary-phase fields + `safetyInspectionComplete` |
+| `PATCH` | `/admin/projects/:id` | Edit Master Data: `name`, `address`, `city`, `coordinates`, budget/`scaffoldArea`/`scaffoldSpecification.area`, site access, optional primary-phase fields + `safetyInspectionComplete` |
 | `DELETE` | `/admin/projects/:id` | Soft delete (`deletedAt`) |
+| `GET` | `/admin/schedule` | Calendar month dots — same as mobile (`startDate`+`endDate` required) → `{ date, phases[] }` day buckets |
+| `GET` | `/admin/map` | Project map pins — same as mobile; optional `type` + `page&limit` |
+| `GET` | `/admin/crew-time` | Crew time for a project — same as mobile; **required** `projectId`, optional `date` + `page&limit` |
+| `GET` | `/admin/phases` | Phase board / Kanban columns: optional `column=ENQUIRY\|ERECTION\|DISMANTLING\|STANDING` + `page&limit` → `MobileManagedPhaseDTO[]` |
 | `POST` | `/admin/projects/:id/phases` | Kanban phase create |
 | `PATCH` | `/admin/phases/:phaseId/status` | Kanban drag-and-drop; optional `safetyInspectionComplete` |
 | `PATCH` | `/admin/projects/:projectId/phases/:phaseId/dates` | Dates tab (same body as mobile) |
+| `GET` | `/admin/projects/:projectId/employees` | Task assignee picker (`?search&page&limit`) → same as mobile (`id`, `firstName`, `lastName`, `avatarUrl`, `role`) |
 | `GET`/`POST` | `/admin/projects/:projectId/tasks` | Tasks tab; query `status=OPEN\|COMPLETED` optional |
 | `PATCH` | `/admin/tasks/:taskId/toggle` | Complete / reopen |
 | `DELETE` | `/admin/tasks/:taskId` | Delete task |

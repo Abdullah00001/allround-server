@@ -2,12 +2,25 @@ import {
   AttachmentCategory,
   InspectionStatus,
   PhaseStatus,
+  PhaseType,
   Prisma,
   Priority,
   TimeLogStatus,
 } from '@prisma/client';
 import prisma from '@/app/configs/db.configs';
 import { paginateArray } from '@/app/utils/pagination.utils';
+import {
+  getUtcDayEndExclusive,
+  getUtcDayStart,
+  haversineKm,
+  toCoordinates as mobileToCoordinates,
+} from '@/app/modules/mobile/mobile.helpers';
+import {
+  MobileManagedPhaseDTO,
+  MobileMapProjectDTO,
+  MobileScheduleDayDTO,
+  MobileSchedulePhaseDTO,
+} from '@/app/modules/mobile/mobile.dto';
 import {
   AdminProjectAssigneeDTO,
   AdminProjectListDTO,
@@ -26,13 +39,32 @@ import {
 import {
   TCreatePhaseServiceParams,
   TDeleteProjectServiceParams,
+  TGetAdminMapServiceParams,
+  TGetAdminScheduleServiceParams,
   TGetProjectByIdServiceParams,
   TGetProjectsQuery,
+  TListAdminPhasesServiceParams,
   TListProjectsServiceParams,
   TProjectCrewMemberRef,
   TUpdatePhaseStatusServiceParams,
   TUpdateProjectServiceParams,
 } from '@/app/modules/project/project.types';
+
+/** Active phase statuses used for admin map pins (mobile parity). */
+const ACTIVE_PHASE_STATUSES: PhaseStatus[] = [
+  PhaseStatus.IN_PROGRESS,
+  PhaseStatus.ORDER_CONFIRMED,
+];
+
+/**
+ * UTC calendar date key `YYYY-MM-DD`.
+ *
+ * @param {Date} value - Instant.
+ * @returns {string} UTC date key.
+ */
+const toUtcDateKey = (value: Date): string => {
+  return getUtcDayStart(value).toISOString().slice(0, 10);
+};
 
 /**
  * Converts a Prisma Decimal (or null) into a plain number (or null).
@@ -146,7 +178,80 @@ const cardMatchesTab = (
 };
 
 /**
+ * Resolves multi-select phase filters, falling back to legacy single params.
+ *
+ * @param {TGetProjectsQuery} query - Validated admin list query.
+ * @returns {{ types?: PhaseType[]; statuses?: PhaseStatus[]; priorities?: Priority[] }}
+ */
+const resolvePhaseFilterLists = (
+  query: TGetProjectsQuery
+): {
+  types?: PhaseType[];
+  statuses?: PhaseStatus[];
+  priorities?: Priority[];
+} => {
+  const types =
+    query.phaseTypes && query.phaseTypes.length > 0
+      ? query.phaseTypes
+      : query.phaseType
+        ? [query.phaseType]
+        : undefined;
+  const statuses =
+    query.phaseStatuses && query.phaseStatuses.length > 0
+      ? query.phaseStatuses
+      : query.status
+        ? [query.status]
+        : undefined;
+  const priorities =
+    query.priorities && query.priorities.length > 0
+      ? query.priorities
+      : query.priority
+        ? [query.priority]
+        : undefined;
+  return { types, statuses, priorities };
+};
+
+/**
+ * Whether a phase matches the resolved modal phase filters.
+ *
+ * @param {{ type: PhaseType; status: PhaseStatus; priority: Priority }} phase - Phase fields.
+ * @param {{ types?: PhaseType[]; statuses?: PhaseStatus[]; priorities?: Priority[] }} filters - Lists.
+ * @returns {boolean} True when the phase matches (or no filters set).
+ */
+const phaseMatchesAdminFilters = (
+  phase: { type: PhaseType; status: PhaseStatus; priority: Priority },
+  filters: {
+    types?: PhaseType[];
+    statuses?: PhaseStatus[];
+    priorities?: Priority[];
+  }
+): boolean => {
+  if (filters.types && !filters.types.includes(phase.type)) return false;
+  if (filters.statuses && !filters.statuses.includes(phase.status)) {
+    return false;
+  }
+  if (filters.priorities && !filters.priorities.includes(phase.priority)) {
+    return false;
+  }
+  return true;
+};
+
+/**
+ * Earliest pending inspection appointment for NEXT_INSPECTION sort.
+ *
+ * @param {{ appointmentDate: Date }[]} inspections - Pending inspections.
+ * @returns {number} Epoch ms or +Infinity when empty.
+ */
+const nextInspectionSortKey = (
+  inspections: Array<{ appointmentDate: Date }>
+): number => {
+  if (inspections.length === 0) return Number.POSITIVE_INFINITY;
+  return Math.min(...inspections.map((row) => row.appointmentDate.getTime()));
+};
+
+/**
  * Lists projects as phase-centric cards for the admin Projects UI.
+ * Supports mobile-parity filters (multi-select, geo, sort) plus admin tabs.
  * Returns tab badge counts across the full (pre-pagination) filtered set.
  *
  * @param {TListProjectsServiceParams} params - Validated query wrapper.
@@ -161,65 +266,91 @@ export const listProjectsService = async ({
   page: number;
   limit: number;
 }> => {
-  const { page, limit, search, tab, phaseType, status, priority } = query;
+  const { page, limit, search, tab } = query;
+  const sortBy = query.sortBy ?? 'NEWEST';
+  const phaseFilters = resolvePhaseFilterLists(query);
+  const phaseSome: Prisma.ProjectPhaseWhereInput = {
+    ...(phaseFilters.types ? { type: { in: phaseFilters.types } } : {}),
+    ...(phaseFilters.statuses
+      ? { status: { in: phaseFilters.statuses } }
+      : {}),
+    ...(phaseFilters.priorities
+      ? { priority: { in: phaseFilters.priorities } }
+      : {}),
+  };
+  const hasPhaseFilter = Object.keys(phaseSome).length > 0;
 
-  const where: Prisma.ProjectWhereInput = {
-    deletedAt: null,
-    ...(search
-      ? {
-          OR: [
-            { name: { contains: search, mode: 'insensitive' } },
-            { address: { contains: search, mode: 'insensitive' } },
-            { city: { contains: search, mode: 'insensitive' } },
-            { contactName: { contains: search, mode: 'insensitive' } },
-            {
-              customer: {
-                OR: [
-                  { name: { contains: search, mode: 'insensitive' } },
-                  {
-                    contacts: {
-                      some: {
-                        name: { contains: search, mode: 'insensitive' },
-                      },
-                    },
-                  },
-                ],
-              },
-            },
-            {
-              projectManagers: {
-                some: {
-                  user: {
-                    OR: [
-                      {
-                        firstName: { contains: search, mode: 'insensitive' },
-                      },
-                      {
-                        lastName: { contains: search, mode: 'insensitive' },
-                      },
-                    ],
+  const and: Prisma.ProjectWhereInput[] = [{ deletedAt: null }];
+
+  if (search) {
+    and.push({
+      OR: [
+        { name: { contains: search, mode: 'insensitive' } },
+        { address: { contains: search, mode: 'insensitive' } },
+        { city: { contains: search, mode: 'insensitive' } },
+        { contactName: { contains: search, mode: 'insensitive' } },
+        {
+          customer: {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' } },
+              {
+                contacts: {
+                  some: {
+                    name: { contains: search, mode: 'insensitive' },
                   },
                 },
               },
-            },
-          ],
-        }
-      : {}),
-    ...(phaseType || status || priority
-      ? {
-          phases: {
+            ],
+          },
+        },
+        {
+          projectManagers: {
             some: {
-              ...(phaseType ? { type: phaseType } : {}),
-              ...(status ? { status } : {}),
-              ...(priority ? { priority } : {}),
+              user: {
+                OR: [
+                  { firstName: { contains: search, mode: 'insensitive' } },
+                  { lastName: { contains: search, mode: 'insensitive' } },
+                ],
+              },
             },
           },
-        }
-      : {}),
-  };
+        },
+      ],
+    });
+  }
 
-  const projects = await prisma.project.findMany({
-    where,
+  if (hasPhaseFilter) {
+    and.push({ phases: { some: phaseSome } });
+  }
+
+  if (query.categories && query.categories.length > 0) {
+    and.push({
+      customer: {
+        category: { in: query.categories },
+        deletedAt: null,
+      },
+    });
+  }
+
+  if (query.lat !== undefined && query.lng !== undefined) {
+    const radiusKm = query.radiusKm ?? 25;
+    const latDelta = radiusKm / 111;
+    const lngDelta =
+      radiusKm / (111 * Math.max(0.2, Math.cos((query.lat * Math.PI) / 180)));
+    and.push({
+      latitude: {
+        gte: new Prisma.Decimal(query.lat - latDelta),
+        lte: new Prisma.Decimal(query.lat + latDelta),
+      },
+      longitude: {
+        gte: new Prisma.Decimal(query.lng - lngDelta),
+        lte: new Prisma.Decimal(query.lng + lngDelta),
+      },
+    });
+  }
+
+  let projects = await prisma.project.findMany({
+    where: { AND: and },
     orderBy: { createdAt: 'desc' },
     include: {
       customer: {
@@ -232,8 +363,8 @@ export const listProjectsService = async ({
               status: InspectionStatus.PENDING,
               deletedAt: null,
             },
-            select: { id: true },
-            take: 1,
+            select: { appointmentDate: true },
+            orderBy: { appointmentDate: 'asc' as const },
           },
         },
       },
@@ -247,15 +378,7 @@ export const listProjectsService = async ({
       },
       phases: {
         orderBy: { createdAt: 'desc' },
-        ...(phaseType || status || priority
-          ? {
-              where: {
-                ...(phaseType ? { type: phaseType } : {}),
-                ...(status ? { status } : {}),
-                ...(priority ? { priority } : {}),
-              },
-            }
-          : {}),
+        ...(hasPhaseFilter ? { where: phaseSome } : {}),
       },
       attachments: {
         where: {
@@ -268,10 +391,19 @@ export const listProjectsService = async ({
     },
   });
 
+  if (query.lat !== undefined && query.lng !== undefined) {
+    const radiusKm = query.radiusKm ?? 25;
+    projects = projects.filter((project) => {
+      const lat = decimalToNumber(project.latitude);
+      const lng = decimalToNumber(project.longitude);
+      if (lat === null || lng === null) return false;
+      return haversineKm(query.lat!, query.lng!, lat, lng) <= radiusKm;
+    });
+  }
+
   const projectIds = projects.map((project) => project.id);
   const loggedByProject = await getLoggedHoursByProjectId(projectIds);
 
-  // Crew avatars: distinct users from crew assignments across project phases.
   const crewRows =
     projectIds.length === 0
       ? []
@@ -299,11 +431,18 @@ export const listProjectsService = async ({
   type TCardMeta = {
     card: AdminProjectPhaseCardDTO;
     hasPendingInspection: boolean;
+    createdAtMs: number;
+    nextInspectionMs: number;
   };
 
   const allCards: TCardMeta[] = [];
 
   for (const project of projects) {
+    const matchingPhases = project.phases.filter((phase) =>
+      phaseMatchesAdminFilters(phase, phaseFilters)
+    );
+    if (matchingPhases.length === 0) continue;
+
     const pm = project.projectManagers[0]?.user;
     const assigneeName = pm ? `${pm.firstName} ${pm.lastName}` : null;
     const logged = loggedByProject.get(project.id) ?? 0;
@@ -329,9 +468,7 @@ export const listProjectsService = async ({
         )
     );
 
-    if (project.phases.length === 0) continue;
-
-    const phase = selectPrimaryPhase(project.phases);
+    const phase = selectPrimaryPhase(matchingPhases);
     const card = new AdminProjectPhaseCardDTO(
       phase.id,
       phase.type,
@@ -357,7 +494,12 @@ export const listProjectsService = async ({
       Number(logged.toFixed(2)),
       logged <= budgeted
     );
-    allCards.push({ card, hasPendingInspection });
+    allCards.push({
+      card,
+      hasPendingInspection,
+      createdAtMs: project.createdAt.getTime(),
+      nextInspectionMs: nextInspectionSortKey(project.customer.inspections),
+    });
   }
 
   const tabCounts = new AdminProjectTabCountsDTO(
@@ -374,13 +516,23 @@ export const listProjectsService = async ({
     ).length
   );
 
-  const filtered = allCards
-    .filter(({ card, hasPendingInspection }) =>
-      cardMatchesTab(card, tab ?? 'ALL', hasPendingInspection)
-    )
-    .map(({ card }) => card);
+  const filtered = allCards.filter(({ card, hasPendingInspection }) =>
+    cardMatchesTab(card, tab ?? 'ALL', hasPendingInspection)
+  );
 
-  const pageSlice = paginateArray(filtered, page, limit);
+  if (sortBy === 'NAME_AZ') {
+    filtered.sort((a, b) => a.card.projectName.localeCompare(b.card.projectName));
+  } else if (sortBy === 'NEXT_INSPECTION') {
+    filtered.sort((a, b) => a.nextInspectionMs - b.nextInspectionMs);
+  } else {
+    filtered.sort((a, b) => b.createdAtMs - a.createdAtMs);
+  }
+
+  const pageSlice = paginateArray(
+    filtered.map(({ card }) => card),
+    page,
+    limit
+  );
 
   return {
     data: new AdminProjectListDTO(pageSlice.items, tabCounts),
@@ -388,6 +540,222 @@ export const listProjectsService = async ({
     page: pageSlice.page,
     limit: pageSlice.limit,
   };
+};
+
+/**
+ * Lists company-wide phases for the admin Kanban / phase board.
+ * Optional `column` matches mobile: ENQUIRY → status; others → phase type.
+ *
+ * @param {TListAdminPhasesServiceParams} params - Validated column/page query.
+ * @returns {Promise<{ items: MobileManagedPhaseDTO[]; total: number; page: number; limit: number }>}
+ */
+export const listAdminPhasesService = async ({
+  query,
+}: TListAdminPhasesServiceParams): Promise<{
+  items: MobileManagedPhaseDTO[];
+  total: number;
+  page: number;
+  limit: number;
+}> => {
+  const { page, limit } = query;
+  const columnWhere =
+    query.column === 'ENQUIRY'
+      ? { status: PhaseStatus.ENQUIRY }
+      : query.column === 'ERECTION' ||
+          query.column === 'DISMANTLING' ||
+          query.column === 'STANDING'
+        ? { type: query.column as PhaseType }
+        : {};
+
+  const where = {
+    ...columnWhere,
+    project: { deletedAt: null },
+  };
+
+  const [total, phases] = await Promise.all([
+    prisma.projectPhase.count({ where }),
+    prisma.projectPhase.findMany({
+      where,
+      include: {
+        project: {
+          select: { id: true, name: true, address: true },
+        },
+      },
+      orderBy: [{ status: 'asc' }, { updatedAt: 'desc' }],
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+  ]);
+
+  return {
+    items: phases.map(
+      (phase) =>
+        new MobileManagedPhaseDTO(
+          phase.id,
+          phase.type,
+          phase.status,
+          phase.priority,
+          phase.startDate ? phase.startDate.toISOString() : null,
+          phase.endDate ? phase.endDate.toISOString() : null,
+          {
+            id: phase.project.id,
+            name: phase.project.name,
+            address: phase.project.address,
+          }
+        )
+    ),
+    total,
+    page,
+    limit,
+  };
+};
+
+/**
+ * Company-wide calendar schedule (mobile `GET /mobile/schedule` parity).
+ * Phases overlapping the window, grouped by UTC day. No SM access scoping.
+ *
+ * @param {TGetAdminScheduleServiceParams} params - Inclusive date window + page.
+ * @returns {Promise<{ items: MobileScheduleDayDTO[]; total: number; page: number; limit: number }>}
+ */
+export const getAdminScheduleService = async ({
+  query,
+}: TGetAdminScheduleServiceParams): Promise<{
+  items: MobileScheduleDayDTO[];
+  total: number;
+  page: number;
+  limit: number;
+}> => {
+  const { page, limit } = query;
+  const rangeStart = getUtcDayStart(query.startDate);
+  const rangeEndExclusive = getUtcDayEndExclusive(
+    getUtcDayStart(query.endDate)
+  );
+
+  const phases = await prisma.projectPhase.findMany({
+    where: {
+      startDate: { not: null, lte: query.endDate },
+      endDate: { not: null, gte: query.startDate },
+      project: { deletedAt: null },
+    },
+    include: {
+      project: {
+        select: { id: true, name: true, address: true },
+      },
+    },
+    orderBy: [{ startDate: 'asc' }, { priority: 'asc' }],
+  });
+
+  const byDate = new Map<string, MobileSchedulePhaseDTO[]>();
+
+  for (const phase of phases) {
+    if (!phase.startDate || !phase.endDate) continue;
+
+    const overlapStart = new Date(
+      Math.max(getUtcDayStart(phase.startDate).getTime(), rangeStart.getTime())
+    );
+    const overlapEnd = new Date(
+      Math.min(
+        getUtcDayStart(phase.endDate).getTime(),
+        getUtcDayStart(query.endDate).getTime()
+      )
+    );
+
+    for (
+      let cursor = overlapStart.getTime();
+      cursor <= overlapEnd.getTime();
+      cursor += 24 * 60 * 60 * 1000
+    ) {
+      const dateKey = toUtcDateKey(new Date(cursor));
+      const bucket = byDate.get(dateKey) ?? [];
+      bucket.push(
+        new MobileSchedulePhaseDTO(
+          phase.id,
+          phase.type,
+          phase.status,
+          phase.priority,
+          phase.startDate.toISOString(),
+          phase.endDate.toISOString(),
+          {
+            id: phase.project.id,
+            name: phase.project.name,
+            address: phase.project.address,
+          }
+        )
+      );
+      byDate.set(dateKey, bucket);
+    }
+  }
+
+  for (
+    let cursor = rangeStart.getTime();
+    cursor < rangeEndExclusive.getTime();
+    cursor += 24 * 60 * 60 * 1000
+  ) {
+    const dateKey = toUtcDateKey(new Date(cursor));
+    if (!byDate.has(dateKey)) byDate.set(dateKey, []);
+  }
+
+  const days = [...byDate.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, dayPhases]) => new MobileScheduleDayDTO(date, dayPhases));
+
+  return paginateArray(days, page, limit);
+};
+
+/**
+ * Company-wide map pins for projects with active phases
+ * (mobile `GET /mobile/map` parity; no SM access scoping).
+ *
+ * @param {TGetAdminMapServiceParams} params - Optional phase type + page.
+ * @returns {Promise<{ items: MobileMapProjectDTO[]; total: number; page: number; limit: number }>}
+ */
+export const getAdminMapService = async ({
+  query,
+}: TGetAdminMapServiceParams): Promise<{
+  items: MobileMapProjectDTO[];
+  total: number;
+  page: number;
+  limit: number;
+}> => {
+  const { page, limit } = query;
+
+  const phases = await prisma.projectPhase.findMany({
+    where: {
+      status: { in: ACTIVE_PHASE_STATUSES },
+      ...(query.type ? { type: query.type } : {}),
+      project: { deletedAt: null },
+    },
+    include: {
+      project: {
+        select: {
+          id: true,
+          name: true,
+          latitude: true,
+          longitude: true,
+        },
+      },
+    },
+    orderBy: [{ priority: 'asc' }, { startDate: 'asc' }],
+  });
+
+  const pinByProject = new Map<string, MobileMapProjectDTO>();
+  for (const phase of phases) {
+    if (pinByProject.has(phase.project.id)) continue;
+    pinByProject.set(
+      phase.project.id,
+      new MobileMapProjectDTO(
+        phase.project.id,
+        phase.project.name,
+        mobileToCoordinates(
+          decimalToNumber(phase.project.latitude),
+          decimalToNumber(phase.project.longitude)
+        ),
+        phase.type
+      )
+    );
+  }
+
+  return paginateArray([...pinByProject.values()], page, limit);
 };
 
 /**
@@ -478,6 +846,7 @@ export const updateProjectService = async ({
   const {
     budgetedHours,
     scaffoldArea,
+    scaffoldSpecification,
     coordinates,
     city,
     phaseType,
@@ -490,6 +859,11 @@ export const updateProjectService = async ({
     ...rest
   } = payload;
 
+  const resolvedScaffoldArea =
+    scaffoldSpecification?.area !== undefined
+      ? scaffoldSpecification.area
+      : scaffoldArea;
+
   await prisma.$transaction(async (tx) => {
     await tx.project.update({
       where: { id: project.id },
@@ -499,12 +873,12 @@ export const updateProjectService = async ({
         ...(budgetedHours !== undefined
           ? { budgetedHours: new Prisma.Decimal(budgetedHours) }
           : {}),
-        ...(scaffoldArea !== undefined
+        ...(resolvedScaffoldArea !== undefined
           ? {
               scaffoldArea:
-                scaffoldArea === null
+                resolvedScaffoldArea === null
                   ? null
-                  : new Prisma.Decimal(scaffoldArea),
+                  : new Prisma.Decimal(resolvedScaffoldArea),
             }
           : {}),
         ...(coordinates !== undefined

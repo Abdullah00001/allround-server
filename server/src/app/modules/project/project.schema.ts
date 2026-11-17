@@ -1,7 +1,16 @@
-import { PhaseStatus, PhaseType, Priority } from '@prisma/client';
+import {
+  CustomerCategory,
+  PhaseStatus,
+  PhaseType,
+  Priority,
+} from '@prisma/client';
 import { z } from 'zod';
 import { DEFAULT_LIMIT, DEFAULT_PAGE } from '@/const';
-import { createMobileProjectSchema } from '@/app/modules/mobile/mobile.schema';
+import {
+  createMobileProjectSchema,
+  getMobilePhasesQuerySchema,
+  getProjectEmployeesQuerySchema,
+} from '@/app/modules/mobile/mobile.schema';
 
 /**
  * Admin project list tabs matching the Projects card-view filter strip.
@@ -15,8 +24,42 @@ export const adminProjectTabEnum = z.enum([
 ]);
 
 /**
+ * Preprocesses CSV or repeated query values into a string array.
+ *
+ * @param {unknown} value - Raw Express query value.
+ * @returns {unknown} Normalized string array, undefined, or original value.
+ */
+const preprocessCsvOrArray = (value: unknown): unknown => {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((entry) => String(entry).split(','))
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+  }
+  return value;
+};
+
+/**
+ * Optional array query that accepts CSV strings or repeated params.
+ *
+ * @template T
+ * @param {z.ZodType<T>} itemSchema - Element schema.
+ * @returns {z.ZodType<T[] | undefined>} Optional non-empty array.
+ */
+const csvOrArray = <T>(itemSchema: z.ZodType<T>) =>
+  z.preprocess(preprocessCsvOrArray, z.array(itemSchema).min(1).optional());
+
+/**
  * Query schema for `GET /admin/projects`.
- * Phase-centric cards with tab filters and multi-field search (parity with admin UI).
+ * Admin tabs + mobile-parity filter modal (multi-select, geo, sort).
+ * Legacy single `phaseType` / `status` / `priority` still accepted.
  */
 export const getProjectsQuerySchema = z
   .object({
@@ -27,8 +70,46 @@ export const getProjectsQuerySchema = z
     phaseType: z.enum(PhaseType, { message: 'Invalid phase type' }).optional(),
     status: z.enum(PhaseStatus, { message: 'Invalid status' }).optional(),
     priority: z.enum(Priority, { message: 'Invalid priority' }).optional(),
+    phaseTypes: csvOrArray(
+      z.enum(PhaseType, { message: 'Invalid phase type' })
+    ),
+    phaseStatuses: csvOrArray(
+      z.enum(PhaseStatus, { message: 'Invalid status' })
+    ),
+    priorities: csvOrArray(
+      z.enum(Priority, { message: 'Invalid priority' })
+    ),
+    categories: csvOrArray(
+      z.enum(CustomerCategory, { message: 'Invalid category' })
+    ),
+    lat: z.coerce.number().min(-90).max(90).optional(),
+    lng: z.coerce.number().min(-180).max(180).optional(),
+    radiusKm: z.coerce.number().positive().max(500).optional().default(25),
+    sortBy: z
+      .enum(['NEWEST', 'NEXT_INSPECTION', 'NAME_AZ'], {
+        message: 'Invalid sortBy',
+      })
+      .optional()
+      .default('NEWEST'),
   })
-  .strict();
+  .strict()
+  .refine(
+    (data) =>
+      (data.lat === undefined && data.lng === undefined) ||
+      (data.lat !== undefined && data.lng !== undefined),
+    { message: 'lat and lng must be provided together', path: ['lat'] }
+  );
+
+/**
+ * Query schema for `GET /admin/projects/:projectId/employees` (task assignee picker).
+ */
+export const getAdminProjectEmployeesQuerySchema =
+  getProjectEmployeesQuerySchema;
+
+/**
+ * Query schema for `GET /admin/phases` (Kanban / phase board columns).
+ */
+export const getAdminPhasesQuerySchema = getMobilePhasesQuerySchema;
 
 /**
  * Path params schema for routes targeting a single project by UUID (`:id`).
@@ -97,6 +178,14 @@ export const updateProjectSchema = z
     scaffoldArea: z.number().min(0).nullable().optional(),
     siteAccessCode: z.string().trim().min(1).nullable().optional(),
     siteAccessNotes: z.string().trim().min(1).nullable().optional(),
+    scaffoldSpecification: z
+      .object({
+        area: z.number().min(0).nullable().optional(),
+        height: z.number().positive().nullable().optional(),
+        type: z.string().trim().min(1).nullable().optional(),
+      })
+      .strict()
+      .optional(),
     phaseType: z.enum(PhaseType, { message: 'Invalid phase type' }).optional(),
     status: z.enum(PhaseStatus, { message: 'Invalid status' }).optional(),
     priority: z.enum(Priority, { message: 'Invalid priority' }).optional(),

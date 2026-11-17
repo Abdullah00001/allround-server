@@ -113,7 +113,8 @@ export const updateInspectionSchema = z
 
 /**
  * Query schema for `GET /admin/inspections`.
- * Supports pagination, status tab, customer id, and customer-name search.
+ * Supports pagination, status tab, customer id, customer-name search,
+ * and optional appointmentDate window (Calendar day panel parity with mobile).
  */
 export const getInspectionsQuerySchema = z
   .object({
@@ -122,8 +123,33 @@ export const getInspectionsQuerySchema = z
     status: z.enum(InspectionStatus).optional(),
     customerId: z.string().uuid({ error: 'Invalid customer id' }).optional(),
     search: z.string().trim().min(1).optional(),
+    startDate: z.coerce.date({ error: 'Invalid startDate' }).optional(),
+    endDate: z.coerce.date({ error: 'Invalid endDate' }).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((data, ctx) => {
+    const hasStart = data.startDate !== undefined;
+    const hasEnd = data.endDate !== undefined;
+    if (hasStart !== hasEnd) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'startDate and endDate must be provided together',
+        path: [hasStart ? 'endDate' : 'startDate'],
+      });
+      return;
+    }
+    if (
+      hasStart &&
+      hasEnd &&
+      data.endDate!.getTime() < data.startDate!.getTime()
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'endDate must be on or after startDate',
+        path: ['endDate'],
+      });
+    }
+  });
 
 /**
  * Request body schema for `POST /admin/inspections/:id/convert`.
