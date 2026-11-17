@@ -7447,6 +7447,78 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/mobile/projects/{projectId}/employees:
+    get:
+      tags: [MobileProjectManagement]
+      summary: List employees for task assignee picker
+      description: >
+        Returns ACTIVE `EMPLOYEE` and `SITE_MANAGER` users for the Site Manager
+        task-creation Assign Employee dropdown. Use each row `id` as create-task
+        `employeeId`. Optional `search` filters first/last name (case-insensitive).
+        Requires Site Manager project access (same chain as project tasks).
+      operationId: listMobileProjectEmployees
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema: {type: string, format: uuid}
+        - in: query
+          name: search
+          schema: {type: string, minLength: 1}
+          description: Optional name search (firstName or lastName contains)
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: 1-based page number
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Page size
+      responses:
+        '200':
+          description: Employees fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMobileProjectEmployeesResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Forbidden (not site manager or no project access)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
   /api/v1/mobile/projects/{projectId}/tasks:
     get:
       tags: [MobileProjectManagement]
@@ -8838,7 +8910,12 @@ paths:
     get:
       tags: [MobileDashboard]
       summary: Get site-manager schedule
-      description: Site Manager only. Returns ProjectPhases overlapping the query window, grouped by UTC date. Respects CompanyProfile.siteManagerAccessRule. Excludes phases with null startDate/endDate.
+      description: >
+        Site Manager only. Returns ProjectPhases overlapping the query window,
+        grouped by UTC date (Calendar month dots). Respects
+        CompanyProfile.siteManagerAccessRule. Excludes phases with null
+        startDate/endDate. Day-list inspections use GET /mobile/inspections
+        with startDate/endDate.
       operationId: getMobileSchedule
       security: [{bearerAuth: []}]
       parameters:
@@ -9385,6 +9462,10 @@ paths:
         Site Manager only. Returns inspections assigned via siteManagerId.
         `status=PENDING` (default) returns PENDING; `status=COMPLETED` returns
         SURVEY_DONE and CONVERTED. Includes `projectId` when converted.
+
+        Calendar day panel: pass `startDate` and `endDate` (same day) to filter
+        by appointmentDate UTC window. Empty result → "No inspections assigned".
+        Omit dates for Pending/Completed tabs.
       operationId: listMobileInspections
       security: [{bearerAuth: []}]
       parameters:
@@ -9395,6 +9476,22 @@ paths:
             enum: [PENDING, COMPLETED]
             default: PENDING
           description: Pending vs Completed inspections tab
+        - in: query
+          name: startDate
+          schema:
+            type: string
+            format: date-time
+          description: >
+            Inclusive UTC day start for appointmentDate filter (requires endDate).
+            Calendar: set equal to selected day.
+        - in: query
+          name: endDate
+          schema:
+            type: string
+            format: date-time
+          description: >
+            Inclusive UTC day end for appointmentDate filter (requires startDate).
+            Must be on or after startDate.
         - in: query
           name: page
           schema:
@@ -13479,6 +13576,33 @@ components:
         firstName: {type: string}
         lastName: {type: string}
         avatarUrl: {type: string, nullable: true}
+    MobileProjectEmployeeDTO:
+      type: object
+      required: [id, firstName, lastName, avatarUrl, role]
+      description: Workforce row for SM task assignee picker (`id` → create-task `employeeId`)
+      properties:
+        id: {type: string, format: uuid}
+        firstName: {type: string}
+        lastName: {type: string}
+        avatarUrl: {type: string, nullable: true}
+        role:
+          type: string
+          enum: [EMPLOYEE, SITE_MANAGER]
+    GetMobileProjectEmployeesResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [meta, data]
+          properties:
+            message:
+              type: string
+              example: 'Employees fetched successfully.'
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/MobileProjectEmployeeDTO'
     MobileProjectTaskDTO:
       type: object
       required: [id, projectId, title, description, priority, isCompleted, dueDate, employee, createdAt, updatedAt]

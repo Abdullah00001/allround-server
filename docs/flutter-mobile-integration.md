@@ -368,7 +368,8 @@ Stored on `CompanyProfile` (`id: "global"`):
 Login (role=SITE_MANAGER)
   → GET /mobile/config
   → GET /mobile/dashboard          (stats: pendingInspections, standingActiveSites, erection/dismantling planned+running)
-  → GET /mobile/schedule           (week view)
+  → GET /mobile/schedule           (Calendar month dots / phases)
+  → GET /mobile/inspections?status=PENDING&startDate&endDate  (Calendar day list)
   → GET /mobile/map                (project pins)
   → GET /mobile/projects?tab&search&phaseTypes&phaseStatuses&priorities&categories&lat&lng&radiusKm&sortBy
   → POST /mobile/projects  (create; coordinates from map)
@@ -424,12 +425,21 @@ Dashboard `stats` for SM also includes `standingActiveSites` and per-type `{ pla
 
 ### 4.5 Site Manager–only API reference
 
-#### Schedule & map
+#### Schedule & map (SM Calendar)
 
 | Method | Path | Query |
 | --- | --- | --- |
-| `GET` | `/mobile/schedule` | **required** `startDate`, `endDate` + `page&limit` → day buckets (SM only) |
+| `GET` | `/mobile/schedule` | **required** `startDate`, `endDate` + `page&limit` → day buckets `{ date, phases[] }` (SM only) |
 | `GET` | `/mobile/map` | optional `type` + `page&limit` → project pins |
+
+**Calendar screen:**
+
+| UI | API |
+| --- | --- |
+| Month dots Erection / Dismantling / Half-day | `GET /mobile/schedule` → `phases[].type` (`ERECTION` / `DISMANTLING` / `STANDING`\|`MAINTENANCE`) |
+| Day list under “SCHEDULE FOR …” / “No inspections assigned” | `GET /mobile/inspections?status=PENDING&startDate=<day>&endDate=<day>` |
+
+Do **not** expect inspections on schedule day buckets.
 
 #### Crew time
 
@@ -443,7 +453,7 @@ Returns `totalProjectHours`, `hoursByActivity[]`, `crewBreakdown[]`, paginated `
 
 | Method | Path | Query / Body |
 | --- | --- | --- |
-| `GET` | `/mobile/inspections` | `status=PENDING` (default) or `COMPLETED` + `page&limit` |
+| `GET` | `/mobile/inspections` | `status=PENDING` (default) or `COMPLETED` + `page&limit`; optional `startDate`+`endDate` (appointmentDate window; Calendar day panel) |
 | `GET` | `/mobile/inspections/:id` | Detail (must be assigned); includes `projectId` when converted |
 | `PATCH` | `/mobile/inspections/:id/complete` | See **§5.7 Survey Completion** (scaffold specs + notes + photos + optional `convertToProject`) |
 
@@ -611,12 +621,18 @@ Site Managers can list, create, toggle completion, and delete project tasks. Ass
 
 | Method | Path | Body |
 | --- | --- | --- |
+| `GET` | `/mobile/projects/:projectId/employees` | `?search&page&limit` → assignee picker (`id`, `firstName`, `lastName`, `avatarUrl`, `role`) + `meta` |
 | `GET` | `/mobile/projects/:projectId/tasks` | `?page&limit` (+ optional `status=OPEN\|COMPLETED`) → `{ open, completed }` or flat array + `meta` |
 | `POST` | `/mobile/projects/:projectId/tasks` | `description`, `employeeId`, `priority`, optional `dueDate` |
 | `PATCH` | `/mobile/tasks/:taskId/toggle` | — (flips `isCompleted`) |
 | `DELETE` | `/mobile/tasks/:taskId` | — → `{ id }` |
 
+**Assign Employee dropdown:** call `GET /mobile/projects/:projectId/employees` before create. Use a row’s `id` as `employeeId` on `POST .../tasks`. Optional `search` filters first/last name.
+
 ```http
+GET /api/v1/mobile/projects/<projectId>/employees?search=Tim&page=1&limit=20
+Authorization: Bearer <accessJwt>
+
 POST /api/v1/mobile/projects/<projectId>/tasks
 Authorization: Bearer <accessJwt>
 Content-Type: application/json

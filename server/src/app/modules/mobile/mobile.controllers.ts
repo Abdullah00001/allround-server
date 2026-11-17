@@ -44,6 +44,7 @@ import {
   listMobileInspectionsService,
   listMobilePhasesService,
   listProjectAttachmentsService,
+  listProjectEmployeesService,
   listProjectHistoryService,
   listProjectMeasurementsService,
   listProjectNotesService,
@@ -77,6 +78,7 @@ import {
   TGetMyTimeLogsQuery,
   TGetProjectAttachmentsQuery,
   TGetProjectListQuery,
+  TGetProjectEmployeesQuery,
   TGetProjectTasksQuery,
   TGetScheduleQuery,
   TGetTimeTrackingProjectsQuery,
@@ -755,6 +757,38 @@ export const listProjectTasksController = asyncHandler(
       message: 'Project tasks fetched successfully.',
       meta,
       data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `GET /mobile/projects/:projectId/employees`.
+ * Returns ACTIVE EMPLOYEE/SITE_MANAGER users for the SM task assignee picker.
+ *
+ * @param {Request} req - Express request with trusted project and validated query.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const listProjectEmployeesController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const project = req.project as Project;
+    const query = req.validatedQuery as TGetProjectEmployeesQuery;
+    const { items, total, page, limit } = await listProjectEmployeesService({
+      user,
+      project,
+      query,
+    });
+    const meta = buildPaginationMeta({ total, page, limit, req });
+
+    res.status(200).json({
+      success: true,
+      message: 'Employees fetched successfully.',
+      meta,
+      data: items,
       traceId,
     });
     return;

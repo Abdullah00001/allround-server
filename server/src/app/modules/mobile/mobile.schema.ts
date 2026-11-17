@@ -370,7 +370,9 @@ export const getMobilePhasesQuerySchema = z
   .strict();
 
 /**
- * Query schema for `GET /mobile/inspections` Pending/Completed tabs.
+ * Query schema for `GET /mobile/inspections` Pending/Completed tabs
+ * and Calendar day panel (`startDate`/`endDate` on appointmentDate).
+ * When either date is set, both are required and endDate ≥ startDate.
  */
 export const getMobileInspectionsQuerySchema = z
   .object({
@@ -378,9 +380,34 @@ export const getMobileInspectionsQuerySchema = z
       .enum(['PENDING', 'COMPLETED'], { message: 'Invalid inspection status' })
       .optional()
       .default('PENDING'),
+    startDate: z.coerce.date({ error: 'Invalid startDate' }).optional(),
+    endDate: z.coerce.date({ error: 'Invalid endDate' }).optional(),
     ...paginationQueryFields,
   })
-  .strict();
+  .strict()
+  .superRefine((data, ctx) => {
+    const hasStart = data.startDate !== undefined;
+    const hasEnd = data.endDate !== undefined;
+    if (hasStart !== hasEnd) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'startDate and endDate must be provided together',
+        path: [hasStart ? 'endDate' : 'startDate'],
+      });
+      return;
+    }
+    if (
+      hasStart &&
+      hasEnd &&
+      data.endDate!.getTime() < data.startDate!.getTime()
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'endDate must be on or after startDate',
+        path: ['endDate'],
+      });
+    }
+  });
 
 /**
  * Query schema for `GET /mobile/projects/:projectId/attachments`.
@@ -405,6 +432,17 @@ export const getProjectTasksQuerySchema = z
     status: z
       .enum(['OPEN', 'COMPLETED'], { message: 'Invalid task status' })
       .optional(),
+    ...paginationQueryFields,
+  })
+  .strict();
+
+/**
+ * Query schema for `GET /mobile/projects/:projectId/employees`
+ * (SM task-creation assignee picker).
+ */
+export const getProjectEmployeesQuerySchema = z
+  .object({
+    search: z.string().trim().min(1).optional(),
     ...paginationQueryFields,
   })
   .strict();

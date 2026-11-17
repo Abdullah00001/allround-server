@@ -382,12 +382,12 @@ export class MobileSchedulePhaseDTO {
 }
 
 /**
- * Calendar day bucket for the Site Manager schedule tab.
+ * Calendar day bucket for the Site Manager schedule / Calendar tab.
  */
 export class MobileScheduleDayDTO {
   /**
    * @param {string} date - UTC calendar date `YYYY-MM-DD`.
-   * @param {MobileSchedulePhaseDTO[]} phases - Phases overlapping this date.
+   * @param {MobileSchedulePhaseDTO[]} phases - Phases overlapping this date (calendar dots).
    */
   constructor(
     public date: string,
@@ -1007,6 +1007,44 @@ export class MobileTaskEmployeeDTO {
       user.firstName,
       user.lastName,
       user.avatarUrl
+    );
+  }
+}
+
+/**
+ * Workforce row for the SM task-creation employee picker.
+ */
+export class MobileProjectEmployeeDTO {
+  /**
+   * @param {string} id - User UUID (use as create-task `employeeId`).
+   * @param {string} firstName - First name.
+   * @param {string} lastName - Last name.
+   * @param {string | null} avatarUrl - Optional avatar.
+   * @param {Role} role - EMPLOYEE or SITE_MANAGER.
+   */
+  constructor(
+    public id: string,
+    public firstName: string,
+    public lastName: string,
+    public avatarUrl: string | null,
+    public role: Role
+  ) {}
+
+  /**
+   * Builds a picker row from a workforce user.
+   *
+   * @param {Pick<User, 'id' | 'firstName' | 'lastName' | 'avatarUrl' | 'role'>} user - User fields.
+   * @returns {MobileProjectEmployeeDTO} Assignee picker row.
+   */
+  static build(
+    user: Pick<User, 'id' | 'firstName' | 'lastName' | 'avatarUrl' | 'role'>
+  ): MobileProjectEmployeeDTO {
+    return new MobileProjectEmployeeDTO(
+      user.id,
+      user.firstName,
+      user.lastName,
+      user.avatarUrl,
+      user.role
     );
   }
 }

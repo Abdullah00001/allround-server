@@ -43,6 +43,7 @@ import {
   createProjectMeasurementController,
   createProjectNoteController,
   createProjectTaskController,
+  listProjectEmployeesController,
   deleteProjectAttachmentController,
   deleteProjectMeasurementController,
   deleteProjectNoteController,
@@ -98,6 +99,7 @@ import {
   getMyProjectsQuerySchema,
   getMyTimeLogsQuerySchema,
   getProjectAttachmentsQuerySchema,
+  getProjectEmployeesQuerySchema,
   getProjectListQuerySchema,
   getProjectTasksQuerySchema,
   getScheduleQuerySchema,
@@ -202,6 +204,14 @@ router
     ...siteManagerProjectAccess,
     validateReqBody(updateMobileProjectSchema),
     updateMobileProjectController
+  );
+
+router
+  .route('/mobile/projects/:projectId/employees')
+  .get(
+    ...siteManagerProjectAccess,
+    validateReqQuery(getProjectEmployeesQuerySchema),
+    listProjectEmployeesController
   );
 
 router

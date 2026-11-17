@@ -27,6 +27,7 @@ import {
   getMyProjectsQuerySchema,
   getMyTimeLogsQuerySchema,
   getProjectAttachmentsQuerySchema,
+  getProjectEmployeesQuerySchema,
   getProjectListQuerySchema,
   getProjectTasksQuerySchema,
   getScheduleQuerySchema,
@@ -156,6 +157,13 @@ export type TGetMyProjectsQuery = z.infer<typeof getMyProjectsQuerySchema>;
  * Validated project tasks list query.
  */
 export type TGetProjectTasksQuery = z.infer<typeof getProjectTasksQuerySchema>;
+
+/**
+ * Validated project employees picker query (search + pagination).
+ */
+export type TGetProjectEmployeesQuery = z.infer<
+  typeof getProjectEmployeesQuerySchema
+>;
 
 /**
  * Validated project child list query (notes / measurements / history).
@@ -475,6 +483,18 @@ export type TListProjectTasksServiceParams = {
   project: Project;
   /** Validated page/limit and optional OPEN/COMPLETED filter. */
   query: TGetProjectTasksQuery;
+};
+
+/**
+ * Service params for SM task-creation employee picker.
+ */
+export type TListProjectEmployeesServiceParams = {
+  /** Authenticated site manager (access already gated by middleware). */
+  user: User;
+  /** Trusted accessible project (scopes route auth, not the user filter). */
+  project: Project;
+  /** Validated search + pagination query. */
+  query: TGetProjectEmployeesQuery;
 };
 
 /**

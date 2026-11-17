@@ -14,6 +14,7 @@ import {
   Role,
   TimeLogStatus,
   User,
+  UserStatus,
 } from '@prisma/client';
 import prisma from '@/app/configs/db.configs';
 import logger from '@/app/configs/logger.configs';
@@ -50,6 +51,7 @@ import {
   MobileProjectNoteDTO,
   MobileProjectPhaseCardDTO,
   MobileProjectSettingsDTO,
+  MobileProjectEmployeeDTO,
   MobileProjectTaskDTO,
   MobileProjectTasksListDTO,
   MobileProfileDTO,
@@ -104,6 +106,7 @@ import {
   TListMobilePhasesServiceParams,
   TListProjectAttachmentsServiceParams,
   TListProjectChildServiceParams,
+  TListProjectEmployeesServiceParams,
   TListProjectTasksServiceParams,
   TManualTimeServiceParams,
   TMobileProjectServiceParams,
@@ -1711,7 +1714,7 @@ const buildScheduleDayBuckets = (
 
   return [...byDate.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, dayPhases]) => new MobileScheduleDayDTO(date, dayPhases));
+    .map(([date, phases]) => new MobileScheduleDayDTO(date, phases));
 };
 
 /**
@@ -1832,6 +1835,7 @@ export const getEmployeeScheduleService = async ({
  * Builds the Site Manager calendar schedule: phases overlapping the query
  * window, grouped by UTC calendar date. Respects `siteManagerAccessRule`.
  * Phases with null `startDate` or `endDate` are excluded.
+ * Calendar day list (inspections) uses `GET /mobile/inspections` with dates.
  *
  * @param {TGetScheduleServiceParams} params - Site manager and date window.
  * @returns {Promise<{ items: MobileScheduleDayDTO[]; total: number; page: number; limit: number }>}
@@ -1862,7 +1866,11 @@ export const getScheduleService = async ({
         : {
             OR: [
               { crewAssignments: { some: { userId: user.id } } },
-              { project: { projectManagers: { some: { userId: user.id } } } },
+              {
+                project: {
+                  projectManagers: { some: { userId: user.id } },
+                },
+              },
             ],
           }),
     },
@@ -1915,11 +1923,7 @@ export const getScheduleService = async ({
     }
   }
 
-  const days = buildScheduleDayBuckets(
-    byDate,
-    rangeStart,
-    rangeEndExclusive
-  );
+  const days = buildScheduleDayBuckets(byDate, rangeStart, rangeEndExclusive);
   return paginateArray(days, page, limit);
 };
 
@@ -2063,9 +2067,11 @@ export const syncTimeLogsService = async ({
 /**
  * Lists inspections assigned to the authenticated site manager.
  * `status=PENDING` → PENDING only; `status=COMPLETED` → SURVEY_DONE + CONVERTED.
+ * Optional `startDate`/`endDate` filters by UTC appointmentDate window
+ * (Calendar day panel: same day for both).
  *
- * @param {TListMobileInspectionsServiceParams} params - Site manager and status tab.
- * @returns {Promise<MobileInspectionDTO[]>} Assigned inspections for the survey list.
+ * @param {TListMobileInspectionsServiceParams} params - Site manager and query.
+ * @returns {Promise<{ items: MobileInspectionDTO[]; total: number; page: number; limit: number }>}
  */
 export const listMobileInspectionsService = async ({
   user,
@@ -2086,10 +2092,21 @@ export const listMobileInspectionsService = async ({
         }
       : { status: InspectionStatus.PENDING };
 
+  const appointmentDateFilter =
+    query.startDate !== undefined && query.endDate !== undefined
+      ? {
+          appointmentDate: {
+            gte: getUtcDayStart(query.startDate),
+            lt: getUtcDayEndExclusive(getUtcDayStart(query.endDate)),
+          },
+        }
+      : {};
+
   const where = {
     siteManagerId: user.id,
     deletedAt: null,
     ...statusFilter,
+    ...appointmentDateFilter,
   };
 
   const [total, inspections] = await Promise.all([
@@ -2382,6 +2399,74 @@ export const updateMobilePhaseStatusService = async ({
       address: updated.project.address,
     }
   );
+};
+
+/**
+ * Lists assignable workforce users for the SM task-creation employee picker.
+ * Matches create-task assignee rules: ACTIVE EMPLOYEE or SITE_MANAGER.
+ * `project` is required for route access scoping only.
+ *
+ * @param {TListProjectEmployeesServiceParams} params - Project + search/page query.
+ * @returns {Promise<{ items: MobileProjectEmployeeDTO[]; total: number; page: number; limit: number }>}
+ */
+export const listProjectEmployeesService = async ({
+  query,
+}: TListProjectEmployeesServiceParams): Promise<{
+  items: MobileProjectEmployeeDTO[];
+  total: number;
+  page: number;
+  limit: number;
+}> => {
+  const { page, limit, search } = query;
+  const trimmedSearch = search?.trim();
+
+  const where: Prisma.UserWhereInput = {
+    deletedAt: null,
+    status: UserStatus.ACTIVE,
+    role: { in: [Role.EMPLOYEE, Role.SITE_MANAGER] },
+    ...(trimmedSearch
+      ? {
+          OR: [
+            {
+              firstName: {
+                contains: trimmedSearch,
+                mode: 'insensitive',
+              },
+            },
+            {
+              lastName: {
+                contains: trimmedSearch,
+                mode: 'insensitive',
+              },
+            },
+          ],
+        }
+      : {}),
+  };
+
+  const [total, rows] = await Promise.all([
+    prisma.user.count({ where }),
+    prisma.user.findMany({
+      where,
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        avatarUrl: true,
+        role: true,
+      },
+      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+  ]);
+
+  return {
+    items: rows.map((row) => MobileProjectEmployeeDTO.build(row)),
+    total,
+    page,
+    limit,
+  };
 };
 
 /**
