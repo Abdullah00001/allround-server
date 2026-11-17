@@ -5,6 +5,7 @@ import {
   InspectionStatus,
   Language,
   MeasurementUnit,
+  NotificationType,
   PhaseStatus,
   PhaseType,
   Priority,
@@ -15,6 +16,8 @@ import {
   User,
 } from '@prisma/client';
 import prisma from '@/app/configs/db.configs';
+import logger from '@/app/configs/logger.configs';
+import { triggerRawPushNotification } from '@/app/utils/notification.utils';
 import {
   aggregateLoggedHours,
   selectPrimaryPhase,
@@ -1090,6 +1093,10 @@ export const getMyProjectsService = async ({
  * it uses assignment-scoped project ids. `completedProjectsCount` follows the
  * same project scope.
  *
+ * Also enqueues a dummy test push/in-app notification (alua profile-GET parity)
+ * so Flutter can verify Socket/FCM + notification list wiring. Failures are logged
+ * and never block the profile response.
+ *
  * @param {TMobileUserServiceParams} params - Authenticated user wrapper.
  * @returns {Promise<MobileProfileDTO>} Profile payload for the Profile tab.
  */
@@ -1161,6 +1168,20 @@ export const getProfileStatsService = async ({
     where: { userId },
     select: { language: true },
   });
+
+  try {
+    await triggerRawPushNotification({
+      userIds: [userId],
+      type: NotificationType.SYSTEM_ALERT,
+      title: 'Test Push Notification',
+      body: `Hello ${user.firstName} ${user.lastName}, this is a test push notification from Allround.`,
+    });
+  } catch (pushError) {
+    logger.error(
+      'Failed to trigger test push notification for mobile profile get:',
+      pushError
+    );
+  }
 
   return MobileProfileDTO.build(
     user,

@@ -8427,6 +8427,9 @@ paths:
         hoursThisWeek (UTC ISO week, APPROVED net hours), assignedProjectsCount,
         and completedProjectsCount (all phases COMPLETED). Available to EMPLOYEE
         and SITE_MANAGER.
+        Also enqueues a dummy `SYSTEM_ALERT` test notification for the caller
+        (alua profile-GET parity) so Socket/FCM + `GET /mobile/notifications` can be verified.
+        Requires the notification worker to be running.
       operationId: getMobileProfile
       security:
         - bearerAuth: []

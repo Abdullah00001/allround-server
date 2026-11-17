@@ -6,6 +6,20 @@ import { t, TranslationKey } from '@/app/i18n';
 import { QUEUE_JOBS } from '@/const';
 
 /**
+ * Alua-compatible raw push payload (literal title/body, no i18n keys).
+ */
+export type TTriggerRawPushNotificationPayload = {
+  /** Recipient user UUIDs. */
+  userIds: string[];
+  /** Prisma notification category. */
+  type: NotificationType;
+  /** Push / in-app title. */
+  title: string;
+  /** Push / in-app body. */
+  body: string;
+};
+
+/**
  * Resolves the company-wide default language, falling back to `EN`.
  *
  * @returns {Promise<Language>} Default language code.
@@ -16,6 +30,36 @@ const getCompanyDefaultLanguage = async (): Promise<Language> => {
     select: { defaultLanguage: true },
   });
   return profile?.defaultLanguage ?? Language.EN;
+};
+
+/**
+ * Enqueues a push/in-app notification with literal title/body (alua-compatible).
+ * Used for test hooks and already-rendered copy. Failures are logged, never thrown.
+ *
+ * @param {TTriggerRawPushNotificationPayload} payload - Recipients + copy.
+ * @returns {Promise<void>}
+ */
+export const triggerRawPushNotification = async (
+  payload: TTriggerRawPushNotificationPayload
+): Promise<void> => {
+  const uniqueUserIds = [...new Set((payload.userIds || []).filter(Boolean))];
+  if (uniqueUserIds.length === 0) return;
+
+  try {
+    const queue = getNotificationQueue();
+    await queue.add(QUEUE_JOBS.SEND_PUSH_NOTIFICATION, {
+      userIds: uniqueUserIds,
+      type: payload.type,
+      title: payload.title,
+      body: payload.body,
+    });
+  } catch (error) {
+    logger.error('[triggerRawPushNotification] Failed to enqueue push job', {
+      userIds: uniqueUserIds,
+      type: payload.type,
+      error,
+    });
+  }
 };
 
 /**
