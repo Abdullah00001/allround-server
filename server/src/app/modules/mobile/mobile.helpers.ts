@@ -152,3 +152,25 @@ export const toCoordinates = (
   if (latitude === null || longitude === null) return null;
   return { lat: latitude, lng: longitude };
 };
+
+/**
+ * Returns the ISO-8601 week number for a UTC calendar date.
+ *
+ * @param {Date} [reference=new Date()] - Reference instant.
+ * @returns {number} ISO week number (1–53).
+ */
+export const getUtcIsoWeekNumber = (reference: Date = new Date()): number => {
+  const date = new Date(
+    Date.UTC(
+      reference.getUTCFullYear(),
+      reference.getUTCMonth(),
+      reference.getUTCDate()
+    )
+  );
+  // Thursday in current week decides the year.
+  date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  return Math.ceil(
+    ((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7
+  );
+};

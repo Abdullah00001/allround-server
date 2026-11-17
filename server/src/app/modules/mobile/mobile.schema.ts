@@ -37,7 +37,7 @@ const mobileNoteCategoryEnum = z.enum(
 );
 
 /**
- * Request body schema for `POST /mobile/timer/start`.
+ * Request body schema for `POST /mobile/timer/start` (shared / site-manager flow).
  */
 export const startTimerSchema = z
   .object({
@@ -50,7 +50,7 @@ export const startTimerSchema = z
 
 /**
  * Request body schema for `POST /mobile/timer/stop`.
- */ 
+ */
 export const stopTimerSchema = z
   .object({
     timeLogId: z.string().uuid({ error: 'Invalid time log id' }),
@@ -60,7 +60,7 @@ export const stopTimerSchema = z
   .strict();
 
 /**
- * Request body schema for `POST /mobile/timer/manual`.
+ * Request body schema for `POST /mobile/timer/manual` (shared / site-manager flow).
  */
 export const manualTimeSchema = z
   .object({
@@ -71,6 +71,45 @@ export const manualTimeSchema = z
     breakMinutes: z.number().int().min(0).default(0),
   })
   .strict()
+  .refine((data) => data.endTime.getTime() > data.startTime.getTime(), {
+    message: 'endTime must be after startTime',
+    path: ['endTime'],
+  });
+
+/**
+ * Employee Start New Timer — Assigned Project dropdown uses `projectId`.
+ */
+export const employeeStartTimerSchema = z
+  .object({
+    phaseId: z.string().uuid({ error: 'Invalid phase id' }).optional(),
+    projectId: z.string().uuid({ error: 'Invalid project id' }).optional(),
+    activityType: z.enum(ActivityType, { message: 'Invalid activity type' }),
+    gpsStartLat: z.number().min(-90).max(90).optional(),
+    gpsStartLng: z.number().min(-180).max(180).optional(),
+  })
+  .strict()
+  .refine((data) => Boolean(data.phaseId || data.projectId), {
+    message: 'phaseId or projectId is required',
+    path: ['projectId'],
+  });
+
+/**
+ * Employee Add Time Entry sheet.
+ */
+export const employeeManualTimeSchema = z
+  .object({
+    phaseId: z.string().uuid({ error: 'Invalid phase id' }).optional(),
+    projectId: z.string().uuid({ error: 'Invalid project id' }).optional(),
+    activityType: z.enum(ActivityType, { message: 'Invalid activity type' }),
+    startTime: z.coerce.date({ error: 'Invalid start time' }),
+    endTime: z.coerce.date({ error: 'Invalid end time' }),
+    breakMinutes: z.number().int().min(0).default(0),
+  })
+  .strict()
+  .refine((data) => Boolean(data.phaseId || data.projectId), {
+    message: 'phaseId or projectId is required',
+    path: ['projectId'],
+  })
   .refine((data) => data.endTime.getTime() > data.startTime.getTime(), {
     message: 'endTime must be after startTime',
     path: ['endTime'],
@@ -117,10 +156,20 @@ export const getDashboardQuerySchema = z
 /**
  * Query schema for `GET /mobile/time-logs`.
  * Filters the authenticated user's logs to today, this week, or this month (UTC).
+ * Employee UI: "This Week" → `WEEK`, "This Month" → `MONTH`.
  */
 export const getMyTimeLogsQuerySchema = z
   .object({
     period: z.enum(['TODAY', 'WEEK', 'MONTH']).default('TODAY'),
+    ...paginationQueryFields,
+  })
+  .strict();
+
+/**
+ * Query schema for `GET /mobile/time-tracking/projects` (Assigned Project dropdown).
+ */
+export const getTimeTrackingProjectsQuerySchema = z
+  .object({
     ...paginationQueryFields,
   })
   .strict();

@@ -52,9 +52,14 @@ import {
   MobileProfileDTO,
   MobileScheduleDayDTO,
   MobileSchedulePhaseDTO,
+  EmployeeScheduleDayDTO,
+  EmployeeSchedulePhaseDTO,
+  EmployeeTimeLogDTO,
   MobileStartTimerDTO,
   MobileSyncResultDTO,
   MobileTimeLogDTO,
+  MobileTimeTrackingProjectDTO,
+  MobileTimeTrackingSummaryDTO,
   MobileUpcomingTaskDTO,
   decimalToNumber,
 } from '@/app/modules/mobile/mobile.dto';
@@ -63,6 +68,7 @@ import {
   getPeriodRange,
   getUtcDayEndExclusive,
   getUtcDayStart,
+  getUtcIsoWeekNumber,
   getUtcWeekEndExclusive,
   getUtcWeekStart,
   haversineKm,
@@ -89,6 +95,7 @@ import {
   TGetMyProjectsServiceParams,
   TGetMyTimeLogsServiceParams,
   TGetScheduleServiceParams,
+  TGetTimeTrackingProjectsServiceParams,
   TListMobileCustomersServiceParams,
   TListMobileInspectionsServiceParams,
   TListMobilePhasesServiceParams,
@@ -111,6 +118,8 @@ import {
   TUpdateProjectNoteServiceParams,
 } from '@/app/modules/mobile/mobile.types';
 import { paginateArray } from '@/app/utils/pagination.utils';
+import { localizeFields } from '@/app/services/translation/localize.helper';
+import { TRANSLATION_CONFIG } from '@/const';
 
 const timeLogInclude = {
   breaks: true,
@@ -333,6 +342,7 @@ export const getMobileConfigService = async (): Promise<MobileConfigDTO> => {
     prisma.legalContent.findMany({
       orderBy: { legalContentType: 'asc' },
       select: {
+        id: true,
         legalContentType: true,
         content: true,
         updatedAt: true,
@@ -340,13 +350,22 @@ export const getMobileConfigService = async (): Promise<MobileConfigDTO> => {
     }),
   ]);
 
-  const legalContents = legalRows.map(
-    (row) =>
-      new MobileLegalContentDTO(
+  const legalContents = await Promise.all(
+    legalRows.map(async (row) => {
+      const { fields } = await localizeFields({
+        contentType: 'LEGAL_CONTENT',
+        contentId: row.id,
+        fields: { content: row.content },
+        sourceLocale: TRANSLATION_CONFIG.DEFAULT_LOCALE,
+      });
+      const localizedContent =
+        typeof fields.content === 'string' ? fields.content : row.content;
+      return new MobileLegalContentDTO(
         row.legalContentType,
-        row.content,
+        localizedContent,
         row.updatedAt.toISOString()
-      )
+      );
+    })
   );
 
   const enums = new MobileEnumsDTO(
@@ -1318,6 +1337,7 @@ export const createManualTimeService = async ({
 
 /**
  * Lists the authenticated user's time logs for TODAY, WEEK, or MONTH (UTC).
+ * Shared / site-manager shape (`MobileTimeLogDTO`).
  *
  * @param {TGetMyTimeLogsServiceParams} params - User and period query.
  * @returns {Promise<MobileTimeLogDTO[]>} Period-filtered time logs.
@@ -1358,6 +1378,189 @@ export const getMyTimeLogsService = async ({
     page,
     limit,
   };
+};
+
+/**
+ * Employee Recent Logs — same period filter with project + synced fields.
+ *
+ * @param {TGetMyTimeLogsServiceParams} params - Employee and period query.
+ * @returns {Promise<{ items: EmployeeTimeLogDTO[]; total: number; page: number; limit: number }>}
+ */
+export const getEmployeeTimeLogsService = async ({
+  user,
+  query,
+}: TGetMyTimeLogsServiceParams): Promise<{
+  items: EmployeeTimeLogDTO[];
+  total: number;
+  page: number;
+  limit: number;
+}> => {
+  const { start, endExclusive } = getPeriodRange(query.period);
+  const { page, limit } = query;
+  const where = {
+    userId: user.id,
+    startTime: {
+      gte: start,
+      lt: endExclusive,
+    },
+  };
+
+  const include = {
+    breaks: true,
+    phase: {
+      select: {
+        project: { select: { id: true, name: true } },
+      },
+    },
+  } as const;
+
+  const [total, timeLogs] = await Promise.all([
+    prisma.timeLog.count({ where }),
+    prisma.timeLog.findMany({
+      where,
+      include,
+      orderBy: { startTime: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+  ]);
+
+  return {
+    items: timeLogs.map(EmployeeTimeLogDTO.build),
+    total,
+    page,
+    limit,
+  };
+};
+
+/**
+ * Employee Time Tracking summary card: today / week hours, target, week label,
+ * and any open timer.
+ *
+ * @param {TMobileUserServiceParams} params - Authenticated user.
+ * @returns {Promise<MobileTimeTrackingSummaryDTO>} Summary for the Time tab header.
+ */
+export const getTimeTrackingSummaryService = async ({
+  user,
+}: TMobileUserServiceParams): Promise<MobileTimeTrackingSummaryDTO> => {
+  const now = new Date();
+  const todayStart = getUtcDayStart(now);
+  const todayEnd = getUtcDayEndExclusive(todayStart);
+  const weekStart = getUtcWeekStart(now);
+  const weekEndExclusive = getUtcWeekEndExclusive(weekStart);
+  const weekEndDate = new Date(weekEndExclusive.getTime() - 1);
+
+  const [todayLogs, weekLogs, activeTimer] = await Promise.all([
+    prisma.timeLog.findMany({
+      where: {
+        userId: user.id,
+        status: TimeLogStatus.APPROVED,
+        endTime: { not: null },
+        startTime: { gte: todayStart, lt: todayEnd },
+      },
+      include: { breaks: true },
+    }),
+    prisma.timeLog.findMany({
+      where: {
+        userId: user.id,
+        status: TimeLogStatus.APPROVED,
+        endTime: { not: null },
+        startTime: { gte: weekStart, lt: weekEndExclusive },
+      },
+      include: { breaks: true },
+    }),
+    prisma.timeLog.findFirst({
+      where: { userId: user.id, endTime: null },
+      include: {
+        breaks: true,
+        phase: {
+          select: {
+            project: { select: { id: true, name: true } },
+          },
+        },
+      },
+    }),
+  ]);
+
+  const sumHours = (logs: TTimeLogWithBreaks[]) =>
+    Number(
+      logs.reduce((sum, log) => sum + calculateNetHours(log), 0).toFixed(2)
+    );
+
+  return new MobileTimeTrackingSummaryDTO(
+    sumHours(todayLogs),
+    sumHours(weekLogs),
+    Number(user.weeklyHoursTarget),
+    getUtcIsoWeekNumber(now),
+    toUtcDateKey(weekStart),
+    toUtcDateKey(weekEndDate),
+    activeTimer ? EmployeeTimeLogDTO.build(activeTimer) : null
+  );
+};
+
+/**
+ * Employee Assigned Project dropdown for Time Tracking.
+ * Scoped to the employee's crew/PM project assignments only.
+ *
+ * @param {TGetTimeTrackingProjectsServiceParams} params - Employee and pagination.
+ * @returns {Promise<{ items: MobileTimeTrackingProjectDTO[]; total: number; page: number; limit: number }>}
+ */
+export const getTimeTrackingProjectsService = async ({
+  user,
+  query,
+}: TGetTimeTrackingProjectsServiceParams): Promise<{
+  items: MobileTimeTrackingProjectDTO[];
+  total: number;
+  page: number;
+  limit: number;
+}> => {
+  const { page, limit } = query;
+  const assignedIds = await getAssignedProjectIds(user.id);
+  if (assignedIds.length === 0) {
+    return { items: [], total: 0, page, limit };
+  }
+
+  const where = {
+    deletedAt: null,
+    id: { in: assignedIds },
+    phases: { some: {} },
+  };
+
+  const [total, projects] = await Promise.all([
+    prisma.project.count({ where }),
+    prisma.project.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        phases: {
+          select: {
+            id: true,
+            type: true,
+            status: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+      orderBy: { name: 'asc' },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+  ]);
+
+  const items = projects
+    .filter((project) => project.phases.length > 0)
+    .map((project) => {
+      const phase = selectPrimaryPhase(project.phases);
+      return new MobileTimeTrackingProjectDTO(
+        project.id,
+        project.name,
+        phase.id,
+        phase.type
+      );
+    });
+
+  return { items, total, page, limit };
 };
 
 /**
@@ -1464,13 +1667,153 @@ export const getCrewTimeService = async ({
 };
 
 /**
+ * Fills empty UTC day buckets across an inclusive schedule window.
+ *
+ * @param {Map<string, MobileSchedulePhaseDTO[]>} byDate - Existing day → phases map.
+ * @param {Date} rangeStart - Inclusive UTC day start.
+ * @param {Date} rangeEndExclusive - Exclusive UTC day end.
+ * @returns {MobileScheduleDayDTO[]} Sorted day buckets (empty days included).
+ */
+const buildScheduleDayBuckets = (
+  byDate: Map<string, MobileSchedulePhaseDTO[]>,
+  rangeStart: Date,
+  rangeEndExclusive: Date
+): MobileScheduleDayDTO[] => {
+  for (
+    let cursor = rangeStart.getTime();
+    cursor < rangeEndExclusive.getTime();
+    cursor += 24 * 60 * 60 * 1000
+  ) {
+    const dateKey = toUtcDateKey(new Date(cursor));
+    if (!byDate.has(dateKey)) byDate.set(dateKey, []);
+  }
+
+  return [...byDate.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, dayPhases]) => new MobileScheduleDayDTO(date, dayPhases));
+};
+
+/**
+ * Employee My Schedule — crew-assignment days with site managers + hours.
+ *
+ * @param {TGetScheduleServiceParams} params - Employee and date window.
+ * @returns {Promise<{ items: EmployeeScheduleDayDTO[]; total: number; page: number; limit: number }>}
+ */
+export const getEmployeeScheduleService = async ({
+  user,
+  query,
+}: TGetScheduleServiceParams): Promise<{
+  items: EmployeeScheduleDayDTO[];
+  total: number;
+  page: number;
+  limit: number;
+}> => {
+  const { page, limit } = query;
+  const rangeStart = getUtcDayStart(query.startDate);
+  const rangeEndExclusive = getUtcDayEndExclusive(
+    getUtcDayStart(query.endDate)
+  );
+
+  const assignments = await prisma.crewAssignment.findMany({
+    where: {
+      userId: user.id,
+      date: {
+        gte: rangeStart,
+        lt: rangeEndExclusive,
+      },
+      phase: {
+        project: { deletedAt: null },
+      },
+    },
+    include: {
+      phase: {
+        include: {
+          project: {
+            select: {
+              id: true,
+              name: true,
+              address: true,
+              projectManagers: {
+                select: {
+                  user: {
+                    select: {
+                      id: true,
+                      firstName: true,
+                      lastName: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
+  });
+
+  const byDate = new Map<string, EmployeeSchedulePhaseDTO[]>();
+
+  for (const assignment of assignments) {
+    const dateKey = toUtcDateKey(assignment.date);
+    const phase = assignment.phase;
+    const dayStart = getUtcDayStart(assignment.date);
+    const startDate = phase.startDate
+      ? phase.startDate.toISOString()
+      : dayStart.toISOString();
+    const endDate = phase.endDate
+      ? phase.endDate.toISOString()
+      : getUtcDayEndExclusive(dayStart).toISOString();
+    const hours = decimalToNumber(assignment.hours) ?? 0;
+
+    const bucket = byDate.get(dateKey) ?? [];
+    bucket.push(
+      new EmployeeSchedulePhaseDTO(
+        phase.id,
+        phase.type,
+        phase.status,
+        phase.priority,
+        startDate,
+        endDate,
+        {
+          id: phase.project.id,
+          name: phase.project.name,
+          address: phase.project.address,
+        },
+        phase.project.projectManagers.map((pm) => ({
+          id: pm.user.id,
+          firstName: pm.user.firstName,
+          lastName: pm.user.lastName,
+        })),
+        hours
+      )
+    );
+    byDate.set(dateKey, bucket);
+  }
+
+  for (
+    let cursor = rangeStart.getTime();
+    cursor < rangeEndExclusive.getTime();
+    cursor += 24 * 60 * 60 * 1000
+  ) {
+    const dateKey = toUtcDateKey(new Date(cursor));
+    if (!byDate.has(dateKey)) byDate.set(dateKey, []);
+  }
+
+  const days = [...byDate.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, dayPhases]) => new EmployeeScheduleDayDTO(date, dayPhases));
+
+  return paginateArray(days, page, limit);
+};
+
+/**
  * Builds the Site Manager calendar schedule: phases overlapping the query
- * window, grouped by UTC calendar date. Respects `siteManagerAccessRule`
- * (GLOBAL_ACCESS → all projects; otherwise PM/crew assignments). Phases with
- * null `startDate` or `endDate` are excluded.
+ * window, grouped by UTC calendar date. Respects `siteManagerAccessRule`.
+ * Phases with null `startDate` or `endDate` are excluded.
  *
  * @param {TGetScheduleServiceParams} params - Site manager and date window.
- * @returns {Promise<MobileScheduleDayDTO[]>} Date-grouped schedule rows.
+ * @returns {Promise<{ items: MobileScheduleDayDTO[]; total: number; page: number; limit: number }>}
  */
 export const getScheduleService = async ({
   user,
@@ -1484,7 +1827,9 @@ export const getScheduleService = async ({
   const { page, limit } = query;
   const globalAccess = await hasSiteManagerGlobalAccess(user);
   const rangeStart = getUtcDayStart(query.startDate);
-  const rangeEndExclusive = getUtcDayEndExclusive(getUtcDayStart(query.endDate));
+  const rangeEndExclusive = getUtcDayEndExclusive(
+    getUtcDayStart(query.endDate)
+  );
 
   const phases = await prisma.projectPhase.findMany({
     where: {
@@ -1549,20 +1894,11 @@ export const getScheduleService = async ({
     }
   }
 
-  // Ensure empty day buckets across the requested inclusive window.
-  for (
-    let cursor = rangeStart.getTime();
-    cursor < rangeEndExclusive.getTime();
-    cursor += 24 * 60 * 60 * 1000
-  ) {
-    const dateKey = toUtcDateKey(new Date(cursor));
-    if (!byDate.has(dateKey)) byDate.set(dateKey, []);
-  }
-
-  const days = [...byDate.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, dayPhases]) => new MobileScheduleDayDTO(date, dayPhases));
-
+  const days = buildScheduleDayBuckets(
+    byDate,
+    rangeStart,
+    rangeEndExclusive
+  );
   return paginateArray(days, page, limit);
 };
 

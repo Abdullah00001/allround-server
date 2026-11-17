@@ -1,4 +1,5 @@
 import { Language, Role, User, UserStatus } from '@prisma/client';
+import { LANGUAGE_CATALOG } from '@/const';
 
 export class AdminDTO {
   constructor(
@@ -85,6 +86,74 @@ export class AdminProfileDTO {
       user.role,
       language,
       user.createdAt
+    );
+  }
+}
+
+/**
+ * One row in the admin Available languages grid.
+ */
+export class AdminLanguageOptionDTO {
+  /**
+   * @param {Language} code - Prisma Language enum.
+   * @param {string} displayCode - UI flag code (GB, RS, UA, …).
+   * @param {string} name - English display name.
+   * @param {string} locale - ISO locale for Translate / x-locale.
+   * @param {boolean} enabled - Whether company has this language enabled.
+   * @param {boolean} isDefault - Whether this is CompanyProfile.defaultLanguage.
+   */
+  constructor(
+    public code: Language,
+    public displayCode: string,
+    public name: string,
+    public locale: string,
+    public enabled: boolean,
+    public isDefault: boolean
+  ) {}
+}
+
+/**
+ * Admin Settings → Available languages payload (all 18 languages).
+ */
+export class AdminLanguagesDTO {
+  /**
+   * @param {Language} defaultLanguage - Company default.
+   * @param {Language[]} enabledLanguages - Enabled subset.
+   * @param {AdminLanguageOptionDTO[]} languages - Full catalog with toggles.
+   */
+  constructor(
+    public defaultLanguage: Language,
+    public enabledLanguages: Language[],
+    public languages: AdminLanguageOptionDTO[]
+  ) {}
+
+  /**
+   * Builds the languages settings DTO from CompanyProfile fields.
+   *
+   * @param {Language} defaultLanguage - Default language.
+   * @param {Language[]} enabledLanguages - Enabled languages.
+   * @returns {AdminLanguagesDTO} API payload for the settings grid.
+   */
+  static build(
+    defaultLanguage: Language,
+    enabledLanguages: Language[]
+  ): AdminLanguagesDTO {
+    const enabledSet = new Set(enabledLanguages);
+    const languages = LANGUAGE_CATALOG.map(
+      (row) =>
+        new AdminLanguageOptionDTO(
+          row.code as Language,
+          row.displayCode,
+          row.name,
+          row.locale,
+          enabledSet.has(row.code as Language) || row.code === defaultLanguage,
+          row.code === defaultLanguage
+        )
+    );
+    return new AdminLanguagesDTO(
+      defaultLanguage,
+      [...new Set([defaultLanguage, ...enabledLanguages])],
+      languages
     );
   }
 }

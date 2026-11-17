@@ -19,8 +19,10 @@ import {
   checkInspectionPendingForSurveyMiddleware,
   checkMobileCreateProjectRefsMiddleware,
   checkMobileProjectExistenceMiddleware,
+  checkEmployeeRoleMiddleware,
   checkNoActiveTimerMiddleware,
   checkOwnedActiveTimeLogMiddleware,
+  resolveTimerPhaseFromProjectMiddleware,
   checkPhaseBelongsToProjectMiddleware,
   checkProjectAttachmentExistenceMiddleware,
   checkProjectMeasurementExistenceMiddleware,
@@ -53,8 +55,12 @@ import {
   getMobileInspectionByIdController,
   getMobileProjectByIdController,
   getMyProjectsController,
+  getEmployeeScheduleController,
+  getEmployeeTimeLogsController,
   getMyTimeLogsController,
   getProfileController,
+  getTimeTrackingProjectsController,
+  getTimeTrackingSummaryController,
   updateProfileController,
   getScheduleController,
   listMobileCustomersController,
@@ -95,6 +101,9 @@ import {
   getProjectListQuerySchema,
   getProjectTasksQuerySchema,
   getScheduleQuerySchema,
+  getTimeTrackingProjectsQuerySchema,
+  employeeManualTimeSchema,
+  employeeStartTimerSchema,
   manualTimeSchema,
   mobileInspectionIdParamsSchema,
   mobilePhaseIdParamsSchema,
@@ -130,6 +139,11 @@ const mobileAuth = [
  * Mobile site-manager auth chain for inspection and phase-board routes.
  */
 const siteManagerAuth = [...mobileAuth, checkSiteManagerRoleMiddleware] as const;
+
+/**
+ * Employee-only auth chain (My Plan + Time Tracking UI).
+ */
+const employeeAuth = [...mobileAuth, checkEmployeeRoleMiddleware] as const;
 
 /**
  * Site-manager project access chain for `/:projectId` management routes.
@@ -356,6 +370,11 @@ router
     updateProfileController
   );
 
+/**
+ * ---------------------------------------------------------------------------
+ * Site Manager / shared timer + schedule (unchanged contracts)
+ * ---------------------------------------------------------------------------
+ */
 router
   .route('/mobile/timer/start')
   .post(
@@ -399,6 +418,70 @@ router
     ...siteManagerAuth,
     validateReqQuery(getScheduleQuerySchema),
     getScheduleController
+  );
+
+/**
+ * ---------------------------------------------------------------------------
+ * Employee-only flow (My Plan + Time Tracking UI)
+ * ---------------------------------------------------------------------------
+ */
+router
+  .route('/mobile/employee/schedule')
+  .get(
+    ...employeeAuth,
+    validateReqQuery(getScheduleQuerySchema),
+    getEmployeeScheduleController
+  );
+
+router
+  .route('/mobile/employee/time-tracking/summary')
+  .get(...employeeAuth, getTimeTrackingSummaryController);
+
+router
+  .route('/mobile/employee/time-tracking/projects')
+  .get(
+    ...employeeAuth,
+    validateReqQuery(getTimeTrackingProjectsQuerySchema),
+    getTimeTrackingProjectsController
+  );
+
+router
+  .route('/mobile/employee/timer/start')
+  .post(
+    ...employeeAuth,
+    validateReqBody(employeeStartTimerSchema),
+    checkNoActiveTimerMiddleware,
+    resolveTimerPhaseFromProjectMiddleware,
+    checkPhaseExistenceMiddleware,
+    startTimerController
+  );
+
+router
+  .route('/mobile/employee/timer/stop')
+  .post(
+    ...employeeAuth,
+    validateReqBody(stopTimerSchema),
+    checkOwnedActiveTimeLogMiddleware,
+    stopTimerController
+  );
+
+router
+  .route('/mobile/employee/timer/manual')
+  .post(
+    ...employeeAuth,
+    checkEmployeeManualTimeAllowedMiddleware,
+    validateReqBody(employeeManualTimeSchema),
+    resolveTimerPhaseFromProjectMiddleware,
+    checkPhaseExistenceMiddleware,
+    createManualTimeController
+  );
+
+router
+  .route('/mobile/employee/time-logs')
+  .get(
+    ...employeeAuth,
+    validateReqQuery(getMyTimeLogsQuerySchema),
+    getEmployeeTimeLogsController
   );
 
 router

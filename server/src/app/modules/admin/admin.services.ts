@@ -10,7 +10,11 @@ import {
   generateAccessTokenForAdmin,
   generateRefreshToken,
 } from '@/app/utils/jwt.utils';
-import { AdminDTO, AdminProfileDTO } from '@/app/modules/admin/admin.dto';
+import {
+  AdminDTO,
+  AdminLanguagesDTO,
+  AdminProfileDTO,
+} from '@/app/modules/admin/admin.dto';
 import { ITokenPayload } from '@/app/@types/jwt.types';
 import {
   ICheckAdminServiceParams,
@@ -19,6 +23,7 @@ import {
   IRefreshAdminServiceParams,
   TChangeAdminPasswordServiceParams,
   TGetAdminProfileServiceParams,
+  TUpdateAdminLanguagesPayload,
   TUpdateAdminProfileServiceParams,
 } from '@/app/modules/admin/admin.types';
 import {
@@ -29,6 +34,7 @@ import {
 } from '@/const';
 import { Language } from '@prisma/client';
 import { hashPassword } from '@/app/utils/password.utils';
+import { clearCompanyDefaultLanguageCache } from '@/app/middlewares/locale.middlewares';
 
 /**
  * Admin login: update lastLoginAt, issue tokens, register Redis refresh session.
@@ -281,4 +287,85 @@ export const changeAdminPasswordService = async ({
   if (sessionKeys.length > 0) {
     await redisClient.del(...sessionKeys);
   }
+};
+
+/**
+ * Loads company Available languages settings (all 18 + toggles).
+ *
+ * @returns {Promise<AdminLanguagesDTO>} Languages grid payload.
+ */
+export const getAdminLanguagesService =
+  async (): Promise<AdminLanguagesDTO> => {
+    const profile = await prisma.companyProfile.findUnique({
+      where: { id: 'global' },
+      select: { defaultLanguage: true, enabledLanguages: true },
+    });
+
+    return AdminLanguagesDTO.build(
+      profile?.defaultLanguage ?? Language.DE,
+      profile?.enabledLanguages?.length
+        ? profile.enabledLanguages
+        : [Language.DE, Language.EN]
+    );
+  };
+
+/**
+ * Updates company default + enabled languages (Available languages UI).
+ * Ensures default is always present in the enabled list.
+ *
+ * @param {TUpdateAdminLanguagesPayload} payload - Patch body.
+ * @returns {Promise<AdminLanguagesDTO>} Updated languages grid.
+ */
+export const updateAdminLanguagesService = async (
+  payload: TUpdateAdminLanguagesPayload
+): Promise<AdminLanguagesDTO> => {
+  const current = await prisma.companyProfile.findUnique({
+    where: { id: 'global' },
+    select: { defaultLanguage: true, enabledLanguages: true },
+  });
+
+  const nextDefault =
+    payload.defaultLanguage ?? current?.defaultLanguage ?? Language.DE;
+  let nextEnabled =
+    payload.enabledLanguages ??
+    current?.enabledLanguages ??
+    [Language.DE, Language.EN];
+
+  if (!nextEnabled.includes(nextDefault)) {
+    nextEnabled = [nextDefault, ...nextEnabled];
+  }
+  nextEnabled = [...new Set(nextEnabled)];
+
+  const existing = await prisma.companyProfile.findUnique({
+    where: { id: 'global' },
+    select: { id: true },
+  });
+
+  const updated = existing
+    ? await prisma.companyProfile.update({
+        where: { id: 'global' },
+        data: {
+          defaultLanguage: nextDefault,
+          enabledLanguages: nextEnabled,
+        },
+        select: { defaultLanguage: true, enabledLanguages: true },
+      })
+    : await prisma.companyProfile.create({
+        data: {
+          id: 'global',
+          displayName: 'Allround Cockpit',
+          officialName: 'Allround Gerüstbau GmbH',
+          siteManagerAccessRule: 'RESTRICT_TO_ASSIGNED',
+          defaultLanguage: nextDefault,
+          enabledLanguages: nextEnabled,
+        },
+        select: { defaultLanguage: true, enabledLanguages: true },
+      });
+
+  clearCompanyDefaultLanguageCache();
+
+  return AdminLanguagesDTO.build(
+    updated.defaultLanguage,
+    updated.enabledLanguages
+  );
 };

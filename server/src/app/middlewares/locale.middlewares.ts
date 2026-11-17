@@ -7,11 +7,23 @@ import {
   setLocale,
 } from '@/app/configs/requestContext.configs';
 import { asyncHandler } from '@/app/utils/system.utils';
+import { isSupportedLocale } from '@/app/utils/language.utils';
+import { TRANSLATION_CONFIG } from '@/const';
 
 /** In-memory cache for CompanyProfile.defaultLanguage to avoid per-request DB hits. */
 let cachedCompanyDefaultLanguage: Language | null = null;
 let companyDefaultLoadedAt = 0;
 const COMPANY_DEFAULT_TTL_MS = 60_000;
+
+/**
+ * Clears the cached company default language (call after admin language PATCH).
+ *
+ * @returns {void}
+ */
+export const clearCompanyDefaultLanguageCache = (): void => {
+  cachedCompanyDefaultLanguage = null;
+  companyDefaultLoadedAt = 0;
+};
 
 type UserWithPreferences = User & {
   preferences?: UserPreference | null;
@@ -98,17 +110,26 @@ export const parseAcceptLanguageHeader = (header: string): string[] => {
  * @returns {Promise<string>} Resolved two-letter locale.
  */
 export const resolveRequestedLocale = async (req: Request): Promise<string> => {
-  const explicit = normalizeLocale(
-    (req.query?.locale as string | undefined) ||
-      (req.query?.lang as string | undefined) ||
-      (req.headers['x-locale'] as string | undefined)
+  const pickSupported = (locale: string | null): string | null => {
+    if (!locale) return null;
+    return isSupportedLocale(locale) ? locale : null;
+  };
+
+  const explicit = pickSupported(
+    normalizeLocale(
+      (req.query?.locale as string | undefined) ||
+        (req.query?.lang as string | undefined) ||
+        (req.headers['x-locale'] as string | undefined)
+    )
   );
   if (explicit) {
     return explicit;
   }
 
   const user = req.user as UserWithPreferences | undefined;
-  const preferenceLocale = normalizeLocale(user?.preferences?.language);
+  const preferenceLocale = pickSupported(
+    normalizeLocale(user?.preferences?.language)
+  );
   if (preferenceLocale) {
     return preferenceLocale;
   }
@@ -116,13 +137,17 @@ export const resolveRequestedLocale = async (req: Request): Promise<string> => {
   const acceptLang = req.headers['accept-language'];
   if (acceptLang) {
     const candidates = parseAcceptLanguageHeader(acceptLang);
-    if (candidates[0]) {
-      return candidates[0];
+    for (const candidate of candidates) {
+      const supported = pickSupported(candidate);
+      if (supported) return supported;
     }
   }
 
   const companyDefault = await getCompanyDefaultLanguage();
-  return normalizeLocale(companyDefault) ?? 'en';
+  return (
+    pickSupported(normalizeLocale(companyDefault)) ??
+    TRANSLATION_CONFIG.DEFAULT_LOCALE
+  );
 };
 
 /**

@@ -9,6 +9,7 @@ import { DEFAULT_LIMIT, DEFAULT_PAGE } from '@/const';
 
 /**
  * Lists paginated notifications for a user and the current unread count.
+ * Copy is already localized at write time via static i18n (recipient language).
  *
  * @param {IGetNotificationsParams} params - User id and optional pagination.
  * @returns {Promise<{ data: NotificationDTO[]; total: number; page: number; limit: number; unreadCount: number }>}

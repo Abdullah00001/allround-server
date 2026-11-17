@@ -4,15 +4,18 @@ import { asyncHandler } from '@/app/utils/system.utils';
 import {
   changeAdminPasswordService,
   checkAdminService,
+  getAdminLanguagesService,
   getAdminProfileService,
   loginAdminService,
   logoutAdminService,
   refreshAdminService,
+  updateAdminLanguagesService,
   updateAdminProfileService,
 } from '@/app/modules/admin/admin.services';
 import {
   TAdminLoginPayload,
   TChangeAdminPasswordPayload,
+  TUpdateAdminLanguagesPayload,
   TUpdateAdminProfilePayload,
 } from '@/app/modules/admin/admin.types';
 import { User } from '@prisma/client';
@@ -270,6 +273,53 @@ export const changeAdminPasswordController = asyncHandler(
     res.status(200).json({
       success: true,
       message: 'Admin password changed successfully',
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `GET /admin/settings/languages`.
+ * Returns all 18 catalog languages with company enabled/default toggles.
+ *
+ * @param {Request} _req - Express request.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const getAdminLanguagesController = asyncHandler(
+  async (_req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const data = await getAdminLanguagesService();
+
+    res.status(200).json({
+      success: true,
+      message: 'Languages fetched successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `PATCH /admin/settings/languages`.
+ * Updates company defaultLanguage and/or enabledLanguages.
+ *
+ * @param {Request} req - Express request with validated body.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const updateAdminLanguagesController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const payload = req.body as TUpdateAdminLanguagesPayload;
+    const data = await updateAdminLanguagesService(payload);
+
+    res.status(200).json({
+      success: true,
+      message: 'Languages updated successfully.',
+      data,
       traceId,
     });
     return;

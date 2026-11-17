@@ -22,6 +22,7 @@ import {
   TGetCrewTimeQuery,
   TStopTimerPayload,
 } from '@/app/modules/mobile/mobile.types';
+import { selectPrimaryPhase } from '@/app/modules/project/project.helpers';
 
 /**
  * Blocks employee manual time entries when company settings disable them.
@@ -89,6 +90,98 @@ export const checkNoActiveTimerMiddleware = asyncHandler(
         success: false,
         message: 'An active timer already exists',
         errorType: AuthErrorType.ACTIVE_TIMER_EXISTS,
+        traceId,
+      });
+      return;
+    }
+
+    next();
+  }
+);
+
+/**
+ * Resolves `projectId` → primary `phaseId` for timer start / manual entry.
+ * When `phaseId` is already present, passes through. Must run before
+ * `checkPhaseExistenceMiddleware`.
+ *
+ * @param {Request} req - Express request with validated body.
+ * @param {Response} res - Express response.
+ * @param {NextFunction} next - Continues when phaseId is resolved.
+ * @returns {Promise<void>}
+ */
+export const resolveTimerPhaseFromProjectMiddleware = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const traceId = getTraceId();
+    const body = req.body as { phaseId?: string; projectId?: string };
+
+    if (body.phaseId) {
+      next();
+      return;
+    }
+
+    if (!body.projectId) {
+      res.status(422).json({
+        success: false,
+        message: 'phaseId or projectId is required',
+        errorType: AuthErrorType.BAD_REQUEST,
+        traceId,
+      });
+      return;
+    }
+
+    const project = await prisma.project.findFirst({
+      where: { id: body.projectId, deletedAt: null },
+      include: {
+        phases: {
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+
+    if (!project) {
+      res.status(404).json({
+        success: false,
+        message: 'Project not found',
+        errorType: AuthErrorType.PROJECT_NOT_FOUND,
+        traceId,
+      });
+      return;
+    }
+
+    if (project.phases.length === 0) {
+      res.status(404).json({
+        success: false,
+        message: 'Phase not found',
+        errorType: AuthErrorType.PHASE_NOT_FOUND,
+        traceId,
+      });
+      return;
+    }
+
+    const phase = selectPrimaryPhase(project.phases);
+    req.body = { ...body, phaseId: phase.id };
+    next();
+  }
+);
+
+/**
+ * Restricts access to Employees only (employee schedule / time-tracking flow).
+ *
+ * @param {Request} req - Express request with authenticated `req.user`.
+ * @param {Response} res - Express response used for the 403 envelope.
+ * @param {NextFunction} next - Continues when the user is an EMPLOYEE.
+ * @returns {Promise<void>}
+ */
+export const checkEmployeeRoleMiddleware = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+
+    if (user.role !== Role.EMPLOYEE) {
+      res.status(403).json({
+        success: false,
+        message: 'Only employees can access this resource',
+        errorType: AuthErrorType.FORBIDDEN,
         traceId,
       });
       return;

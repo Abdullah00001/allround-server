@@ -38,8 +38,17 @@ tags:
     description: Admin fleet vehicle management endpoints
   - name: MobileDashboard
     description: Mobile app dashboard, projects, and profile endpoints
+  - name: EmployeeMySchedule
+    description: >
+      EMPLOYEE-only My Schedule / My Plan tab (Flutter bottom nav "My Plan").
+      `GET /mobile/employee/schedule` — crew assignments, calendar dots, site manager name.
+      Not the Site Manager calendar (`GET /mobile/schedule`).
+  - name: EmployeeTimeTracking
+    description: >
+      EMPLOYEE-only Time Tracking tab under `/mobile/employee/time-tracking/*` and
+      `/mobile/employee/timer/*`. Does not change Site Manager `/mobile/timer/*` contracts.
   - name: MobileTimeTracking
-    description: Mobile timer, crew time, and offline sync endpoints
+    description: Mobile timer, time-logs, crew time, and offline sync (shared / site-manager contracts)
   - name: MobileInspection
     description: Mobile site-manager inspection survey endpoints
   - name: MobilePhase
@@ -1328,6 +1337,113 @@ paths:
                 success: false
                 message: 'Current password is incorrect or new password matches the existing one.'
                 traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Forbidden or CSRF validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
+  /api/v1/admin/settings/languages:
+    get:
+      tags: [Admin]
+      summary: Get company Available languages
+      description: >
+        Returns all 18 catalog languages with `enabled` / `isDefault` toggles
+        from `CompanyProfile` (Settings → Available languages UI).
+        Clients should send `x-locale` (or `?locale=`) for localized content APIs.
+      operationId: getAdminLanguages
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+          description: Double Submit CSRF token matching the admin_csrf_token cookie.
+      responses:
+        '200':
+          description: Languages grid fetched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetAdminLanguagesResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Forbidden or CSRF validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+    patch:
+      tags: [Admin]
+      summary: Update company Available languages
+      description: >
+        Patches `CompanyProfile.defaultLanguage` and/or `enabledLanguages`.
+        When both are sent, `enabledLanguages` must include `defaultLanguage`.
+        Default is always forced into the enabled list on save.
+      operationId: updateAdminLanguages
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+          description: Double Submit CSRF token matching the admin_csrf_token cookie.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAdminLanguagesPayload'
+            example:
+              defaultLanguage: DE
+              enabledLanguages: [DE, EN, PL, TR]
+      responses:
+        '200':
+          description: Languages updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetAdminLanguagesResponse'
+        '400':
+          description: Validation refine failed (e.g. default not in enabled)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
           description: Authentication failed
           content:
@@ -8419,7 +8535,7 @@ paths:
     post:
       tags: [MobileTimeTracking]
       summary: Start mobile timer
-      description: Starts an active TimeLog and returns `{ timeLog, project }` (role-aware project via getProjectDto). Rejects with 409 when an open timer already exists.
+      description: Starts an active TimeLog and returns `{ timeLog, project }` (role-aware project via getProjectDto). Rejects with 409 when an open timer already exists. Requires `phaseId`.
       operationId: startMobileTimer
       security: [{bearerAuth: []}]
       requestBody:
@@ -8570,7 +8686,7 @@ paths:
     post:
       tags: [MobileTimeTracking]
       summary: Create manual time entry
-      description: Creates a manual TimeLog with status PENDING_APPROVAL and optional break minutes. Employees are blocked with 403 when CompanyProfile.allowEmployeeManualTime is false.
+      description: Creates a manual TimeLog with status PENDING_APPROVAL and optional break minutes. Requires `phaseId`. Employees are blocked with 403 when CompanyProfile.allowEmployeeManualTime is false.
       operationId: createMobileManualTime
       security: [{bearerAuth: []}]
       requestBody:
@@ -8762,23 +8878,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthErrorResponse'
-              example:
-                success: false
-                message: 'Token not found'
-                errorType: 'TOKEN_INVALID'
-                traceId: '123e4567-e89b-12d3-a456-426614174000'
         '403':
-          description: Forbidden (not site manager / not assigned)
+          description: Forbidden (not site manager)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthErrorResponse'
-              example:
-                success: false
-                message: 'Only site managers can access this resource'
-                errorType: 'FORBIDDEN'
-                traceId: '123e4567-e89b-12d3-a456-426614174000'
-
         '422':
           description: Request query validation failed
           content:
@@ -8791,6 +8896,267 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemErrorResponse'
+
+  /api/v1/mobile/employee/schedule:
+    get:
+      tags: [EmployeeMySchedule]
+      summary: My Schedule (Employee My Plan tab)
+      description: |
+        **EMPLOYEE only** — Flutter "My Schedule" / My Plan screen (not SM calendar).
+
+        Query the week/month window with `startDate` + `endDate`. Response is day buckets:
+        - Days with crew assignments → `phases[]` (calendar dots)
+        - Empty days in the window → `phases: []` (so the week strip can render)
+
+        Card mapping:
+        - `project.name` → "Prj · Goltsteins.Complex"
+        - `type` → badge / legend (ERECTION green, DISMANTLING orange, MAINTENANCE/STANDING → Other blue)
+        - `startDate` / `endDate` / `assignedHours` → time row
+        - `siteManagers[]` → "Site Manager: First Last"
+
+        Site Manager calendar remains `GET /mobile/schedule` (unchanged, SM-only).
+      operationId: getEmployeeSchedule
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: query
+          name: startDate
+          required: true
+          schema: { type: string, format: date-time }
+        - in: query
+          name: endDate
+          required: true
+          schema: { type: string, format: date-time }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 10 }
+      responses:
+        '200':
+          description: My Schedule fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetEmployeeScheduleResponse'
+              example:
+                success: true
+                message: 'Schedule fetched successfully.'
+                meta: { total: 7, page: 1, limit: 10, totalPages: 1 }
+                data:
+                  - date: '2026-09-18'
+                    phases:
+                      - id: '111e4567-e89b-12d3-a456-426614174000'
+                        type: ERECTION
+                        status: IN_PROGRESS
+                        priority: MEDIUM
+                        startDate: '2026-09-18T07:30:00.000Z'
+                        endDate: '2026-09-18T16:30:00.000Z'
+                        project:
+                          id: '222e4567-e89b-12d3-a456-426614174000'
+                          name: Goltsteins.Complex
+                          address: Goltsteinstraße 12, Köln
+                        siteManagers:
+                          - id: '333e4567-e89b-12d3-a456-426614174000'
+                            firstName: Mesut
+                            lastName: Rahaman
+                        assignedHours: 9
+                  - date: '2026-09-19'
+                    phases: []
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Not an employee (SITE_MANAGER must use GET /mobile/schedule)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+
+  /api/v1/mobile/employee/time-tracking/summary:
+    get:
+      tags: [EmployeeTimeTracking]
+      summary: Employee Time Tracking summary
+      description: Today / This Week hours, weekly target, week label, active timer.
+      operationId: getEmployeeTimeTrackingSummary
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: Summary fetched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMobileTimeTrackingSummaryResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Not an employee
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+
+  /api/v1/mobile/employee/time-tracking/projects:
+    get:
+      tags: [EmployeeTimeTracking]
+      summary: Employee assigned projects (timer dropdown)
+      description: Assigned Project dropdown for Start Timer / Add Time. Returns `{ id, name, phaseId, phaseType }`.
+      operationId: getEmployeeTimeTrackingProjects
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 10 }
+      responses:
+        '200':
+          description: Projects fetched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMobileTimeTrackingProjectsResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Not an employee
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+
+  /api/v1/mobile/employee/timer/start:
+    post:
+      tags: [EmployeeTimeTracking]
+      summary: Employee Start New Timer
+      description: EMPLOYEE only. Prefer `projectId` from time-tracking projects list (or `phaseId`). Starts from now.
+      operationId: startEmployeeTimer
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeStartTimerRequest'
+            example:
+              projectId: '222e4567-e89b-12d3-a456-426614174000'
+              activityType: ERECTION
+      responses:
+        '201':
+          description: Timer started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StartMobileTimerResponse'
+        '409':
+          description: Active timer exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+
+  /api/v1/mobile/employee/timer/stop:
+    post:
+      tags: [EmployeeTimeTracking]
+      summary: Employee stop timer
+      operationId: stopEmployeeTimer
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StopMobileTimerRequest'
+      responses:
+        '200':
+          description: Timer stopped
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileTimeLogMutationResponse'
+
+  /api/v1/mobile/employee/timer/manual:
+    post:
+      tags: [EmployeeTimeTracking]
+      summary: Employee Add Time Entry
+      description: EMPLOYEE only. `projectId` or `phaseId` + times + breakMinutes → PENDING_APPROVAL.
+      operationId: createEmployeeManualTime
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeManualTimeRequest'
+            example:
+              projectId: '222e4567-e89b-12d3-a456-426614174000'
+              activityType: ERECTION
+              startTime: '2026-10-12T07:30:00.000Z'
+              endTime: '2026-10-12T18:30:00.000Z'
+              breakMinutes: 45
+      responses:
+        '201':
+          description: Manual entry submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileTimeLogMutationResponse'
+        '403':
+          description: Manual time disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+
+  /api/v1/mobile/employee/time-logs:
+    get:
+      tags: [EmployeeTimeTracking]
+      summary: Employee Recent Logs
+      description: 'This Week → period=WEEK; This Month → period=MONTH. Includes project + synced.'
+      operationId: getEmployeeTimeLogs
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: query
+          name: period
+          schema: { type: string, enum: [TODAY, WEEK, MONTH], default: TODAY }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 10 }
+      responses:
+        '200':
+          description: Logs fetched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetEmployeeTimeLogsResponse'
+        '403':
+          description: Not an employee
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
   /api/v1/mobile/map:
     get:
       tags: [MobileDashboard]
@@ -12972,6 +13338,70 @@ components:
             message:
               type: string
               example: 'Admin password changed successfully'
+    AdminLanguageCode:
+      type: string
+      enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU]
+      description: Prisma Language enum (all 18 company languages)
+    AdminLanguageOptionDTO:
+      type: object
+      required: [code, displayCode, name, locale, enabled, isDefault]
+      properties:
+        code:
+          $ref: '#/components/schemas/AdminLanguageCode'
+        displayCode:
+          type: string
+          description: UI flag code (GB, RS, UA, …)
+          example: GB
+        name:
+          type: string
+          example: English
+        locale:
+          type: string
+          description: ISO 639-1 lowercase for x-locale / Translate
+          example: en
+        enabled:
+          type: boolean
+        isDefault:
+          type: boolean
+    AdminLanguagesDTO:
+      type: object
+      required: [defaultLanguage, enabledLanguages, languages]
+      properties:
+        defaultLanguage:
+          $ref: '#/components/schemas/AdminLanguageCode'
+        enabledLanguages:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminLanguageCode'
+          minItems: 1
+        languages:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminLanguageOptionDTO'
+          minItems: 18
+          maxItems: 18
+    UpdateAdminLanguagesPayload:
+      type: object
+      description: At least one field required. Default must be in enabledLanguages when both are sent.
+      properties:
+        defaultLanguage:
+          $ref: '#/components/schemas/AdminLanguageCode'
+        enabledLanguages:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminLanguageCode'
+          minItems: 1
+    GetAdminLanguagesResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: Languages fetched successfully.
+            data:
+              $ref: '#/components/schemas/AdminLanguagesDTO'
     LegalContentType:
       type: string
       enum: [ABOUT_US, TERMS_AND_CONDITION, PRIVACY_AND_POLICY, DATA_PROTECTION]
@@ -13603,6 +14033,24 @@ components:
           type: number
         gpsStartLng:
           type: number
+    EmployeeStartTimerRequest:
+      type: object
+      required: [activityType]
+      description: Provide projectId and/or phaseId (at least one required).
+      properties:
+        projectId:
+          type: string
+          format: uuid
+        phaseId:
+          type: string
+          format: uuid
+        activityType:
+          type: string
+          enum: [ERECTION, DISMANTLING, TRANSPORT, MAINTENANCE, OTHER]
+        gpsStartLat:
+          type: number
+        gpsStartLng:
+          type: number
     StopMobileTimerRequest:
       type: object
       required: [timeLogId]
@@ -13634,6 +14082,31 @@ components:
           type: integer
           minimum: 0
           default: 0
+    EmployeeManualTimeRequest:
+      type: object
+      required: [activityType, startTime, endTime]
+      description: Provide projectId and/or phaseId (at least one required).
+      properties:
+        projectId:
+          type: string
+          format: uuid
+        phaseId:
+          type: string
+          format: uuid
+        activityType:
+          type: string
+          enum: [ERECTION, DISMANTLING, TRANSPORT, MAINTENANCE, OTHER]
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        breakMinutes:
+          type: integer
+          minimum: 0
+          default: 0
+          description: 'Break duration in minutes (UI 45m → 45)'
     SyncMobileTimeLogItem:
       type: object
       required: [clientSyncId, phaseId, activityType, startTime, endTime]
@@ -13716,6 +14189,80 @@ components:
           format: date-time
         user:
           $ref: '#/components/schemas/MobileTimeLogUserDTO'
+    EmployeeTimeLogDTO:
+      type: object
+      required: [id, phaseId, activityType, startTime, endTime, isManual, status, clientSyncId, breakMinutes, netHours, createdAt, updatedAt, project, synced]
+      properties:
+        id: { type: string, format: uuid }
+        phaseId: { type: string, format: uuid }
+        activityType:
+          type: string
+          enum: [ERECTION, DISMANTLING, TRANSPORT, MAINTENANCE, OTHER]
+        startTime: { type: string, format: date-time }
+        endTime: { type: string, format: date-time, nullable: true }
+        isManual: { type: boolean }
+        status:
+          type: string
+          enum: [PENDING_APPROVAL, APPROVED, REJECTED]
+        clientSyncId: { type: string, nullable: true }
+        breakMinutes: { type: number }
+        netHours: { type: number }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        project:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+        synced:
+          type: boolean
+          description: Show Synced badge when true
+    MobileTimeTrackingProjectDTO:
+      type: object
+      required: [id, name, phaseId, phaseType]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: projectId for start/manual
+        name:
+          type: string
+        phaseId:
+          type: string
+          format: uuid
+        phaseType:
+          type: string
+          enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
+    MobileTimeTrackingSummaryDTO:
+      type: object
+      required: [todayHours, weekHours, weeklyHoursTarget, weekNumber, weekStartDate, weekEndDate, activeTimer]
+      properties:
+        todayHours:
+          type: number
+          example: 7.5
+        weekHours:
+          type: number
+          example: 35.5
+        weeklyHoursTarget:
+          type: number
+          example: 40
+          description: Progress bar denominator
+        weekNumber:
+          type: integer
+          example: 38
+        weekStartDate:
+          type: string
+          example: '2026-09-14'
+        weekEndDate:
+          type: string
+          example: '2026-09-20'
+        activeTimer:
+          type: object
+          nullable: true
+          description: Open timer when running; null when idle
+          allOf:
+            - $ref: '#/components/schemas/EmployeeTimeLogDTO'
     MobileSyncResultDTO:
       type: object
       required: [created, skipped, logs]
@@ -13754,6 +14301,62 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/MobileTimeLogDTO'
+    GetMobileTimeTrackingSummaryResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Time tracking summary fetched successfully.'
+            data:
+              $ref: '#/components/schemas/MobileTimeTrackingSummaryDTO'
+    GetMobileTimeTrackingProjectsResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [meta, data]
+          properties:
+            message:
+              type: string
+              example: 'Time tracking projects fetched successfully.'
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/MobileTimeTrackingProjectDTO'
+    GetEmployeeTimeLogsResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [meta, data]
+          properties:
+            message:
+              type: string
+              example: 'Time logs fetched successfully.'
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/EmployeeTimeLogDTO'
+    GetEmployeeScheduleResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [meta, data]
+          properties:
+            message:
+              type: string
+              example: 'Schedule fetched successfully.'
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/EmployeeScheduleDayDTO'
     MobileSchedulePhaseDTO:
       type: object
       required: [id, type, status, priority, startDate, endDate, project]
@@ -13798,6 +14401,48 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MobileSchedulePhaseDTO'
+    EmployeeSchedulePhaseDTO:
+      type: object
+      required: [id, type, status, priority, startDate, endDate, project, siteManagers, assignedHours]
+      properties:
+        id: { type: string, format: uuid }
+        type:
+          type: string
+          enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
+        status:
+          type: string
+          enum: [ENQUIRY, QUOTATION, ORDER_CONFIRMED, IN_PROGRESS, COMPLETED, POSTPONED]
+        priority:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+        startDate: { type: string, format: date-time }
+        endDate: { type: string, format: date-time }
+        project:
+          type: object
+          required: [id, name, address]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            address: { type: string }
+        siteManagers:
+          type: array
+          items:
+            type: object
+            required: [id, firstName, lastName]
+            properties:
+              id: { type: string, format: uuid }
+              firstName: { type: string }
+              lastName: { type: string }
+        assignedHours: { type: number }
+    EmployeeScheduleDayDTO:
+      type: object
+      required: [date, phases]
+      properties:
+        date: { type: string, example: '2026-09-18' }
+        phases:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmployeeSchedulePhaseDTO'
     MobileMapProjectDTO:
       type: object
       required: [id, name, coordinates, activePhaseType]

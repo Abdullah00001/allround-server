@@ -3,6 +3,7 @@ import { validateReqBody } from '@/app/utils/system.utils';
 import {
   adminLoginSchema,
   changeAdminPasswordSchema,
+  updateAdminLanguagesSchema,
   updateAdminProfileSchema,
 } from '@/app/modules/admin/admin.schema';
 import {
@@ -18,10 +19,12 @@ import {
 import {
   changeAdminPasswordController,
   checkAdminController,
+  getAdminLanguagesController,
   getAdminProfileController,
   loginAdminController,
   logoutAdminController,
   refreshAdminController,
+  updateAdminLanguagesController,
   updateAdminProfileController,
 } from '@/app/modules/admin/admin.controllers';
 
@@ -92,6 +95,18 @@ router
     validateReqBody(changeAdminPasswordSchema),
     checkAdminCurrentPassword,
     changeAdminPasswordController
+  );
+
+/**
+ * Available languages settings (all 18 + company default/enabled).
+ */
+router
+  .route('/admin/settings/languages')
+  .get(...adminAuth, getAdminLanguagesController)
+  .patch(
+    ...adminAuth,
+    validateReqBody(updateAdminLanguagesSchema),
+    updateAdminLanguagesController
   );
 
 export default router;

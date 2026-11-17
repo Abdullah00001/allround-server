@@ -30,6 +30,9 @@ import {
   getProjectListQuerySchema,
   getProjectTasksQuerySchema,
   getScheduleQuerySchema,
+  getTimeTrackingProjectsQuerySchema,
+  employeeManualTimeSchema,
+  employeeStartTimerSchema,
   manualTimeSchema,
   startTimerSchema,
   stopTimerSchema,
@@ -79,9 +82,16 @@ export type TGetDashboardServiceParams = {
 };
 
 /**
- * Validated start-timer request body.
+ * Validated start-timer request body (shared / site-manager).
  */
 export type TStartTimerPayload = z.infer<typeof startTimerSchema>;
+
+/**
+ * Validated employee start-timer body (`projectId` or `phaseId`).
+ */
+export type TEmployeeStartTimerPayload = z.infer<
+  typeof employeeStartTimerSchema
+>;
 
 /**
  * Validated stop-timer request body.
@@ -89,9 +99,16 @@ export type TStartTimerPayload = z.infer<typeof startTimerSchema>;
 export type TStopTimerPayload = z.infer<typeof stopTimerSchema>;
 
 /**
- * Validated manual time-entry request body.
+ * Validated manual time-entry request body (shared / site-manager).
  */
 export type TManualTimePayload = z.infer<typeof manualTimeSchema>;
+
+/**
+ * Validated employee Add Time Entry body.
+ */
+export type TEmployeeManualTimePayload = z.infer<
+  typeof employeeManualTimeSchema
+>;
 
 /**
  * Validated sync request body.
@@ -107,6 +124,13 @@ export type TGetDashboardQuery = z.infer<typeof getDashboardQuerySchema>;
  * Validated my-time-logs query.
  */
 export type TGetMyTimeLogsQuery = z.infer<typeof getMyTimeLogsQuerySchema>;
+
+/**
+ * Validated time-tracking assigned-projects query.
+ */
+export type TGetTimeTrackingProjectsQuery = z.infer<
+  typeof getTimeTrackingProjectsQuerySchema
+>;
 
 /**
  * Validated schedule calendar query.
@@ -237,6 +261,16 @@ export type TGetMyTimeLogsServiceParams = {
 };
 
 /**
+ * Service params for Time Tracking assigned-project dropdown.
+ */
+export type TGetTimeTrackingProjectsServiceParams = {
+  /** Authenticated employee or site manager. */
+  user: User;
+  /** Validated pagination query. */
+  query: TGetTimeTrackingProjectsQuery;
+};
+
+/**
  * Service params for site-manager project crew-time aggregation.
  */
 export type TGetCrewTimeServiceParams = {
@@ -249,10 +283,10 @@ export type TGetCrewTimeServiceParams = {
 };
 
 /**
- * Service params for the Site Manager schedule calendar.
+ * Service params for schedule calendars (SM or employee My Plan).
  */
 export type TGetScheduleServiceParams = {
-  /** Authenticated site manager. */
+  /** Authenticated user (role enforced by route middleware). */
   user: User;
   /** Validated inclusive date window. */
   query: TGetScheduleQuery;

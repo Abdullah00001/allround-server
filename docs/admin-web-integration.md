@@ -85,6 +85,8 @@ Mismatch → **403** with `errorType: "FORBIDDEN"`.
 | `GET /admin/profile` | Yes | Self-profile (`firstName`, `lastName`, `email`, `phone`, `avatarUrl`, `role`, `language`, `createdAt`) |
 | `PATCH /admin/profile` | Yes | Self-update: optional `firstName`, `lastName`, `phone`, `avatarUrl`, `language` (≥1 field) |
 | `POST /admin/settings/password` | Yes | Change password; clears Redis sessions + cookies — re-login required |
+| `GET /admin/settings/languages` | Yes | Available languages grid (all 18 + enabled/default) |
+| `PATCH /admin/settings/languages` | Yes | Update `defaultLanguage` / `enabledLanguages` |
 
 **Critical:** Refresh before the access cookie expires (~15m). Store the latest `csrfToken` from login **and** refresh responses.
 
@@ -529,7 +531,34 @@ Content-Type: application/json
 }
 ```
 
-### 3.6b Settings → Legal (LegalContent)
+### 3.6b Settings → Available languages
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| `GET` | `/admin/settings/languages` | Full catalog (18) + `defaultLanguage` + `enabledLanguages` |
+| `PATCH` | `/admin/settings/languages` | Body may include `defaultLanguage` and/or `enabledLanguages` (≥1 field). Default is always kept in the enabled list. |
+
+```http
+GET /api/v1/admin/settings/languages
+Cookie: access_token=...
+x-csrf-token: ...
+
+PATCH /api/v1/admin/settings/languages
+Cookie: access_token=...
+x-csrf-token: ...
+Content-Type: application/json
+
+{
+  "defaultLanguage": "DE",
+  "enabledLanguages": ["DE", "EN", "PL", "TR"]
+}
+```
+
+Response `data`: `{ defaultLanguage, enabledLanguages, languages: [{ code, displayCode, name, locale, enabled, isDefault }] }`.
+
+Mobile bootstrap already exposes the same company flags via `GET /mobile/config` → `defaultLanguage` / `enabledLanguages`. Localized legal/content APIs honor `x-locale` (or `?locale=`) against the 18 supported locales; publishing legal content pre-translates into every enabled language.
+
+### 3.6c Settings → Legal (LegalContent)
 
 Admin **Legal** tab (Privacy Policy / Terms & Conditions rich-text + **Publish**). Same pattern as alua-academy-management.
 

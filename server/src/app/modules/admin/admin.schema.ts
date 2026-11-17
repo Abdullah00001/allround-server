@@ -61,3 +61,32 @@ export const changeAdminPasswordSchema = z
       .trim(),
   })
   .strict();
+
+/**
+ * Request body for `PATCH /admin/settings/languages` (Available languages UI).
+ * Default must always be included in `enabledLanguages` when both are sent.
+ */
+export const updateAdminLanguagesSchema = z
+  .object({
+    defaultLanguage: z
+      .enum(Language, { message: 'Invalid default language' })
+      .optional(),
+    enabledLanguages: z
+      .array(z.enum(Language, { message: 'Invalid language' }))
+      .min(1)
+      .optional(),
+  })
+  .strict()
+  .refine((data) => Object.keys(data).length > 0, {
+    message: 'At least one field is required',
+  })
+  .refine(
+    (data) => {
+      if (!data.defaultLanguage || !data.enabledLanguages) return true;
+      return data.enabledLanguages.includes(data.defaultLanguage);
+    },
+    {
+      message: 'enabledLanguages must include defaultLanguage',
+      path: ['enabledLanguages'],
+    }
+  );

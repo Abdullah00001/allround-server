@@ -201,7 +201,7 @@ These routes return **403** for employees (`checkSiteManagerRoleMiddleware`):
 
 | Path | Why blocked |
 | --- | --- |
-| `GET /mobile/schedule` | Site Manager only |
+| `GET /mobile/schedule` | Site Manager only (employees use `/mobile/employee/schedule`) |
 | `GET /mobile/map` | Site Manager only |
 | `GET /mobile/crew-time` | Site Manager only |
 | `GET /mobile/inspections` | Site Manager only |
@@ -231,13 +231,15 @@ These routes return **403** for employees (`checkSiteManagerRoleMiddleware`):
 Login (role=EMPLOYEE)
   → GET /mobile/config
   → GET /mobile/dashboard
-  → GET /mobile/projects  (pick a phase / job)
-  → POST /mobile/timer/start
-  → POST /mobile/timer/stop
-  → GET /mobile/time-logs?period=TODAY
+  → GET /mobile/employee/time-tracking/summary
+  → GET /mobile/employee/time-tracking/projects
+  → POST /mobile/employee/timer/start    ({ projectId, activityType })
+  → POST /mobile/employee/timer/stop
+  → POST /mobile/employee/timer/manual
+  → GET /mobile/employee/time-logs?period=WEEK
+  → GET /mobile/employee/schedule        (My Plan)
   → (offline) queue locally → POST /mobile/sync
   → GET /mobile/profile
-  → PATCH /mobile/profile  (optional self-edit)
   → GET /mobile/notifications
 ```
 
@@ -279,27 +281,36 @@ UI label **“Not Started” / “Planned”** → send `status: "ENQUIRY"` (or 
 | `GET` | `/mobile/projects` | `?page&limit` (+ tabs/filters) — phase cards |
 | `GET` | `/mobile/profile` | Identity + `language` + `weeklyHoursTarget`, `hoursThisWeek`, project counts |
 | `PATCH` | `/mobile/profile` | Self-update: optional `firstName`, `lastName`, `phone`, `avatarUrl` (null clears), `language` (≥1 field). Same response as GET |
+| `GET` | `/mobile/employee/schedule` | **My Plan** — `startDate`/`endDate` day buckets from **your** crew assignments |
 | `POST` | `/settings/password` | Change password (EMPLOYEE + SITE_MANAGER). Revokes other devices; keeps current session |
 
 **PATCH body notes:** no phone format validation; upload avatar via `POST /media` then pass URL. Not patchable: `email`, `role`, `status`, `password`, `weeklyHoursTarget`.
 
 **Change password body:** `{ "currentPassword": "...", "newPassword": "..." }`. `newPassword`: 8–32 chars, ≥1 upper, ≥1 lower, ≥1 digit, ≥1 special. Wrong/reused → **400** unified message. Other active devices get `RevokeReason.PASSWORD_CHANGED`.
 
+**My Schedule / My Plan (EMPLOYEE UI you shared):** use **`GET /mobile/employee/schedule`** only.  
+OpenAPI tag: **`EmployeeMySchedule`**. Built from **your** `CrewAssignment` days (`siteManagers`, `assignedHours`, type legend).  
+Do **not** use SM `GET /mobile/schedule` for this screen — that is a different Site Manager calendar.
+
 Employee project DTOs **do not** expose site-manager financial fields (`budgetedHours` / profitability). Those appear only for site managers.
 
-#### Time tracking (own logs only)
+#### Time Tracking tab (Employee-only)
 
-| Method | Path | Body / query |
-| --- | --- | --- |
-| `POST` | `/mobile/timer/start` | `phaseId`, `activityType`, optional `gpsStartLat` / `gpsStartLng` |
-| `POST` | `/mobile/timer/stop` | `timeLogId`, optional GPS end |
-| `POST` | `/mobile/timer/manual` | `phaseId`, `activityType`, `startTime`, `endTime`, `breakMinutes` → status **`PENDING_APPROVAL`** |
-| `GET` | `/mobile/time-logs` | `?period=TODAY` \| `WEEK` \| `MONTH` + `page&limit` |
-| `POST` | `/mobile/sync` | Offline batch — see **§6** |
+OpenAPI tag: **`EmployeeTimeTracking`**. All under `/mobile/employee/*` — do **not** reuse SM `/mobile/timer/*` for this UI.
+
+| Step | Method | Path | Notes |
+| --- | --- | --- | --- |
+| Header card | `GET` | `/mobile/employee/time-tracking/summary` | today/week hours, target, week label, `activeTimer` |
+| Assigned Project dropdown | `GET` | `/mobile/employee/time-tracking/projects` | `{ id, name, phaseId, phaseType }` |
+| Start New Timer | `POST` | `/mobile/employee/timer/start` | `{ projectId, activityType }` |
+| Stop | `POST` | `/mobile/employee/timer/stop` | `{ timeLogId }` |
+| + Add Time | `POST` | `/mobile/employee/timer/manual` | `{ projectId, activityType, startTime, endTime, breakMinutes }` → **`PENDING_APPROVAL`** |
+| Recent Logs | `GET` | `/mobile/employee/time-logs` | `period=WEEK` \| `MONTH` — includes `project` + `synced` |
+| Offline | `POST` | `/mobile/sync` | Shared sync — see **§6** |
 
 `activityType`: `ERECTION` \| `DISMANTLING` \| `TRANSPORT` \| `MAINTENANCE` \| `OTHER`.
 
-Start while another timer is open → **409** `ACTIVE_TIMER_EXISTS`.
+**409** `ACTIVE_TIMER_EXISTS` if a timer is already open. Manual **403** when `allowEmployeeManualTime` is false.
 
 #### Notifications (employee)
 
@@ -396,12 +407,14 @@ Same as employee — call these freely:
 | `GET` | `/mobile/projects` |
 | `GET` / `PATCH` | `/mobile/profile` |
 | `POST` | `/settings/password` |
-| `POST` | `/mobile/timer/start` |
+| `POST` | `/mobile/timer/start` | `phaseId` required (SM/shared) |
 | `POST` | `/mobile/timer/stop` |
-| `POST` | `/mobile/timer/manual` |
+| `POST` | `/mobile/timer/manual` | `phaseId` required |
 | `GET` | `/mobile/time-logs` |
 | `POST` | `/mobile/sync` |
 | `GET` / `PATCH` | `/mobile/notifications...` |
+
+Employee-only Time / My Plan live under `/mobile/employee/*` — SM must not use those routes.
 
 Site managers are **not** blocked by `allowEmployeeManualTime` for manual entries.
 
@@ -415,7 +428,7 @@ Dashboard `stats` for SM also includes `standingActiveSites` and per-type `{ pla
 
 | Method | Path | Query |
 | --- | --- | --- |
-| `GET` | `/mobile/schedule` | **required** `startDate`, `endDate` + `page&limit` → day buckets |
+| `GET` | `/mobile/schedule` | **required** `startDate`, `endDate` + `page&limit` → day buckets (SM only) |
 | `GET` | `/mobile/map` | optional `type` + `page&limit` → project pins |
 
 #### Crew time
@@ -954,11 +967,11 @@ Worker data keys typically include `title`, `body`/`message`, `type`, `click_act
 ## 8. Localization — Both Roles
 
 1. After auth, call **`GET /mobile/config`**.  
-2. Build language settings from `enabledLanguages` / `defaultLanguage`.  
+2. Build language settings from `enabledLanguages` / `defaultLanguage` (up to **18** `Language` codes).  
 3. Cache **`data.enums`** and validate every create/update dropdown against those lists (never hardcode invented statuses like `PLANNED`).  
-3. Render Privacy / Terms from `legalContents` (`PRIVACY_AND_POLICY`, `TERMS_AND_CONDITION`, …).  
+3. Render Privacy / Terms from `legalContents` (`PRIVACY_AND_POLICY`, `TERMS_AND_CONDITION`, …) — bodies follow `x-locale` via the Translation pipeline.  
    Or fetch a single doc without auth: `GET /legal/:type` (404 if unpublished). Admin publishes via `PATCH /admin/legal/:type`.  
-4. Optionally send `x-locale` / `Accept-Language` for server ALS locale.
+4. Send `x-locale` (ISO 639-1, e.g. `de`, `pl`) or `Accept-Language` so legal/config localization matches the UI language.
 
 ---
 
@@ -976,6 +989,8 @@ Worker data keys typically include `title`, `body`/`message`, `type`, `click_act
 | `/mobile/profile` GET/PATCH | ✅ | ✅ |
 | `/settings/password` | ✅ | ✅ |
 | Timer start/stop/manual/logs/sync | ✅ | ✅ |
+| `/mobile/employee/schedule` | ✅ | ❌ 403 |
+| `/mobile/employee/time-tracking/*` + `/mobile/employee/timer/*` | ✅ | ❌ 403 |
 | `/mobile/schedule` | ❌ 403 | ✅ |
 | `/mobile/map` | ❌ 403 | ✅ |
 | `/mobile/crew-time` | ❌ 403 | ✅ |
@@ -996,8 +1011,8 @@ Worker data keys typically include `title`, `body`/`message`, `type`, `click_act
 6. On any session 401 → clear tokens and re-login (no refresh API).
 
 ### Employee shell
-- Screens: Dashboard, Projects, Timer, Time Logs, Profile, Notifications, Settings/Legal.  
-- Never call SM-only endpoints.
+- Screens: Dashboard, Projects, Time (`/mobile/employee/time-tracking/*` + timer), My Plan (`/mobile/employee/schedule`), Profile, Notifications, Settings/Legal.  
+- Never call SM-only endpoints (`/mobile/schedule`, map, crew-time, inspections, phases, project PM CRUD).
 
 ### Site Manager shell
 - All employee screens **plus** Schedule, Map, Crew Time, Inspections, Phase Board, and Project Management tabs (filters, tasks, measurements, notes, dates/settings, media).  

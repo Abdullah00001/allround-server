@@ -1,15 +1,7 @@
--- AlterEnum
--- This migration adds more than one value to an enum.
--- With PostgreSQL versions 11 and earlier, this is not possible
--- in a single migration. This can be worked around by creating
--- multiple migrations, each migration adding only one value to
--- the enum.
-
-
-ALTER TYPE "ProjectNoteCategory" ADD VALUE 'OPEN_POINTS';
-ALTER TYPE "ProjectNoteCategory" ADD VALUE 'AGREEMENTS';
-ALTER TYPE "ProjectNoteCategory" ADD VALUE 'SPECIAL_REQUIREMENTS';
-ALTER TYPE "ProjectNoteCategory" ADD VALUE 'LOCAL_CONTACT';
+-- Note: ProjectNoteCategory values OPEN_POINTS / AGREEMENTS /
+-- SPECIAL_REQUIREMENTS / LOCAL_CONTACT are created in
+-- 20261115090000_mobile_sm_project_mgmt (enum CREATE must run first;
+-- this file previously ALTERed the type before it existed and broke shadow DB).
 
 -- AlterTable
 ALTER TABLE "Attachment" ADD COLUMN     "fileName" TEXT,

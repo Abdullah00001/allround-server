@@ -33,7 +33,11 @@ import {
   getMobileInspectionByIdService,
   getMobileProjectByIdService,
   getMyProjectsService,
+  getEmployeeScheduleService,
+  getEmployeeTimeLogsService,
   getMyTimeLogsService,
+  getTimeTrackingProjectsService,
+  getTimeTrackingSummaryService,
   getProfileStatsService,
   getScheduleService,
   listMobileCustomersService,
@@ -75,6 +79,7 @@ import {
   TGetProjectListQuery,
   TGetProjectTasksQuery,
   TGetScheduleQuery,
+  TGetTimeTrackingProjectsQuery,
   TManualTimePayload,
   TStartTimerPayload,
   TStopTimerPayload,
@@ -358,6 +363,116 @@ export const getMyTimeLogsController = asyncHandler(
 );
 
 /**
+ * Handles `GET /mobile/employee/time-tracking/summary`.
+ *
+ * @param {Request} req - Express request with trusted employee.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const getTimeTrackingSummaryController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const data = await getTimeTrackingSummaryService({ user });
+
+    res.status(200).json({
+      success: true,
+      message: 'Time tracking summary fetched successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `GET /mobile/employee/time-tracking/projects`.
+ *
+ * @param {Request} req - Express request with validated query.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const getTimeTrackingProjectsController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const query = req.validatedQuery as TGetTimeTrackingProjectsQuery;
+    const { items, total, page, limit } = await getTimeTrackingProjectsService({
+      user,
+      query,
+    });
+    const meta = buildPaginationMeta({ total, page, limit, req });
+
+    res.status(200).json({
+      success: true,
+      message: 'Time tracking projects fetched successfully.',
+      meta,
+      data: items,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `GET /mobile/employee/time-logs` (Recent Logs with project + synced).
+ *
+ * @param {Request} req - Express request with validated query.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const getEmployeeTimeLogsController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const query = req.validatedQuery as TGetMyTimeLogsQuery;
+    const { items, total, page, limit } = await getEmployeeTimeLogsService({
+      user,
+      query,
+    });
+    const meta = buildPaginationMeta({ total, page, limit, req });
+
+    res.status(200).json({
+      success: true,
+      message: 'Time logs fetched successfully.',
+      meta,
+      data: items,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `GET /mobile/employee/schedule` (My Plan / My Schedule).
+ *
+ * @param {Request} req - Express request with trusted employee and date query.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const getEmployeeScheduleController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const query = req.validatedQuery as TGetScheduleQuery;
+    const { items, total, page, limit } = await getEmployeeScheduleService({
+      user,
+      query,
+    });
+    const meta = buildPaginationMeta({ total, page, limit, req });
+
+    res.status(200).json({
+      success: true,
+      message: 'Schedule fetched successfully.',
+      meta,
+      data: items,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
  * Handles `GET /mobile/crew-time`.
  * Site-manager-only aggregated crew time for a managed project.
  *
@@ -390,10 +505,9 @@ export const getCrewTimeController = asyncHandler(
 );
 
 /**
- * Handles `GET /mobile/schedule`.
- * Site-manager calendar: phases grouped by UTC date within the query window.
+ * Handles `GET /mobile/schedule` (Site Manager only).
  *
- * @param {Request} req - Express request with trusted user and date query.
+ * @param {Request} req - Express request with trusted site manager and date query.
  * @param {Response} res - Express response.
  * @returns {Promise<void>}
  */

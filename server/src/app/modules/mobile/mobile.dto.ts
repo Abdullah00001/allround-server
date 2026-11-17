@@ -358,7 +358,7 @@ export class MobileStartTimerDTO {
 }
 
 /**
- * Phase card nested under a calendar day group.
+ * Phase card nested under a calendar day group (Site Manager schedule).
  */
 export class MobileSchedulePhaseDTO {
   /**
@@ -392,6 +392,52 @@ export class MobileScheduleDayDTO {
   constructor(
     public date: string,
     public phases: MobileSchedulePhaseDTO[]
+  ) {}
+}
+
+/**
+ * Employee My Schedule phase card (crew assignment day).
+ */
+export class EmployeeSchedulePhaseDTO {
+  /**
+   * @param {string} id - Phase UUID.
+   * @param {PhaseType} type - Phase type for calendar legend / badge.
+   * @param {PhaseStatus} status - Phase status.
+   * @param {Priority} priority - Phase priority.
+   * @param {string} startDate - ISO start.
+   * @param {string} endDate - ISO end.
+   * @param {{ id: string; name: string; address: string }} project - Parent project.
+   * @param {{ id: string; firstName: string; lastName: string }[]} siteManagers - Site managers.
+   * @param {number} assignedHours - Crew hours for this calendar day.
+   */
+  constructor(
+    public id: string,
+    public type: PhaseType,
+    public status: PhaseStatus,
+    public priority: Priority,
+    public startDate: string,
+    public endDate: string,
+    public project: { id: string; name: string; address: string },
+    public siteManagers: Array<{
+      id: string;
+      firstName: string;
+      lastName: string;
+    }>,
+    public assignedHours: number
+  ) {}
+}
+
+/**
+ * Employee My Schedule day bucket.
+ */
+export class EmployeeScheduleDayDTO {
+  /**
+   * @param {string} date - UTC `YYYY-MM-DD`.
+   * @param {EmployeeSchedulePhaseDTO[]} phases - Assignments on this day.
+   */
+  constructor(
+    public date: string,
+    public phases: EmployeeSchedulePhaseDTO[]
   ) {}
 }
 
@@ -555,7 +601,7 @@ export class MobileTimeLogUserDTO {
 }
 
 /**
- * Mobile time-log DTO with computed net hours.
+ * Mobile time-log DTO with computed net hours (shared / site-manager).
  */
 export class MobileTimeLogDTO {
   /**
@@ -617,6 +663,111 @@ export class MobileTimeLogDTO {
       timeLog.user ? MobileTimeLogUserDTO.build(timeLog.user) : undefined
     );
   }
+}
+
+/**
+ * Employee Recent Logs / active-timer card (includes project + synced badge).
+ */
+export class EmployeeTimeLogDTO {
+  /**
+   * @param {MobileTimeLogDTO} base - Shared time-log fields.
+   * @param {{ id: string; name: string }} project - Parent project for the card.
+   * @param {boolean} synced - "Synced" badge.
+   */
+  constructor(
+    public id: string,
+    public phaseId: string,
+    public activityType: ActivityType,
+    public startTime: string,
+    public endTime: string | null,
+    public isManual: boolean,
+    public status: TimeLogStatus,
+    public clientSyncId: string | null,
+    public breakMinutes: number,
+    public netHours: number,
+    public createdAt: string,
+    public updatedAt: string,
+    public project: { id: string; name: string },
+    public synced: boolean
+  ) {}
+
+  /**
+   * Builds an employee time-log card from Prisma + project.
+   *
+   * @param {TimeLog & { breaks: TimeLogBreak[]; phase: { project: Pick<Project, 'id' | 'name'> } }} timeLog - Log with phase.project.
+   * @returns {EmployeeTimeLogDTO} Employee card payload.
+   */
+  static build(
+    timeLog: TimeLog & {
+      breaks: TimeLogBreak[];
+      phase: { project: Pick<Project, 'id' | 'name'> };
+    }
+  ) {
+    const base = MobileTimeLogDTO.build(timeLog);
+    return new EmployeeTimeLogDTO(
+      base.id,
+      base.phaseId,
+      base.activityType,
+      base.startTime,
+      base.endTime,
+      base.isManual,
+      base.status,
+      base.clientSyncId,
+      base.breakMinutes,
+      base.netHours,
+      base.createdAt,
+      base.updatedAt,
+      {
+        id: timeLog.phase.project.id,
+        name: timeLog.phase.project.name,
+      },
+      Boolean(timeLog.clientSyncId) ||
+        timeLog.status !== TimeLogStatus.PENDING_APPROVAL
+    );
+  }
+}
+
+/**
+ * Compact assigned-project row for Time Tracking dropdowns
+ * (`Start New Timer` / `Add Time Entry`).
+ */
+export class MobileTimeTrackingProjectDTO {
+  /**
+   * @param {string} id - Project UUID (`projectId` for start/manual).
+   * @param {string} name - Project display name.
+   * @param {string} phaseId - Primary phase UUID (also accepted by start/manual).
+   * @param {PhaseType} phaseType - Primary phase type for optional UI hint.
+   */
+  constructor(
+    public id: string,
+    public name: string,
+    public phaseId: string,
+    public phaseType: PhaseType
+  ) {}
+}
+
+/**
+ * Employee Time Tracking header summary (Today / This Week / target bar).
+ */
+export class MobileTimeTrackingSummaryDTO {
+  /**
+   * @param {number} todayHours - Net approved hours today (UTC).
+   * @param {number} weekHours - Net approved hours this ISO week (UTC).
+   * @param {number} weeklyHoursTarget - User weekly target (e.g. 40).
+   * @param {number} weekNumber - ISO week number for the header label.
+   * @param {string} weekStartDate - UTC Monday `YYYY-MM-DD`.
+   * @param {string} weekEndDate - UTC Sunday `YYYY-MM-DD`.
+   * @param {EmployeeTimeLogDTO | null} activeTimer - Open timer if any (null when idle).
+   */
+  constructor(
+    public todayHours: number,
+    public weekHours: number,
+    public weeklyHoursTarget: number,
+    public weekNumber: number,
+    public weekStartDate: string,
+    public weekEndDate: string,
+    public activeTimer: EmployeeTimeLogDTO | null
+  ) {}
 }
 
 /**

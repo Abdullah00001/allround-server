@@ -393,3 +393,65 @@ export const COOKIE_NAMES = {
   RECOVER_PAGE_TOKEN: 'recover_page_token',
   ADMIN_CSRF_TOKEN: 'admin_csrf_token',
 } as const;
+
+/**
+ * All 18 company languages (ISO 639-1 lowercase) for Google Translate + i18n.
+ * Order matches Prisma `Language` enum / admin Available languages UI.
+ */
+export const TRANSLATION_CONFIG = {
+  SUPPORTED_LOCALES: [
+    'de',
+    'en',
+    'pl',
+    'ro',
+    'tr',
+    'bg',
+    'hr',
+    'sr',
+    'uk',
+    'ru',
+    'sq',
+    'it',
+    'fr',
+    'es',
+    'pt',
+    'nl',
+    'el',
+    'hu',
+  ] as const,
+  DEFAULT_LOCALE: 'de',
+  TRANSLATABLE_FIELDS: {
+    LEGAL_CONTENT: ['content'],
+    NOTIFICATION: ['title', 'message'],
+    PROJECT_NOTE: ['content'],
+    PROJECT_TASK: ['title', 'description'],
+  } as const,
+  STALE_JOB_THRESHOLD_MS: 5 * 60 * 1000,
+} as const;
+
+export type TranslationContentType =
+  keyof typeof TRANSLATION_CONFIG.TRANSLATABLE_FIELDS;
+
+/**
+ * Admin UI catalog for Available languages (display codes match Flutter flags).
+ */
+export const LANGUAGE_CATALOG = [
+  { code: 'DE', locale: 'de', displayCode: 'DE', name: 'German' },
+  { code: 'EN', locale: 'en', displayCode: 'GB', name: 'English' },
+  { code: 'PL', locale: 'pl', displayCode: 'PL', name: 'Polish' },
+  { code: 'RO', locale: 'ro', displayCode: 'RO', name: 'Romanian' },
+  { code: 'TR', locale: 'tr', displayCode: 'TR', name: 'Turkish' },
+  { code: 'BG', locale: 'bg', displayCode: 'BG', name: 'Bulgarian' },
+  { code: 'HR', locale: 'hr', displayCode: 'HR', name: 'Croatian' },
+  { code: 'SR', locale: 'sr', displayCode: 'RS', name: 'Serbian' },
+  { code: 'UK', locale: 'uk', displayCode: 'UA', name: 'Ukrainian' },
+  { code: 'RU', locale: 'ru', displayCode: 'RU', name: 'Russian' },
+  { code: 'SQ', locale: 'sq', displayCode: 'AL', name: 'Albanian' },
+  { code: 'IT', locale: 'it', displayCode: 'IT', name: 'Italian' },
+  { code: 'FR', locale: 'fr', displayCode: 'FR', name: 'French' },
+  { code: 'ES', locale: 'es', displayCode: 'ES', name: 'Spanish' },
+  { code: 'PT', locale: 'pt', displayCode: 'PT', name: 'Portuguese' },
+  { code: 'NL', locale: 'nl', displayCode: 'NL', name: 'Dutch' },
+  { code: 'EL', locale: 'el', displayCode: 'GR', name: 'Greek' },
+  { code: 'HU', locale: 'hu', displayCode: 'HU', name: 'Hungarian' },
+] as const;

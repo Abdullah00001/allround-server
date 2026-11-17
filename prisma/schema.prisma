@@ -131,6 +131,13 @@ enum Language {
   HU // Hungarian
 }
 
+enum TranslationStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
 // NEW: For the Notification Bell
 enum NotificationType {
   PROJECT_ASSIGNED
@@ -638,6 +645,28 @@ model LegalContent {
   content          String           @db.Text
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
+}
+
+/**
+ * Durable store for Google/mock translations (alua-compatible).
+ * `contentType` + `contentId` point at domain rows (e.g. LEGAL_CONTENT + uuid).
+ */
+model Translation {
+  id               String            @id @default(uuid())
+  contentType      String
+  contentId        String
+  sourceLocale     String
+  targetLocale     String
+  sourceHash       String
+  translatedFields Json              @db.Json
+  status           TranslationStatus @default(READY)
+  provider         String?
+  errorMessage     String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@unique([contentType, contentId, targetLocale, sourceHash])
+  @@index([contentType, contentId, targetLocale, status])
 }
 
 model UserPreference {
