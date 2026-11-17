@@ -105,6 +105,7 @@ import {
   TSetProjectAttachmentCoverServiceParams,
   TUpdateMeasurementServiceParams,
   TUpdateMobilePhaseStatusServiceParams,
+  TUpdateMobileProfileServiceParams,
   TUpdateMobileProjectServiceParams,
   TUpdatePhaseDatesServiceParams,
   TUpdateProjectNoteServiceParams,
@@ -1137,12 +1138,59 @@ export const getProfileStatsService = async ({
       project.phases.every((phase) => phase.status === PhaseStatus.COMPLETED)
   ).length;
 
+  const preference = await prisma.userPreference.findUnique({
+    where: { userId },
+    select: { language: true },
+  });
+
   return MobileProfileDTO.build(
     user,
+    preference?.language ?? Language.EN,
     hoursThisWeek,
     activeProjectsCount,
     completedProjectsCount
   );
+};
+
+/**
+ * Updates the authenticated mobile user's self-profile fields.
+ * Upserts `UserPreference.language` when `language` is present.
+ * Returns the same hub shape as `GET /mobile/profile`.
+ *
+ * @param {TUpdateMobileProfileServiceParams} params - User and patch payload.
+ * @returns {Promise<MobileProfileDTO>} Refreshed profile with weekly stats.
+ */
+export const updateMobileProfileService = async ({
+  user,
+  payload,
+}: TUpdateMobileProfileServiceParams): Promise<MobileProfileDTO> => {
+  const { firstName, lastName, phone, avatarUrl, language } = payload;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: user.id },
+      data: {
+        ...(firstName !== undefined ? { firstName } : {}),
+        ...(lastName !== undefined ? { lastName } : {}),
+        ...(phone !== undefined ? { phone } : {}),
+        ...(avatarUrl !== undefined ? { avatarUrl } : {}),
+      },
+    });
+
+    if (language !== undefined) {
+      await tx.userPreference.upsert({
+        where: { userId: user.id },
+        create: { userId: user.id, language },
+        update: { language },
+      });
+    }
+  });
+
+  const refreshed = await prisma.user.findUniqueOrThrow({
+    where: { id: user.id },
+  });
+
+  return getProfileStatsService({ user: refreshed });
 };
 
 /**

@@ -82,6 +82,9 @@ Mismatch → **403** with `errorType: "FORBIDDEN"`.
 | `POST /admin/auth/check` | Yes | Returns current admin session |
 | `POST /admin/auth/refresh` | Yes | Rotates access/refresh/csrf cookies; returns new `csrfToken` |
 | `POST /admin/auth/logout` | Yes | Clears cookies + blacklists access JWT |
+| `GET /admin/profile` | Yes | Self-profile (`firstName`, `lastName`, `email`, `phone`, `avatarUrl`, `role`, `language`, `createdAt`) |
+| `PATCH /admin/profile` | Yes | Self-update: optional `firstName`, `lastName`, `phone`, `avatarUrl`, `language` (≥1 field) |
+| `POST /admin/settings/password` | Yes | Change password; clears Redis sessions + cookies — re-login required |
 
 **Critical:** Refresh before the access cookie expires (~15m). Store the latest `csrfToken` from login **and** refresh responses.
 
@@ -499,9 +502,87 @@ Notification list `data` shape:
 }
 ```
 
-### 3.6 Settings & access policies
+### 3.6 Admin self-profile
 
-**There is no admin REST settings controller today.** Company policies such as:
+| Method | Path | Notes |
+| --- | --- | --- |
+| `GET` | `/admin/profile` | Cookie + CSRF; returns `AdminProfileDTO` |
+| `PATCH` | `/admin/profile` | Patchable: `firstName`, `lastName`, `phone` (no format), `avatarUrl` (URL or `null`), `language` |
+
+### 3.6a Change password
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| `POST` | `/admin/settings/password` | Cookie + CSRF; body `{ currentPassword, newPassword }` |
+
+`newPassword`: 8–32 chars, ≥1 upper, ≥1 lower, ≥1 digit, ≥1 special. Wrong/reused current → **400** (unified message). On success, all admin Redis sessions are revoked and auth cookies cleared — redirect to login.
+
+```http
+POST /api/v1/admin/settings/password
+Cookie: access_token=...
+x-csrf-token: ...
+Content-Type: application/json
+
+{
+  "currentPassword": "CurrentPassword123!",
+  "newPassword": "NewSecurePassword123!"
+}
+```
+
+### 3.6b Settings → Legal (LegalContent)
+
+Admin **Legal** tab (Privacy Policy / Terms & Conditions rich-text + **Publish**). Same pattern as alua-academy-management.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| `GET` | `/admin/legal/:type` | Load editor; empty `content` + `updatedAt: null` if never published |
+| `PATCH` | `/admin/legal/:type` | Publish — body `{ "content": "<html or markdown>" }` (min 1 char) |
+| `GET` | `/legal/:type` | Public (no auth) — **404** if unpublished |
+
+**`:type` values** (`LegalContentType`):
+
+| UI label | `:type` |
+| --- | --- |
+| Privacy Policy | `PRIVACY_AND_POLICY` |
+| Terms & Conditions | `TERMS_AND_CONDITION` |
+| About Us | `ABOUT_US` |
+| Data Protection | `DATA_PROTECTION` |
+
+```http
+GET /api/v1/admin/legal/PRIVACY_AND_POLICY
+Cookie: access_token=...
+x-csrf-token: ...
+
+PATCH /api/v1/admin/legal/TERMS_AND_CONDITION
+Cookie: access_token=...
+x-csrf-token: ...
+Content-Type: application/json
+
+{ "content": "<p>Updated terms…</p>" }
+```
+
+Response `data`: `{ legalContentType, content, updatedAt }`. Mobile already receives the same rows via `GET /mobile/config` → `legalContents[]`.
+
+```http
+PATCH /api/v1/admin/profile
+Cookie: access_token=...
+x-csrf-token: ...
+Content-Type: application/json
+
+{
+  "firstName": "Admin",
+  "lastName": "User",
+  "phone": "+491234567890",
+  "avatarUrl": "https://cdn.example.com/admin.jpg",
+  "language": "DE"
+}
+```
+
+Not patchable: `email`, `role`, `status`, `password`. Upload avatar via `POST /media` first. `language` upserts `UserPreference`.
+
+### 3.7 Settings & access policies
+
+**There is no admin company-settings REST controller today.** Company policies such as:
 
 - `siteManagerAccessRule` (`RESTRICT_TO_ASSIGNED` \| `GLOBAL_ACCESS`)
 - `allowEmployeeManualTime`
@@ -510,7 +591,7 @@ Notification list `data` shape:
 
 are stored on `CompanyProfile` (`id: "global"`) and enforced by the API / seeded via Prisma. Mobile apps read a subset through `GET /mobile/config` (mobile bearer auth only).
 
-Until an admin settings API ships, change policies via DB/seed/admin tooling—not via a dashboard HTTP route.
+Until an admin company-settings API ships, change those policies via DB/seed/admin tooling—not via a dashboard HTTP route.
 
 Media uploads (shared): `POST /api/v1/media`, `DELETE /api/v1/media` (see OpenAPI `Media` tag; follow the auth chain documented there).
 

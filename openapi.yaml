@@ -52,6 +52,10 @@ tags:
     description: Mobile customer directory and selection endpoints
   - name: Notification
     description: In-app notification list and read-state endpoints for Mobile and Admin
+  - name: Legal
+    description: Public and admin legal documents (Privacy, Terms, About, Data Protection)
+  - name: Settings
+    description: Authenticated settings endpoints (change password for mobile roles)
 
 paths:
   /health:
@@ -1174,6 +1178,399 @@ paths:
                 message: 'Internal Server Error'
                 errorType: 'SERVER_ERROR'
                 traceId: '123e4567-e89b-12d3-a456-426614174000'
+
+  /api/v1/admin/profile:
+    get:
+      tags: [Admin]
+      summary: Get admin self-profile
+      description: >
+        Returns the authenticated admin's profile (`firstName`, `lastName`, `email`,
+        `phone`, `avatarUrl`, `role`, `language`, `createdAt`). Cookie + CSRF required.
+      operationId: getAdminProfile
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Profile fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetAdminProfileResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+    patch:
+      tags: [Admin]
+      summary: Update admin self-profile
+      description: |
+        Updates the authenticated admin's profile. Patchable: `firstName`, `lastName`,
+        `phone` (no format), `avatarUrl` (URL or null), `language` (upserts UserPreference).
+        At least one field required. Not patchable: email, role, status, password.
+        Upload avatar via `POST /media` first.
+      operationId: updateAdminProfile
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAdminProfileRequest'
+            example:
+              firstName: Admin
+              lastName: User
+              phone: '+491234567890'
+              language: DE
+      responses:
+        '200':
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetAdminProfileResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
+  /api/v1/admin/settings/password:
+    post:
+      tags: [Admin]
+      summary: Change admin password
+      description: >
+        Changes the authenticated admin's password, updates `passwordHash`,
+        revokes all Redis admin sessions, and clears auth cookies.
+        Client must re-login afterward.
+      operationId: changeAdminPassword
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+          description: Double Submit CSRF token matching the admin_csrf_token cookie.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeAdminPasswordPayload'
+            example:
+              currentPassword: 'CurrentPassword123!'
+              newPassword: 'NewSecurePassword123!'
+      responses:
+        '200':
+          description: Admin password changed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeAdminPasswordResponse'
+              example:
+                success: true
+                message: 'Admin password changed successfully'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '400':
+          description: Current password incorrect or identical to existing password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                message: 'Current password is incorrect or new password matches the existing one.'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Forbidden or CSRF validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
+  /api/v1/settings/password:
+    post:
+      tags: [Settings]
+      summary: Change password (EMPLOYEE + SITE_MANAGER)
+      description: >
+        Authenticated mobile endpoint. Verifies current password, ensures the new
+        password differs, updates `passwordHash`, and revokes all other active
+        device sessions (`RevokeReason.PASSWORD_CHANGED`). Keeps the current device.
+      operationId: changePassword
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordPayload'
+            example:
+              currentPassword: 'SecurePassword123!'
+              newPassword: 'BrandNewPassword2026!'
+      responses:
+        '200':
+          description: Password changed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangePasswordResponse'
+              example:
+                success: true
+                message: 'Change password successful.'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '400':
+          description: Current password incorrect or identical to existing password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                message: 'Current password is incorrect or new password matches the existing one.'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '401':
+          description: Authentication or device session error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
+  /api/v1/legal/{type}:
+    get:
+      tags: [Legal]
+      summary: Get public legal content
+      description: |
+        Fetches a published legal document by type (no auth).
+        UI: Privacy Policy → `PRIVACY_AND_POLICY`, Terms → `TERMS_AND_CONDITION`.
+        Returns 404 when never published. Mobile apps may also use `GET /mobile/config` → `legalContents[]`.
+      operationId: getPublicLegalContent
+      security: []
+      parameters:
+        - in: path
+          name: type
+          required: true
+          schema:
+            $ref: '#/components/schemas/LegalContentType'
+      responses:
+        '200':
+          description: Legal content fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetLegalContentResponse'
+        '404':
+          description: Legal content not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Legal content not found.'
+                errorType: 'LEGAL_CONTENT_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '422':
+          description: Invalid type param
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
+  /api/v1/admin/legal/{type}:
+    get:
+      tags: [Legal, Admin]
+      summary: Get admin legal content for editor
+      description: |
+        Settings → Legal tab load. Returns empty `content` and `updatedAt: null`
+        when the document has never been published (blank editor).
+      operationId: getAdminLegalContent
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: type
+          required: true
+          schema:
+            $ref: '#/components/schemas/LegalContentType'
+      responses:
+        '200':
+          description: Legal content fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetLegalContentResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Invalid type param
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+    patch:
+      tags: [Legal, Admin]
+      summary: Publish legal content
+      description: |
+        Upserts legal HTML/markdown for the given type (admin Publish button).
+        Body requires non-empty `content`.
+      operationId: updateAdminLegalContent
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: type
+          required: true
+          schema:
+            $ref: '#/components/schemas/LegalContentType'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLegalContentRequest'
+            example:
+              content: '<p>Updated Privacy Policy…</p>'
+      responses:
+        '200':
+          description: Legal content updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetLegalContentResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: CSRF validation failed or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
 
   /api/v1/recover/find:
     post:
@@ -7908,7 +8305,11 @@ paths:
     get:
       tags: [MobileDashboard]
       summary: Get mobile profile stats
-      description: Returns profile fields plus hoursThisWeek (UTC ISO week, APPROVED net hours), assignedProjectsCount, and completedProjectsCount (all phases COMPLETED).
+      description: >
+        Returns profile fields (including `language` from UserPreference), plus
+        hoursThisWeek (UTC ISO week, APPROVED net hours), assignedProjectsCount,
+        and completedProjectsCount (all phases COMPLETED). Available to EMPLOYEE
+        and SITE_MANAGER.
       operationId: getMobileProfile
       security:
         - bearerAuth: []
@@ -7951,6 +8352,62 @@ paths:
                 errorType: 'ACCOUNT_INACTIVE'
                 traceId: '123e4567-e89b-12d3-a456-426614174000'
 
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+    patch:
+      tags: [MobileDashboard]
+      summary: Update mobile self-profile
+      description: |
+        Updates the authenticated EMPLOYEE/SITE_MANAGER profile.
+        Patchable: `firstName`, `lastName`, `phone` (no format), `avatarUrl` (URL or null),
+        `language` (upserts UserPreference). At least one field required.
+        Not patchable: email, role, status, password, weeklyHoursTarget.
+        Upload avatar via `POST /media` first, then pass the URL.
+        Response shape matches GET.
+      operationId: updateMobileProfile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMobileProfileRequest'
+            example:
+              firstName: Tim
+              lastName: Muller
+              phone: '+49654515151'
+              avatarUrl: https://cdn.example.com/avatar.jpg
+              language: DE
+      responses:
+        '200':
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMobileProfileResponse'
+        '401':
+          description: Authentication or device session failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Account inactive or suspended
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
         '500':
           description: Internal server error
           content:
@@ -12389,7 +12846,7 @@ components:
             role: {type: string, enum: [ADMIN, SITE_MANAGER, EMPLOYEE]}
     MobileProfileDTO:
       type: object
-      required: [id, firstName, lastName, role, email, phone, avatarUrl, weeklyHoursTarget, hoursThisWeek, assignedProjectsCount, completedProjectsCount]
+      required: [id, firstName, lastName, role, email, phone, avatarUrl, language, weeklyHoursTarget, hoursThisWeek, assignedProjectsCount, completedProjectsCount]
       properties:
         id:
           type: string
@@ -12410,6 +12867,10 @@ components:
         avatarUrl:
           type: string
           nullable: true
+        language:
+          type: string
+          enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU]
+          description: From UserPreference (default EN when missing)
         weeklyHoursTarget:
           type: number
         hoursThisWeek:
@@ -12419,6 +12880,136 @@ components:
           type: integer
         completedProjectsCount:
           type: integer
+    UpdateMobileProfileRequest:
+      type: object
+      description: At least one field required. Email/role/status/password/weeklyHoursTarget are not patchable.
+      properties:
+        firstName: { type: string, example: Tim }
+        lastName: { type: string, example: Muller }
+        phone: { type: string, nullable: true, example: '+49654515151' }
+        avatarUrl: { type: string, format: uri, nullable: true }
+        language:
+          type: string
+          enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU]
+    AdminProfileDTO:
+      type: object
+      required: [id, firstName, lastName, email, phone, avatarUrl, role, language, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        firstName: { type: string }
+        lastName: { type: string }
+        email: { type: string, format: email }
+        phone: { type: string, nullable: true }
+        avatarUrl: { type: string, nullable: true }
+        role: { type: string, enum: [ADMIN] }
+        language:
+          type: string
+          enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU]
+        createdAt: { type: string, format: date-time }
+    UpdateAdminProfileRequest:
+      type: object
+      description: At least one field required. Same patchable fields as mobile self-profile.
+      properties:
+        firstName: { type: string }
+        lastName: { type: string }
+        phone: { type: string, nullable: true }
+        avatarUrl: { type: string, format: uri, nullable: true }
+        language:
+          type: string
+          enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU]
+    GetAdminProfileResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message: { type: string, example: 'Profile fetched successfully.' }
+            data: { $ref: '#/components/schemas/AdminProfileDTO' }
+    ChangePasswordPayload:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          example: 'SecurePassword123!'
+          description: User's current password
+        newPassword:
+          type: string
+          minLength: 8
+          maxLength: 32
+          example: 'BrandNewPassword2026!'
+          description: >
+            8–32 characters; at least 1 uppercase, 1 lowercase, 1 number,
+            and 1 special character
+    ChangePasswordResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            message:
+              type: string
+              example: 'Change password successful.'
+    ChangeAdminPasswordPayload:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          example: 'CurrentPassword123!'
+        newPassword:
+          type: string
+          minLength: 8
+          maxLength: 32
+          example: 'NewSecurePassword123!'
+          description: >
+            8–32 characters; at least 1 uppercase, 1 lowercase, 1 number,
+            and 1 special character
+    ChangeAdminPasswordResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            message:
+              type: string
+              example: 'Admin password changed successfully'
+    LegalContentType:
+      type: string
+      enum: [ABOUT_US, TERMS_AND_CONDITION, PRIVACY_AND_POLICY, DATA_PROTECTION]
+      description: >
+        Privacy Policy → PRIVACY_AND_POLICY; Terms & Conditions → TERMS_AND_CONDITION
+    LegalContentDTO:
+      type: object
+      required: [legalContentType, content, updatedAt]
+      properties:
+        legalContentType:
+          $ref: '#/components/schemas/LegalContentType'
+        content:
+          type: string
+          description: HTML or markdown body from the admin rich-text editor
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: null when admin GET finds an unpublished type
+    UpdateLegalContentRequest:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          example: '<p>Updated Privacy Policy…</p>'
+    GetLegalContentResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Legal content fetched successfully.'
+            data:
+              $ref: '#/components/schemas/LegalContentDTO'
     GetMobileDashboardResponse:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'

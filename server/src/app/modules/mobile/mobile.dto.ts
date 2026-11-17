@@ -473,6 +473,7 @@ export class MobileProfileDTO {
    * @param {string} email - Email address.
    * @param {string | null} phone - Optional phone.
    * @param {string | null} avatarUrl - Optional avatar URL.
+   * @param {Language} language - Preferred UI language.
    * @param {number} weeklyHoursTarget - Weekly hours target.
    * @param {number} hoursThisWeek - Net approved hours in the current UTC week.
    * @param {number} assignedProjectsCount - Distinct assigned projects.
@@ -486,6 +487,7 @@ export class MobileProfileDTO {
     public email: string,
     public phone: string | null,
     public avatarUrl: string | null,
+    public language: Language,
     public weeklyHoursTarget: number,
     public hoursThisWeek: number,
     public assignedProjectsCount: number,
@@ -496,6 +498,7 @@ export class MobileProfileDTO {
    * Builds a profile DTO from user entity plus computed stats.
    *
    * @param {User} user - Authenticated user.
+   * @param {Language} language - Preferred language from UserPreference.
    * @param {number} hoursThisWeek - Net hours this UTC week.
    * @param {number} assignedProjectsCount - Assigned project count.
    * @param {number} completedProjectsCount - Completed project count.
@@ -503,6 +506,7 @@ export class MobileProfileDTO {
    */
   static build(
     user: User,
+    language: Language,
     hoursThisWeek: number,
     assignedProjectsCount: number,
     completedProjectsCount: number
@@ -515,6 +519,7 @@ export class MobileProfileDTO {
       user.email,
       user.phone,
       user.avatarUrl,
+      language,
       Number(user.weeklyHoursTarget),
       hoursThisWeek,
       assignedProjectsCount,

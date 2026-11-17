@@ -55,6 +55,7 @@ import {
   getMyProjectsController,
   getMyTimeLogsController,
   getProfileController,
+  updateProfileController,
   getScheduleController,
   listMobileCustomersController,
   listMobileInspectionsController,
@@ -105,6 +106,7 @@ import {
   stopTimerSchema,
   syncTimeLogsSchema,
   updateMeasurementSchema,
+  updateMobileProfileSchema,
   updateMobileProjectSchema,
   updatePhaseDatesSchema,
   updatePhaseStatusSchema,
@@ -345,7 +347,14 @@ router
     deleteProjectAttachmentController
   );
 
-router.route('/mobile/profile').get(...mobileAuth, getProfileController);
+router
+  .route('/mobile/profile')
+  .get(...mobileAuth, getProfileController)
+  .patch(
+    ...mobileAuth,
+    validateReqBody(updateMobileProfileSchema),
+    updateProfileController
+  );
 
 router
   .route('/mobile/timer/start')

@@ -1,9 +1,14 @@
 import { Router } from 'express';
 import { validateReqBody } from '@/app/utils/system.utils';
-import { adminLoginSchema } from '@/app/modules/admin/admin.schema';
+import {
+  adminLoginSchema,
+  changeAdminPasswordSchema,
+  updateAdminProfileSchema,
+} from '@/app/modules/admin/admin.schema';
 import {
   checkAdminAccessTokenMiddleware,
   checkAdminAccountStatus,
+  checkAdminCurrentPassword,
   checkAdminExistenceMiddleware,
   checkAdminPassword,
   checkAdminRefreshTokenMiddleware,
@@ -11,13 +16,25 @@ import {
   findAdminForLoginByEmail,
 } from '@/app/modules/admin/admin.middlewares';
 import {
+  changeAdminPasswordController,
   checkAdminController,
+  getAdminProfileController,
   loginAdminController,
   logoutAdminController,
   refreshAdminController,
+  updateAdminProfileController,
 } from '@/app/modules/admin/admin.controllers';
 
 const router = Router();
+
+/**
+ * Shared admin cookie/CSRF auth chain.
+ */
+const adminAuth = [
+  checkCsrfTokenMiddleware,
+  checkAdminAccessTokenMiddleware,
+  checkAdminExistenceMiddleware,
+] as const;
 
 router
   .route('/admin/auth/login')
@@ -54,6 +71,27 @@ router
     checkAdminAccessTokenMiddleware,
     checkAdminExistenceMiddleware,
     logoutAdminController
+  );
+
+router
+  .route('/admin/profile')
+  .get(...adminAuth, getAdminProfileController)
+  .patch(
+    ...adminAuth,
+    validateReqBody(updateAdminProfileSchema),
+    updateAdminProfileController
+  );
+
+/**
+ * Change admin password (alua-compatible). Clears all Redis sessions + cookies.
+ */
+router
+  .route('/admin/settings/password')
+  .post(
+    ...adminAuth,
+    validateReqBody(changeAdminPasswordSchema),
+    checkAdminCurrentPassword,
+    changeAdminPasswordController
   );
 
 export default router;

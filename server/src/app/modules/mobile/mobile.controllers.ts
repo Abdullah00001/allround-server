@@ -50,6 +50,7 @@ import {
   toggleProjectTaskService,
   updateMobilePhaseStatusService,
   setProjectAttachmentCoverService,
+  updateMobileProfileService,
   updateMobileProjectService,
   updatePhaseDatesService,
   updateProjectMeasurementService,
@@ -80,6 +81,7 @@ import {
   TSyncTimeLogsPayload,
   TUpdateMeasurementPayload,
   TUpdateMobilePhaseStatusPayload,
+  TUpdateMobileProfilePayload,
   TUpdateMobileProjectPayload,
   TUpdatePhaseDatesPayload,
   TUpdateProjectNotePayload,
@@ -216,6 +218,31 @@ export const getProfileController = asyncHandler(
     res.status(200).json({
       success: true,
       message: 'Profile fetched successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `PATCH /mobile/profile`.
+ * Updates self-profile fields; returns the same DTO as GET.
+ *
+ * @param {Request} req - Express request with trusted `req.user` and body.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const updateProfileController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const payload = req.body as TUpdateMobileProfilePayload;
+    const data = await updateMobileProfileService({ user, payload });
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully.',
       data,
       traceId,
     });

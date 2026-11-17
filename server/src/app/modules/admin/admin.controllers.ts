@@ -2,12 +2,19 @@ import { Request, Response } from 'express';
 import { getTraceId } from '@/app/configs/requestContext.configs';
 import { asyncHandler } from '@/app/utils/system.utils';
 import {
+  changeAdminPasswordService,
   checkAdminService,
+  getAdminProfileService,
   loginAdminService,
   logoutAdminService,
   refreshAdminService,
+  updateAdminProfileService,
 } from '@/app/modules/admin/admin.services';
-import { TAdminLoginPayload } from '@/app/modules/admin/admin.types';
+import {
+  TAdminLoginPayload,
+  TChangeAdminPasswordPayload,
+  TUpdateAdminProfilePayload,
+} from '@/app/modules/admin/admin.types';
 import { User } from '@prisma/client';
 import { cookieOption } from '@/app/utils/cookie.utils';
 import {
@@ -173,6 +180,96 @@ export const logoutAdminController = asyncHandler(
     res.status(200).json({
       success: true,
       message: 'Admin logged out successfully',
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `GET /admin/profile`.
+ * Returns the authenticated admin's self-profile.
+ *
+ * @param {Request} req - Express request with trusted `req.user`.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const getAdminProfileController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const data = await getAdminProfileService({ user });
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile fetched successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `PATCH /admin/profile`.
+ * Updates self-profile fields for the authenticated admin.
+ *
+ * @param {Request} req - Express request with trusted `req.user` and body.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const updateAdminProfileController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const payload = req.body as TUpdateAdminProfilePayload;
+    const data = await updateAdminProfileService({ user, payload });
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `POST /admin/settings/password`.
+ * Updates password, revokes Redis sessions, and clears auth cookies.
+ *
+ * @param {Request} req - Express request with trusted admin and body.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const changeAdminPasswordController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const { newPassword } = req.body as TChangeAdminPasswordPayload;
+
+    await changeAdminPasswordService({
+      userId: user.id,
+      newPassword,
+    });
+
+    res.clearCookie(
+      COOKIE_NAMES.ACCESS_TOKEN,
+      cookieOption(adminAccessTokenExpiresIn)
+    );
+    res.clearCookie(
+      COOKIE_NAMES.REFRESH_TOKEN,
+      cookieOption(refreshTokenExpiresInWithRememberMe)
+    );
+    res.clearCookie(COOKIE_NAMES.ADMIN_CSRF_TOKEN, {
+      ...cookieOption(refreshTokenExpiresInWithRememberMe),
+      httpOnly: false,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Admin password changed successfully',
       traceId,
     });
     return;

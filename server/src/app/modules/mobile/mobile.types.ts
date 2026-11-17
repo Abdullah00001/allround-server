@@ -37,6 +37,7 @@ import {
   updateMeasurementSchema,
   updateMobileProjectSchema,
   updatePhaseDatesSchema,
+  updateMobileProfileSchema,
   updatePhaseStatusSchema,
   updateProjectNoteSchema,
 } from '@/app/modules/mobile/mobile.schema';
@@ -48,6 +49,23 @@ import {
 export type TMobileUserServiceParams = {
   /** Trusted authenticated user from the mobile auth chain. */
   user: User;
+};
+
+/**
+ * Validated self-profile patch body.
+ */
+export type TUpdateMobileProfilePayload = z.infer<
+  typeof updateMobileProfileSchema
+>;
+
+/**
+ * Service params for patching the authenticated mobile user's profile.
+ */
+export type TUpdateMobileProfileServiceParams = {
+  /** Trusted authenticated user. */
+  user: User;
+  /** Validated patch payload (≥1 field). */
+  payload: TUpdateMobileProfilePayload;
 };
 
 /**

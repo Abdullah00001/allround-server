@@ -7,7 +7,10 @@ import { getRedisClient } from '@/app/configs/redis.configs';
 import { AuthErrorType, COOKIE_NAMES, REDIS_PREFIXES } from '@/const';
 import { Role, User, UserStatus } from '@prisma/client';
 import { ITokenPayload } from '@/app/@types/jwt.types';
-import { TAdminLoginPayload } from '@/app/modules/admin/admin.types';
+import {
+  TAdminLoginPayload,
+  TChangeAdminPasswordPayload,
+} from '@/app/modules/admin/admin.types';
 import { comparePassword } from '@/app/utils/password.utils';
 
 /**
@@ -261,6 +264,55 @@ export const checkAdminAccountStatus = asyncHandler(
         errorType: AuthErrorType.ACCOUNT_INACTIVE,
         message:
           'Your account is not active. Please verify your email or contact support.',
+        traceId,
+      });
+      return;
+    }
+
+    return next();
+  }
+);
+
+/**
+ * Validates current admin password and rejects reuse of the same password.
+ * Unified 400 message (does not reveal which check failed) — same as alua.
+ *
+ * @param {Request} req - Express request with `req.user` and validated body.
+ * @param {Response} res - Express response.
+ * @param {NextFunction} next - Continues when checks pass.
+ * @returns {Promise<void>}
+ */
+export const checkAdminCurrentPassword = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const { currentPassword, newPassword } =
+      req.body as TChangeAdminPasswordPayload;
+
+    const isCurrentPasswordValid = await comparePassword(
+      currentPassword,
+      user.passwordHash
+    );
+
+    if (!isCurrentPasswordValid) {
+      res.status(400).json({
+        success: false,
+        message:
+          'Current password is incorrect or new password matches the existing one.',
+        traceId,
+      });
+      return;
+    }
+
+    const isSamePassword = await comparePassword(
+      newPassword,
+      user.passwordHash
+    );
+    if (isSamePassword) {
+      res.status(400).json({
+        success: false,
+        message:
+          'Current password is incorrect or new password matches the existing one.',
         traceId,
       });
       return;

@@ -237,6 +237,7 @@ Login (role=EMPLOYEE)
   → GET /mobile/time-logs?period=TODAY
   → (offline) queue locally → POST /mobile/sync
   → GET /mobile/profile
+  → PATCH /mobile/profile  (optional self-edit)
   → GET /mobile/notifications
 ```
 
@@ -276,7 +277,13 @@ UI label **“Not Started” / “Planned”** → send `status: "ENQUIRY"` (or 
 | --- | --- | --- |
 | `GET` | `/mobile/dashboard` | `?page&limit` → `stats` + paginated `upcomingTasks[]` / `mapPins[]` |
 | `GET` | `/mobile/projects` | `?page&limit` (+ tabs/filters) — phase cards |
-| `GET` | `/mobile/profile` | `weeklyHoursTarget`, `hoursThisWeek`, project counts |
+| `GET` | `/mobile/profile` | Identity + `language` + `weeklyHoursTarget`, `hoursThisWeek`, project counts |
+| `PATCH` | `/mobile/profile` | Self-update: optional `firstName`, `lastName`, `phone`, `avatarUrl` (null clears), `language` (≥1 field). Same response as GET |
+| `POST` | `/settings/password` | Change password (EMPLOYEE + SITE_MANAGER). Revokes other devices; keeps current session |
+
+**PATCH body notes:** no phone format validation; upload avatar via `POST /media` then pass URL. Not patchable: `email`, `role`, `status`, `password`, `weeklyHoursTarget`.
+
+**Change password body:** `{ "currentPassword": "...", "newPassword": "..." }`. `newPassword`: 8–32 chars, ≥1 upper, ≥1 lower, ≥1 digit, ≥1 special. Wrong/reused → **400** unified message. Other active devices get `RevokeReason.PASSWORD_CHANGED`.
 
 Employee project DTOs **do not** expose site-manager financial fields (`budgetedHours` / profitability). Those appear only for site managers.
 
@@ -387,7 +394,8 @@ Same as employee — call these freely:
 | `GET` | `/mobile/config` |
 | `GET` | `/mobile/dashboard` |
 | `GET` | `/mobile/projects` |
-| `GET` | `/mobile/profile` |
+| `GET` / `PATCH` | `/mobile/profile` |
+| `POST` | `/settings/password` |
 | `POST` | `/mobile/timer/start` |
 | `POST` | `/mobile/timer/stop` |
 | `POST` | `/mobile/timer/manual` |
@@ -949,6 +957,7 @@ Worker data keys typically include `title`, `body`/`message`, `type`, `click_act
 2. Build language settings from `enabledLanguages` / `defaultLanguage`.  
 3. Cache **`data.enums`** and validate every create/update dropdown against those lists (never hardcode invented statuses like `PLANNED`).  
 3. Render Privacy / Terms from `legalContents` (`PRIVACY_AND_POLICY`, `TERMS_AND_CONDITION`, …).  
+   Or fetch a single doc without auth: `GET /legal/:type` (404 if unpublished). Admin publishes via `PATCH /admin/legal/:type`.  
 4. Optionally send `x-locale` / `Accept-Language` for server ALS locale.
 
 ---
@@ -964,7 +973,8 @@ Worker data keys typically include `title`, `body`/`message`, `type`, `click_act
 | Project tasks / measurements / notes | ❌ 403 | ✅ full CRUD |
 | Project settings + phase dates | ❌ 403 | ✅ |
 | Project attachments (`PHOTO` / `PDF_PLAN`) | ❌ 403 | ✅ |
-| `/mobile/profile` | ✅ | ✅ |
+| `/mobile/profile` GET/PATCH | ✅ | ✅ |
+| `/settings/password` | ✅ | ✅ |
 | Timer start/stop/manual/logs/sync | ✅ | ✅ |
 | `/mobile/schedule` | ❌ 403 | ✅ |
 | `/mobile/map` | ❌ 403 | ✅ |

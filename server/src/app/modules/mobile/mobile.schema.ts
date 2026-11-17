@@ -2,6 +2,7 @@ import {
   ActivityType,
   AttachmentCategory,
   CustomerCategory,
+  Language,
   MeasurementUnit,
   PhaseStatus,
   PhaseType,
@@ -750,4 +751,25 @@ export const getMobileCustomersQuerySchema = z
     category: z.enum(CustomerCategory).optional(),
   })
   .strict();
+
+/**
+ * Request body for `PATCH /mobile/profile` (self-profile update).
+ * At least one field required. Email/role/status/password are not patchable.
+ */
+export const updateMobileProfileSchema = z
+  .object({
+    firstName: z.string().trim().min(1).optional(),
+    lastName: z.string().trim().min(1).optional(),
+    phone: z.string().trim().nullable().optional(),
+    avatarUrl: z
+      .string()
+      .url({ message: 'Invalid avatar URL' })
+      .nullable()
+      .optional(),
+    language: z.enum(Language, { message: 'Invalid language' }).optional(),
+  })
+  .strict()
+  .refine((data) => Object.keys(data).length > 0, {
+    message: 'At least one field is required to update',
+  });
 
