@@ -6527,6 +6527,73 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/mobile/employee/dashboard:
+    get:
+      tags: [MobileDashboard]
+      summary: Get employee mobile dashboard
+      description: Returns the employee-specific home dashboard matching the employee mobile UI, including user greeting, formatted date, task counters, and enriched upcoming task cards with site manager and coordinates.
+      operationId: getMobileEmployeeDashboard
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: 1-based page number
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Page size
+      responses:
+        '200':
+          description: Employee dashboard fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMobileEmployeeDashboardResponse'
+        '401':
+          description: Authentication or device session failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              examples:
+                tokenInvalid:
+                  value:
+                    success: false
+                    message: 'Token not found'
+                    errorType: 'TOKEN_INVALID'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+                sessionRevoked:
+                  value:
+                    success: false
+                    message: 'Your session has ended. Please log in again.'
+                    errorType: 'SESSION_REVOKED'
+                    traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '403':
+          description: Account inactive or suspended
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Your account is not active. Please verify your email or contact support.'
+                errorType: 'ACCOUNT_INACTIVE'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
   /api/v1/mobile/projects:
     get:
       tags: [MobileDashboard, MobileProjectManagement]
@@ -11960,7 +12027,7 @@ components:
           nullable: true
         project:
           type: object
-          required: [id, name, address]
+          required: [id, name, address, coordinates]
           properties:
             id:
               type: string
@@ -11969,6 +12036,33 @@ components:
               type: string
             address:
               type: string
+            coordinates:
+              type: object
+              nullable: true
+              required: [lat, lng]
+              properties:
+                lat: {type: number}
+                lng: {type: number}
+        siteManager:
+          type: object
+          nullable: true
+          required: [id, name]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+              example: 'Mesut Rahaman'
+            phone:
+              type: string
+              nullable: true
+            email:
+              type: string
+              nullable: true
+        workingHours:
+          type: string
+          example: '07:30 am - 04:15 pm'
     MobilePhaseTypeStatsDTO:
       type: object
       required: [planned, running]
@@ -12033,6 +12127,45 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MobileMapPinDTO'
+        employeeDashboard:
+          $ref: '#/components/schemas/MobileEmployeeDashboardDTO'
+    MobileEmployeeDashboardDTO:
+      type: object
+      required: [user, date, formattedDate, totalUpcomingTasks, upcomingTasks]
+      properties:
+        user:
+          type: object
+          required: [id, firstName, lastName, role, avatarUrl]
+          properties:
+            id:
+              type: string
+              format: uuid
+            firstName:
+              type: string
+              example: 'Mesut'
+            lastName:
+              type: string
+              example: 'Rahaman'
+            role:
+              type: string
+              enum: [EMPLOYEE, SITE_MANAGER, ADMIN]
+            avatarUrl:
+              type: string
+              nullable: true
+        date:
+          type: string
+          format: date-time
+          example: '2026-11-17T09:38:00.000Z'
+        formattedDate:
+          type: string
+          example: 'Tuesday, November 17'
+        totalUpcomingTasks:
+          type: integer
+          example: 3
+        upcomingTasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileUpcomingTaskDTO'
     MobileProjectPhaseDTO:
       type: object
       required: [id, type, status, priority, startDate, endDate]
@@ -12299,6 +12432,19 @@ components:
               $ref: '#/components/schemas/PaginationMeta'
             data:
               $ref: '#/components/schemas/MobileDashboardDTO'
+    GetMobileEmployeeDashboardResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [meta, data]
+          properties:
+            message:
+              type: string
+              example: 'Employee dashboard fetched successfully.'
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
+            data:
+              $ref: '#/components/schemas/MobileEmployeeDashboardDTO'
 
     MobileTaskEmployeeDTO:
       type: object

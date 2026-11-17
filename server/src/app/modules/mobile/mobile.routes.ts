@@ -49,6 +49,7 @@ import {
   getDashboardController,
   getMapController,
   getMobileConfigController,
+  getMobileEmployeeDashboardController,
   getMobileInspectionByIdController,
   getMobileProjectByIdController,
   getMyProjectsController,
@@ -154,6 +155,14 @@ router
     ...mobileAuth,
     validateReqQuery(getDashboardQuerySchema),
     getDashboardController
+  );
+
+router
+  .route('/mobile/employee/dashboard')
+  .get(
+    ...mobileAuth,
+    validateReqQuery(getDashboardQuerySchema),
+    getMobileEmployeeDashboardController
   );
 
 router

@@ -27,6 +27,7 @@ import {
   deleteProjectTaskService,
   getCrewTimeService,
   getDashboardDataService,
+  getEmployeeDashboardService,
   getMapDataService,
   getMobileConfigService,
   getMobileInspectionByIdService,
@@ -129,6 +130,37 @@ export const getDashboardController = asyncHandler(
     res.status(200).json({
       success: true,
       message: 'Dashboard fetched successfully.',
+      meta,
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `GET /mobile/employee/dashboard`.
+ * Returns the employee-specific home dashboard: user greeting, current date,
+ * task counters, and enriched upcoming task cards with site manager and coordinates.
+ *
+ * @param {Request} req - Express request with trusted `req.user`.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const getMobileEmployeeDashboardController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const query = req.validatedQuery as TGetDashboardQuery;
+    const { data, total, page, limit } = await getEmployeeDashboardService({
+      user,
+      query,
+    });
+    const meta = buildPaginationMeta({ total, page, limit, req });
+
+    res.status(200).json({
+      success: true,
+      message: 'Employee dashboard fetched successfully.',
       meta,
       data,
       traceId,

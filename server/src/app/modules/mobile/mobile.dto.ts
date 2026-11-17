@@ -43,6 +43,26 @@ const decimalToNumber = (value: Decimal | null | undefined): number | null => {
 };
 
 /**
+ * Site manager summary attached to an upcoming task card.
+ */
+export type TUpcomingTaskSiteManager = {
+  id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+};
+
+/**
+ * Project summary attached to an upcoming task card.
+ */
+export type TUpcomingTaskProject = {
+  id: string;
+  name: string;
+  address: string;
+  coordinates: { lat: number; lng: number } | null;
+};
+
+/**
  * Dashboard upcoming-task card.
  */
 export class MobileUpcomingTaskDTO {
@@ -53,7 +73,9 @@ export class MobileUpcomingTaskDTO {
    * @param {Priority} priority - Phase priority.
    * @param {string | null} startDate - ISO start date.
    * @param {string | null} endDate - ISO end date.
-   * @param {{ id: string; name: string; address: string }} project - Parent project summary.
+   * @param {TUpcomingTaskProject} project - Parent project summary with coordinates.
+   * @param {TUpcomingTaskSiteManager | null} siteManager - Primary site manager details.
+   * @param {string} workingHours - Standard daily working hours (e.g. '07:30 am - 04:15 pm').
    */
   constructor(
     public phaseId: string,
@@ -62,7 +84,9 @@ export class MobileUpcomingTaskDTO {
     public priority: Priority,
     public startDate: string | null,
     public endDate: string | null,
-    public project: { id: string; name: string; address: string }
+    public project: TUpcomingTaskProject,
+    public siteManager: TUpcomingTaskSiteManager | null = null,
+    public workingHours: string = '07:30 am - 04:15 pm'
   ) {}
 }
 
@@ -159,6 +183,37 @@ export class MobileMapPinDTO {
 }
 
 /**
+ * User summary for employee dashboard greeting.
+ */
+export type TMobileEmployeeDashboardUser = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  role: Role;
+  avatarUrl: string | null;
+};
+
+/**
+ * Employee home dashboard payload matching the employee mobile UI.
+ */
+export class MobileEmployeeDashboardDTO {
+  /**
+   * @param {TMobileEmployeeDashboardUser} user - Authenticated employee profile summary.
+   * @param {string} date - Current date in ISO format.
+   * @param {string} formattedDate - Human readable date string (e.g. 'Tuesday, November 17').
+   * @param {number} totalUpcomingTasks - Total upcoming tasks assigned to this employee.
+   * @param {MobileUpcomingTaskDTO[]} upcomingTasks - Upcoming task cards.
+   */
+  constructor(
+    public user: TMobileEmployeeDashboardUser,
+    public date: string,
+    public formattedDate: string,
+    public totalUpcomingTasks: number,
+    public upcomingTasks: MobileUpcomingTaskDTO[]
+  ) {}
+}
+
+/**
  * Aggregated dashboard response.
  */
 export class MobileDashboardDTO {
@@ -166,11 +221,13 @@ export class MobileDashboardDTO {
    * @param {MobileDashboardStatsDTO} stats - Home screen counters.
    * @param {MobileUpcomingTaskDTO[]} upcomingTasks - Active assigned phases.
    * @param {MobileMapPinDTO[]} mapPins - Distinct project pins with active phases.
+   * @param {MobileEmployeeDashboardDTO | null} [employeeDashboard] - Optional employee dashboard summary.
    */
   constructor(
     public stats: MobileDashboardStatsDTO,
     public upcomingTasks: MobileUpcomingTaskDTO[],
-    public mapPins: MobileMapPinDTO[]
+    public mapPins: MobileMapPinDTO[],
+    public employeeDashboard?: MobileEmployeeDashboardDTO | null
   ) {}
 }
 

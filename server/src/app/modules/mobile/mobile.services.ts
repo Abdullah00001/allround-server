@@ -30,6 +30,7 @@ import {
   MobileCustomerListItemDTO,
   MobileDashboardDTO,
   MobileDashboardStatsDTO,
+  MobileEmployeeDashboardDTO,
   MobileEnumsDTO,
   MobileHoursByActivityDTO,
   MobileInspectionDTO,
@@ -139,7 +140,35 @@ const upcomingPhaseProjectSelect = {
   address: true,
   latitude: true,
   longitude: true,
+  projectManagers: {
+    orderBy: { assignedAt: 'asc' },
+    select: {
+      user: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          email: true,
+        },
+      },
+    },
+  },
 } as const;
+
+/**
+ * Formats a Date into a human-friendly string like "Tuesday, November 17".
+ *
+ * @param {Date} date - Date to format.
+ * @returns {string} Formatted date.
+ */
+const formatDashboardDate = (date: Date): string => {
+  return date.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
+};
 
 /**
  * Loads the singleton company profile (`id = "global"`).
@@ -456,22 +485,35 @@ export const getDashboardDataService = async ({
     return new MobilePhaseTypeStatsDTO(planned, running);
   };
 
-  const upcomingTasks = upcomingPhases.map(
-    (phase) =>
-      new MobileUpcomingTaskDTO(
-        phase.id,
-        phase.type,
-        phase.status,
-        phase.priority,
-        phase.startDate ? phase.startDate.toISOString() : null,
-        phase.endDate ? phase.endDate.toISOString() : null,
-        {
-          id: phase.project.id,
-          name: phase.project.name,
-          address: phase.project.address,
-        }
-      )
-  );
+  const upcomingTasks = upcomingPhases.map((phase) => {
+    const pm = phase.project.projectManagers[0]?.user;
+    return new MobileUpcomingTaskDTO(
+      phase.id,
+      phase.type,
+      phase.status,
+      phase.priority,
+      phase.startDate ? phase.startDate.toISOString() : null,
+      phase.endDate ? phase.endDate.toISOString() : null,
+      {
+        id: phase.project.id,
+        name: phase.project.name,
+        address: phase.project.address,
+        coordinates: toCoordinates(
+          decimalToNumber(phase.project.latitude),
+          decimalToNumber(phase.project.longitude)
+        ),
+      },
+      pm
+        ? {
+            id: pm.id,
+            name: `${pm.firstName} ${pm.lastName}`.trim(),
+            phone: pm.phone ?? null,
+            email: pm.email ?? null,
+          }
+        : null,
+      '07:30 am - 04:15 pm'
+    );
+  });
 
   const pinByProject = new Map<string, MobileMapPinDTO>();
   for (const phase of upcomingPhases) {
@@ -494,6 +536,21 @@ export const getDashboardDataService = async ({
   const tasksPage = paginateArray(upcomingTasks, page, limit);
   const pinsPage = paginateArray(allPins, page, limit);
 
+  const now = new Date();
+  const employeeDashboard = new MobileEmployeeDashboardDTO(
+    {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      avatarUrl: user.avatarUrl ?? null,
+    },
+    now.toISOString(),
+    formatDashboardDate(now),
+    upcomingTasks.length,
+    tasksPage.items
+  );
+
   return {
     data: new MobileDashboardDTO(
       new MobileDashboardStatsDTO(
@@ -504,9 +561,106 @@ export const getDashboardDataService = async ({
         countPlannedRunning(dismantlingPhases)
       ),
       tasksPage.items,
-      pinsPage.items
+      pinsPage.items,
+      employeeDashboard
     ),
     total: Math.max(tasksPage.total, pinsPage.total),
+    page,
+    limit,
+  };
+};
+
+/**
+ * Builds the employee-specific home dashboard matching the employee mobile UI:
+ * user greeting, current date, task counters, and enriched upcoming task cards.
+ *
+ * @param {TGetDashboardServiceParams} params - Authenticated user wrapper and query.
+ * @returns {Promise<{ data: MobileEmployeeDashboardDTO; total: number; page: number; limit: number }>}
+ */
+export const getEmployeeDashboardService = async ({
+  user,
+  query,
+}: TGetDashboardServiceParams): Promise<{
+  data: MobileEmployeeDashboardDTO;
+  total: number;
+  page: number;
+  limit: number;
+}> => {
+  const userId = user.id;
+  const page = query.page;
+  const limit = query.limit;
+
+  const phaseScope = {
+    project: { deletedAt: null },
+    OR: [
+      { crewAssignments: { some: { userId } } },
+      { project: { projectManagers: { some: { userId } } } },
+    ],
+  };
+
+  const upcomingPhases = await prisma.projectPhase.findMany({
+    where: {
+      status: { in: ACTIVE_PHASE_STATUSES },
+      ...phaseScope,
+    },
+    include: {
+      project: {
+        select: upcomingPhaseProjectSelect,
+      },
+    },
+    orderBy: [{ priority: 'asc' }, { startDate: 'asc' }],
+  });
+
+  const upcomingTasks = upcomingPhases.map((phase) => {
+    const pm = phase.project.projectManagers[0]?.user;
+    return new MobileUpcomingTaskDTO(
+      phase.id,
+      phase.type,
+      phase.status,
+      phase.priority,
+      phase.startDate ? phase.startDate.toISOString() : null,
+      phase.endDate ? phase.endDate.toISOString() : null,
+      {
+        id: phase.project.id,
+        name: phase.project.name,
+        address: phase.project.address,
+        coordinates: toCoordinates(
+          decimalToNumber(phase.project.latitude),
+          decimalToNumber(phase.project.longitude)
+        ),
+      },
+      pm
+        ? {
+            id: pm.id,
+            name: `${pm.firstName} ${pm.lastName}`.trim(),
+            phone: pm.phone ?? null,
+            email: pm.email ?? null,
+          }
+        : null,
+      '07:30 am - 04:15 pm'
+    );
+  });
+
+  const now = new Date();
+  const tasksPage = paginateArray(upcomingTasks, page, limit);
+
+  const employeeDashboard = new MobileEmployeeDashboardDTO(
+    {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      avatarUrl: user.avatarUrl ?? null,
+    },
+    now.toISOString(),
+    formatDashboardDate(now),
+    upcomingTasks.length,
+    tasksPage.items
+  );
+
+  return {
+    data: employeeDashboard,
+    total: tasksPage.total,
     page,
     limit,
   };
