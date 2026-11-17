@@ -11,6 +11,7 @@
     "prisma:generate": "bash scripts/prisma-generate.sh",
     "prisma:sync": "bash scripts/prisma-sync.sh",
     "prisma:seed": "prisma db seed",
+    "seed:test": "tsx prisma/seed-test-data.ts",
     "clean": "bash scripts/clean.sh",
     "prepare": "husky",
     "create:job": "bash scheduler/scripts/create-job.sh",
