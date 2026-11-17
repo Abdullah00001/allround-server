@@ -1,5 +1,8 @@
 import { NextFunction, Request, Response } from 'express';
-import { getTraceId } from '@/app/configs/requestContext.configs';
+import {
+  getTraceId,
+  requestContext,
+} from '@/app/configs/requestContext.configs';
 import { asyncHandler, createRedisKey } from '@/app/utils/system.utils';
 import prisma from '@/app/configs/db.configs';
 import { verifyAccessToken, verifyRefreshToken } from '@/app/utils/jwt.utils';
@@ -190,6 +193,16 @@ export const checkAdminExistenceMiddleware = asyncHandler(
     }
 
     req.user = user;
+
+    // Alua-compatible: after auth, apply UserPreference.language to ALS
+    // unless the client already sent an explicit x-locale / ?locale override.
+    const store = requestContext.getStore();
+    const explicit =
+      req.query?.locale || req.query?.lang || req.headers['x-locale'];
+    if (store && !explicit && user.preferences?.language) {
+      store.locale = user.preferences.language.toLowerCase().slice(0, 2);
+    }
+
     return next();
   }
 );

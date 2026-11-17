@@ -1256,6 +1256,7 @@ paths:
               firstName: Admin
               lastName: User
               phone: '+491234567890'
+              avatarUrl: https://cdn.example.com/admin.jpg
               language: DE
       responses:
         '200':
