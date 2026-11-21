@@ -55,6 +55,10 @@ tags:
     description: >
       EMPLOYEE-only Time Tracking tab under `/mobile/employee/time-tracking/*` and
       `/mobile/employee/timer/*`. Does not change Site Manager `/mobile/timer/*` contracts.
+  - name: EmployeeProjectDetail
+    description: >
+      EMPLOYEE-only Assignment / Project Detail reads under `/mobile/employee/projects/:projectId`.
+      Crew/PM assignment required. No financial fields. SM management routes stay separate.
   - name: MobileTimeTracking
     description: Mobile timer, time-logs, crew time, and offline sync (shared / site-manager contracts)
   - name: MobileInspection
@@ -10811,6 +10815,138 @@ paths:
               schema:
                 $ref: '#/components/schemas/AuthErrorResponse'
 
+  /api/v1/mobile/employee/projects/{projectId}:
+    get:
+      tags: [EmployeeProjectDetail]
+      summary: Employee Assignment / Project Detail
+      description: >
+        Read-only detail for Assignment Detail + Project Details screens.
+        Requires crew or PM assignment. Includes phase badge, map coords,
+        site manager contact, site access, photo/task previews. No budget/profit fields.
+      operationId: getEmployeeProjectDetail
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Employee project detail fetched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetEmployeeProjectDetailResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Not an employee or not assigned to project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+
+  /api/v1/mobile/employee/projects/{projectId}/photos:
+    get:
+      tags: [EmployeeProjectDetail]
+      summary: Employee project photos (View All)
+      description: Paginated PHOTO attachments for an assigned project.
+      operationId: listEmployeeProjectPhotos
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 10 }
+      responses:
+        '200':
+          description: Photos fetched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetEmployeeProjectPhotosResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Not assigned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+
+  /api/v1/mobile/employee/projects/{projectId}/tasks:
+    get:
+      tags: [EmployeeProjectDetail]
+      summary: Employee own tasks on a project
+      description: Tasks assigned to the authenticated employee on this project.
+      operationId: listEmployeeProjectTasks
+      security: [{bearerAuth: []}]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: status
+          schema: { type: string, enum: [OPEN, COMPLETED] }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 10 }
+      responses:
+        '200':
+          description: Tasks fetched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetEmployeeProjectTasksResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Not assigned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+
   /api/v1/mobile/employee/timer/start:
     post:
       tags: [EmployeeTimeTracking]
@@ -16163,6 +16299,128 @@ components:
         phaseType:
           type: string
           enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE]
+    EmployeeProjectSiteManagerDTO:
+      type: object
+      required: [id, firstName, lastName, phone, avatarUrl]
+      properties:
+        id: { type: string, format: uuid }
+        firstName: { type: string }
+        lastName: { type: string }
+        phone: { type: string, nullable: true }
+        avatarUrl: { type: string, nullable: true }
+    EmployeeProjectPhaseDTO:
+      type: object
+      required: [id, type, status, startDate, endDate, assignedHoursToday]
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string, enum: [ERECTION, DISMANTLING, STANDING, MAINTENANCE] }
+        status:
+          type: string
+          enum: [ENQUIRY, QUOTATION, ORDER_CONFIRMED, IN_PROGRESS, COMPLETED, POSTPONED]
+        startDate: { type: string, format: date-time, nullable: true }
+        endDate: { type: string, format: date-time, nullable: true }
+        assignedHoursToday:
+          type: number
+          nullable: true
+          description: Crew assignment hours for today when present
+    EmployeeProjectDetailDTO:
+      type: object
+      required:
+        - id
+        - name
+        - address
+        - city
+        - coordinates
+        - siteAccessCode
+        - siteAccessNotes
+        - scaffoldArea
+        - scaffoldLabel
+        - phase
+        - siteManager
+        - photoCount
+        - photos
+        - taskCount
+        - tasks
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        address: { type: string }
+        city: { type: string, nullable: true }
+        coordinates:
+          type: object
+          nullable: true
+          required: [lat, lng]
+          properties:
+            lat: { type: number }
+            lng: { type: number }
+        siteAccessCode: { type: string, nullable: true }
+        siteAccessNotes: { type: string, nullable: true }
+        scaffoldArea: { type: number, nullable: true }
+        scaffoldLabel:
+          type: string
+          nullable: true
+          description: Measurement position label (e.g. North Wing - Level 8)
+        phase:
+          $ref: '#/components/schemas/EmployeeProjectPhaseDTO'
+        siteManager:
+          type: object
+          nullable: true
+          description: Primary site manager contact; null when none assigned
+          allOf:
+            - $ref: '#/components/schemas/EmployeeProjectSiteManagerDTO'
+        photoCount: { type: integer }
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileAttachmentDTO'
+        taskCount: { type: integer }
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileProjectTaskDTO'
+        localization:
+          $ref: '#/components/schemas/LocalizationMeta'
+    GetEmployeeProjectDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Employee project detail fetched successfully.'
+            data:
+              $ref: '#/components/schemas/EmployeeProjectDetailDTO'
+    GetEmployeeProjectPhotosResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [meta, data]
+          properties:
+            message:
+              type: string
+              example: 'Project photos fetched successfully.'
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/MobileAttachmentDTO'
+    GetEmployeeProjectTasksResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [meta, data]
+          properties:
+            message:
+              type: string
+              example: 'Employee project tasks fetched successfully.'
+            meta:
+              $ref: '#/components/schemas/PaginationMeta'
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/MobileProjectTaskDTO'
     MobileTimeTrackingSummaryDTO:
       type: object
       required: [todayHours, weekHours, weeklyHoursTarget, weekNumber, weekStartDate, weekEndDate, activeTimer]

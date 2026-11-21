@@ -218,12 +218,12 @@ These routes return **403** for employees (`checkSiteManagerRoleMiddleware`):
 | `GET` / `POST` `/mobile/projects/:projectId/notes` | Site Manager only |
 | `DELETE /mobile/projects/:projectId/notes/:id` | Site Manager only |
 | `PATCH /mobile/projects/:projectId/phases/:phaseId/dates` | Site Manager only |
-| `GET /mobile/projects/:projectId` | Site Manager only (detail hub) |
-| `GET/POST /mobile/projects/:projectId/attachments` | Site Manager only |
+| `GET /mobile/projects/:projectId` | Site Manager only (detail hub) — employees use `/mobile/employee/projects/:projectId` |
+| `GET/POST /mobile/projects/:projectId/attachments` | Site Manager only — employees use `/mobile/employee/projects/:projectId/photos` |
 | `GET /mobile/projects/:projectId/history` | Site Manager only |
 | `DELETE /mobile/projects/:projectId/attachments/:id` | Site Manager only |
 
-**Do not render** Schedule, Map, Crew Time, Inspections, Phase Board, or Project Management (tasks / measurements / notes / attachments / settings) tabs for employees.
+**Do not render** Schedule, Map, Crew Time, Inspections, Phase Board, or SM Project Management write tabs for employees. Use **Employee Project Detail** APIs below for Assignment / Project Details.
 
 ### 3.3 Employee screen flow
 
@@ -231,13 +231,16 @@ These routes return **403** for employees (`checkSiteManagerRoleMiddleware`):
 Login (role=EMPLOYEE)
   → GET /mobile/config
   → GET /mobile/dashboard
+  → GET /mobile/employee/schedule        (My Plan)
+  → GET /mobile/employee/projects/:projectId   (Assignment / Project Detail)
+  → GET /mobile/employee/projects/:projectId/photos
+  → GET /mobile/employee/projects/:projectId/tasks
   → GET /mobile/employee/time-tracking/summary
   → GET /mobile/employee/time-tracking/projects
   → POST /mobile/employee/timer/start    ({ projectId, activityType })
-  → POST /mobile/employee/timer/stop
+  → POST /mobile/employee/timer/stop     (Active Timer → Save Entry)
   → POST /mobile/employee/timer/manual
   → GET /mobile/employee/time-logs?period=WEEK
-  → GET /mobile/employee/schedule        (My Plan)
   → (offline) queue locally → POST /mobile/sync
   → GET /mobile/profile
   → GET /mobile/notifications
@@ -295,6 +298,20 @@ OpenAPI tag: **`EmployeeMySchedule`**. Built from **your** `CrewAssignment` days
 Do **not** use SM `GET /mobile/schedule` for this screen — that is a different Site Manager calendar.
 
 Employee project DTOs **do not** expose site-manager financial fields (`budgetedHours` / profitability). Those appear only for site managers.
+
+#### Assignment / Project Detail (Employee-only)
+
+OpenAPI tag: **`EmployeeProjectDetail`**. Read-only; requires crew/PM assignment (**403** otherwise).
+
+| Screen | Method | Path | Notes |
+| --- | --- | --- | --- |
+| Assignment Detail / Project Details | `GET` | `/mobile/employee/projects/:projectId` | phase badge, name, address/coords, site access, SM contact+phone, scaffold area/label, photo+task previews, `localization` |
+| Photos → View All | `GET` | `/mobile/employee/projects/:projectId/photos` | `?page&limit` PHOTO only |
+| Tasks list | `GET` | `/mobile/employee/projects/:projectId/tasks` | own tasks only; optional `status=OPEN\|COMPLETED` |
+| Start New Timer | `POST` | `/mobile/employee/timer/start` | use `projectId` (or `phase.id` from detail) |
+| Active Timer / Save Entry | `GET` summary + `POST` stop | `/mobile/employee/time-tracking/summary`, `/mobile/employee/timer/stop` | `activeTimer` + `{ timeLogId }` |
+
+Do **not** call SM `GET /mobile/projects/:projectId` for this UI.
 
 #### Time Tracking tab (Employee-only)
 

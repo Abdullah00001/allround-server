@@ -521,6 +521,64 @@ export const checkSiteManagerProjectAccessMiddleware = asyncHandler(
 );
 
 /**
+ * Ensures the authenticated employee is crew- or PM-assigned to `req.project`.
+ * Used for employee Assignment / Project Detail read routes.
+ *
+ * @param {Request} req - Express request with trusted `req.user` and `req.project`.
+ * @param {Response} res - Express response used for the 403 envelope.
+ * @param {NextFunction} next - Continues when access is allowed.
+ * @returns {Promise<void>}
+ */
+export const checkEmployeeProjectAccessMiddleware = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const project = req.project;
+
+    if (!project) {
+      res.status(404).json({
+        success: false,
+        message: 'Project not found',
+        errorType: AuthErrorType.PROJECT_NOT_FOUND,
+        traceId,
+      });
+      return;
+    }
+
+    const [pmAssignment, crewAssignment] = await Promise.all([
+      prisma.projectManagerAssignment.findUnique({
+        where: {
+          projectId_userId: {
+            projectId: project.id,
+            userId: user.id,
+          },
+        },
+        select: { id: true },
+      }),
+      prisma.crewAssignment.findFirst({
+        where: {
+          userId: user.id,
+          phase: { projectId: project.id },
+        },
+        select: { id: true },
+      }),
+    ]);
+
+    if (!pmAssignment && !crewAssignment) {
+      res.status(403).json({
+        success: false,
+        message: 'You are not assigned to this project',
+        errorType: AuthErrorType.FORBIDDEN,
+        traceId,
+      });
+      return;
+    }
+
+    next();
+  }
+);
+
+/**
  * Loads a non-deleted project from validated `params.projectId`.
  * Attaches the Prisma `Project` to `req.project` on success.
  *

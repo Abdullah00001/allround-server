@@ -31,6 +31,7 @@ import {
   checkProjectNoteExistenceMiddleware,
   checkProjectPhotoAttachmentMiddleware,
   checkProjectTaskExistenceMiddleware,
+  checkEmployeeProjectAccessMiddleware,
   checkSiteManagerPhaseAccessMiddleware,
   checkSiteManagerProjectAccessMiddleware,
   checkSiteManagerRoleMiddleware,
@@ -52,6 +53,7 @@ import {
   deleteProjectTaskController,
   getCrewTimeController,
   getDashboardController,
+  getEmployeeProjectDetailController,
   getMapController,
   getMobileConfigController,
   getMobileEmployeeDashboardController,
@@ -66,6 +68,8 @@ import {
   getTimeTrackingSummaryController,
   updateProfileController,
   getScheduleController,
+  listEmployeeProjectPhotosController,
+  listEmployeeProjectTasksController,
   listMobileCustomersController,
   listMobileInspectionsController,
   listMobilePhasesController,
@@ -150,6 +154,16 @@ const siteManagerAuth = [...mobileAuth, checkSiteManagerRoleMiddleware] as const
  * Employee-only auth chain (My Plan + Time Tracking UI).
  */
 const employeeAuth = [...mobileAuth, checkEmployeeRoleMiddleware] as const;
+
+/**
+ * Employee project access chain for Assignment / Project Detail reads.
+ */
+const employeeProjectAccess = [
+  ...employeeAuth,
+  validateReqParams(mobileProjectIdParamsSchema),
+  checkMobileProjectExistenceMiddleware,
+  checkEmployeeProjectAccessMiddleware,
+] as const;
 
 /**
  * Site-manager project access chain for `/:projectId` management routes.
@@ -440,6 +454,26 @@ router
  * Employee-only flow (My Plan + Time Tracking UI)
  * ---------------------------------------------------------------------------
  */
+router
+  .route('/mobile/employee/projects/:projectId')
+  .get(...employeeProjectAccess, getEmployeeProjectDetailController);
+
+router
+  .route('/mobile/employee/projects/:projectId/photos')
+  .get(
+    ...employeeProjectAccess,
+    validateReqQuery(getProjectListQuerySchema),
+    listEmployeeProjectPhotosController
+  );
+
+router
+  .route('/mobile/employee/projects/:projectId/tasks')
+  .get(
+    ...employeeProjectAccess,
+    validateReqQuery(getProjectTasksQuerySchema),
+    listEmployeeProjectTasksController
+  );
+
 router
   .route('/mobile/employee/schedule')
   .get(

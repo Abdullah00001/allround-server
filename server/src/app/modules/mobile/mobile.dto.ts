@@ -1571,4 +1571,89 @@ export class MobileCustomerListItemDTO {
   }
 }
 
+/**
+ * Site manager contact card on employee Assignment / Project Detail.
+ */
+export class EmployeeProjectSiteManagerDTO {
+  /**
+   * @param {string} id - User UUID.
+   * @param {string} firstName - First name.
+   * @param {string} lastName - Last name.
+   * @param {string | null} phone - Phone for call action.
+   * @param {string | null} avatarUrl - Optional avatar.
+   */
+  constructor(
+    public id: string,
+    public firstName: string,
+    public lastName: string,
+    public phone: string | null,
+    public avatarUrl: string | null
+  ) {}
+}
+
+/**
+ * Primary phase summary for employee assignment detail.
+ */
+export class EmployeeProjectPhaseDTO {
+  /**
+   * @param {string} id - Phase UUID (timer target).
+   * @param {PhaseType} type - ERECTION / DISMANTLING / …
+   * @param {PhaseStatus} status - Phase status.
+   * @param {string | null} startDate - ISO start.
+   * @param {string | null} endDate - ISO end.
+   * @param {number | null} assignedHoursToday - Crew hours for today when assigned.
+   */
+  constructor(
+    public id: string,
+    public type: PhaseType,
+    public status: PhaseStatus,
+    public startDate: string | null,
+    public endDate: string | null,
+    public assignedHoursToday: number | null
+  ) {}
+}
+
+/**
+ * Employee read-only project / assignment detail (no financial fields).
+ */
+export class EmployeeProjectDetailDTO {
+  /** Alua localization metadata for project name / site access notes. */
+  localization?: ILocalizationMeta;
+
+  /**
+   * @param {string} id - Project UUID.
+   * @param {string} name - Project name.
+   * @param {string} address - Street address (Navigation).
+   * @param {string | null} city - City label.
+   * @param {{ lat: number; lng: number } | null} coordinates - Map pin.
+   * @param {string | null} siteAccessCode - Gate code.
+   * @param {string | null} siteAccessNotes - Site Access bullets body.
+   * @param {number | null} scaffoldArea - Aggregated scaffold area.
+   * @param {string | null} scaffoldLabel - Measurement position label when present.
+   * @param {EmployeeProjectPhaseDTO} phase - Primary / assigned phase.
+   * @param {EmployeeProjectSiteManagerDTO | null} siteManager - Primary PM contact.
+   * @param {number} photoCount - Total PHOTO attachments.
+   * @param {MobileAttachmentDTO[]} photos - Preview photos (newest first).
+   * @param {number} taskCount - Tasks assigned to this employee.
+   * @param {MobileProjectTaskDTO[]} tasks - Preview of those tasks.
+   */
+  constructor(
+    public id: string,
+    public name: string,
+    public address: string,
+    public city: string | null,
+    public coordinates: { lat: number; lng: number } | null,
+    public siteAccessCode: string | null,
+    public siteAccessNotes: string | null,
+    public scaffoldArea: number | null,
+    public scaffoldLabel: string | null,
+    public phase: EmployeeProjectPhaseDTO,
+    public siteManager: EmployeeProjectSiteManagerDTO | null,
+    public photoCount: number,
+    public photos: MobileAttachmentDTO[],
+    public taskCount: number,
+    public tasks: MobileProjectTaskDTO[]
+  ) {}
+}
+
 export { decimalToNumber };

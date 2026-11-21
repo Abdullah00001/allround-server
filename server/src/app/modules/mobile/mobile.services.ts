@@ -58,6 +58,9 @@ import {
   MobileProfileDTO,
   MobileScheduleDayDTO,
   MobileSchedulePhaseDTO,
+  EmployeeProjectDetailDTO,
+  EmployeeProjectPhaseDTO,
+  EmployeeProjectSiteManagerDTO,
   EmployeeScheduleDayDTO,
   EmployeeSchedulePhaseDTO,
   EmployeeTimeLogDTO,
@@ -96,12 +99,14 @@ import {
   TDeleteProjectNoteServiceParams,
   TGetCrewTimeServiceParams,
   TGetDashboardServiceParams,
+  TGetEmployeeProjectDetailServiceParams,
   TGetMapServiceParams,
   TGetMobileInspectionServiceParams,
   TGetMyProjectsServiceParams,
   TGetMyTimeLogsServiceParams,
   TGetScheduleServiceParams,
   TGetTimeTrackingProjectsServiceParams,
+  TListEmployeeProjectChildServiceParams,
   TListMobileCustomersServiceParams,
   TListMobileInspectionsServiceParams,
   TListMobilePhasesServiceParams,
@@ -3867,5 +3872,278 @@ export const listMobileCustomersService = async ({
     page,
     limit,
   };
+};
+
+/**
+ * Employee read-only Assignment / Project Detail hub.
+ * Scoped to crew/PM assignment (middleware). No financial fields.
+ *
+ * @param {TGetEmployeeProjectDetailServiceParams} params - Employee + trusted project.
+ * @returns {Promise<EmployeeProjectDetailDTO>} Detail payload for Flutter screens.
+ */
+export const getEmployeeProjectDetailService = async ({
+  user,
+  project,
+}: TGetEmployeeProjectDetailServiceParams): Promise<EmployeeProjectDetailDTO> => {
+  const todayStart = getUtcDayStart(new Date());
+  const todayEnd = getUtcDayEndExclusive(todayStart);
+
+  const [record, photoCount, photos, taskCount, tasks, todayCrew] =
+    await Promise.all([
+      prisma.project.findUniqueOrThrow({
+        where: { id: project.id },
+        include: {
+          phases: { orderBy: { updatedAt: 'desc' } },
+          projectManagers: {
+            take: 1,
+            orderBy: { assignedAt: 'asc' },
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  phone: true,
+                  avatarUrl: true,
+                },
+              },
+            },
+          },
+          measurements: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: { id: true, position: true, remark: true, scaffoldType: true },
+          },
+        },
+      }),
+      prisma.attachment.count({
+        where: { projectId: project.id, category: AttachmentCategory.PHOTO },
+      }),
+      prisma.attachment.findMany({
+        where: { projectId: project.id, category: AttachmentCategory.PHOTO },
+        orderBy: [{ isCover: 'desc' }, { createdAt: 'desc' }],
+        take: 4,
+      }),
+      prisma.projectTask.count({
+        where: { projectId: project.id, employeeId: user.id },
+      }),
+      prisma.projectTask.findMany({
+        where: { projectId: project.id, employeeId: user.id },
+        include: {
+          employee: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              avatarUrl: true,
+            },
+          },
+        },
+        orderBy: [{ isCompleted: 'asc' }, { dueDate: 'asc' }, { createdAt: 'desc' }],
+        take: 10,
+      }),
+      prisma.crewAssignment.findFirst({
+        where: {
+          userId: user.id,
+          phase: { projectId: project.id },
+          date: { gte: todayStart, lt: todayEnd },
+        },
+        select: { hours: true, phaseId: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+  if (record.phases.length === 0) {
+    throw Object.assign(new Error('Project has no phases'), {
+      statusCode: 404,
+      errorType: 'PHASE_NOT_FOUND',
+    });
+  }
+
+  const phaseRow =
+    (todayCrew
+      ? record.phases.find((phase) => phase.id === todayCrew.phaseId)
+      : null) ?? selectPrimaryPhase(record.phases);
+
+  const measurement = record.measurements[0] ?? null;
+  const pm = record.projectManagers[0]?.user ?? null;
+
+  const [localizedProject, localizedTasks, localizedMeasurement, localizedPm] =
+    await Promise.all([
+      localizeProject({
+        id: record.id,
+        name: record.name,
+        siteAccessNotes: record.siteAccessNotes,
+      }),
+      localizeMany(tasks, async (task) => {
+        const dto = MobileProjectTaskDTO.build(task);
+        const localized = await localizeProjectTask(dto);
+        return Object.assign(dto, {
+          title: localized.title,
+          description: localized.description ?? null,
+          localization: localized.localization,
+        });
+      }),
+      measurement
+        ? localizeProjectMeasurement({
+            id: measurement.id,
+            position: measurement.position,
+            remark: measurement.remark,
+            scaffoldType: measurement.scaffoldType,
+          })
+        : Promise.resolve(null),
+      pm
+        ? localizeUser({
+            id: pm.id,
+            firstName: pm.firstName,
+            lastName: pm.lastName,
+          })
+        : Promise.resolve(null),
+    ]);
+
+  const siteManager = pm
+    ? new EmployeeProjectSiteManagerDTO(
+        pm.id,
+        localizedPm?.firstName ?? pm.firstName,
+        localizedPm?.lastName ?? pm.lastName,
+        pm.phone,
+        pm.avatarUrl
+      )
+    : null;
+
+  const dto = new EmployeeProjectDetailDTO(
+    record.id,
+    localizedProject.name,
+    record.address,
+    record.city,
+    toCoordinates(
+      decimalToNumber(record.latitude),
+      decimalToNumber(record.longitude)
+    ),
+    record.siteAccessCode,
+    localizedProject.siteAccessNotes ?? null,
+    decimalToNumber(record.scaffoldArea),
+    localizedMeasurement?.position ?? measurement?.position ?? null,
+    new EmployeeProjectPhaseDTO(
+      phaseRow.id,
+      phaseRow.type,
+      phaseRow.status,
+      phaseRow.startDate ? phaseRow.startDate.toISOString() : null,
+      phaseRow.endDate ? phaseRow.endDate.toISOString() : null,
+      todayCrew ? decimalToNumber(todayCrew.hours) : null
+    ),
+    siteManager,
+    photoCount,
+    photos.map((row) => MobileAttachmentDTO.build(row)),
+    taskCount,
+    localizedTasks
+  );
+  dto.localization = localizedProject.localization;
+  return dto;
+};
+
+/**
+ * Lists PHOTO attachments for an employee-assigned project (View All).
+ *
+ * @param {TListEmployeeProjectChildServiceParams} params - Employee, project, pagination.
+ * @returns {Promise<{ items: MobileAttachmentDTO[]; total: number; page: number; limit: number }>}
+ */
+export const listEmployeeProjectPhotosService = async ({
+  project,
+  query,
+}: TListEmployeeProjectChildServiceParams): Promise<{
+  items: MobileAttachmentDTO[];
+  total: number;
+  page: number;
+  limit: number;
+}> => {
+  const { page, limit } = query as { page: number; limit: number };
+  const where = {
+    projectId: project.id,
+    category: AttachmentCategory.PHOTO,
+  };
+
+  const [total, rows] = await Promise.all([
+    prisma.attachment.count({ where }),
+    prisma.attachment.findMany({
+      where,
+      orderBy: [{ isCover: 'desc' }, { createdAt: 'desc' }],
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+  ]);
+
+  return {
+    items: rows.map((row) => MobileAttachmentDTO.build(row)),
+    total,
+    page,
+    limit,
+  };
+};
+
+/**
+ * Lists tasks assigned to the authenticated employee on a project.
+ *
+ * @param {TListEmployeeProjectChildServiceParams} params - Employee, project, query.
+ * @returns {Promise<{ items: MobileProjectTaskDTO[]; total: number; page: number; limit: number }>}
+ */
+export const listEmployeeProjectTasksService = async ({
+  user,
+  project,
+  query,
+}: TListEmployeeProjectChildServiceParams): Promise<{
+  items: MobileProjectTaskDTO[];
+  total: number;
+  page: number;
+  limit: number;
+}> => {
+  const { page, limit } = query as {
+    page: number;
+    limit: number;
+    status?: 'OPEN' | 'COMPLETED';
+  };
+  const status = 'status' in query ? query.status : undefined;
+
+  const where = {
+    projectId: project.id,
+    employeeId: user.id,
+    ...(status === 'OPEN'
+      ? { isCompleted: false }
+      : status === 'COMPLETED'
+        ? { isCompleted: true }
+        : {}),
+  };
+
+  const [total, tasks] = await Promise.all([
+    prisma.projectTask.count({ where }),
+    prisma.projectTask.findMany({
+      where,
+      include: {
+        employee: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            avatarUrl: true,
+          },
+        },
+      },
+      orderBy: [{ isCompleted: 'asc' }, { dueDate: 'asc' }, { createdAt: 'desc' }],
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+  ]);
+
+  const items = await localizeMany(tasks, async (task) => {
+    const dto = MobileProjectTaskDTO.build(task);
+    const localized = await localizeProjectTask(dto);
+    return Object.assign(dto, {
+      title: localized.title,
+      description: localized.description ?? null,
+      localization: localized.localization,
+    });
+  });
+
+  return { items, total, page, limit };
 };
 

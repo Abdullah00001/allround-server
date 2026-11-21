@@ -28,6 +28,7 @@ import {
   getCrewTimeService,
   getDashboardDataService,
   getEmployeeDashboardService,
+  getEmployeeProjectDetailService,
   getMapDataService,
   getMobileConfigService,
   getMobileInspectionByIdService,
@@ -40,6 +41,8 @@ import {
   getTimeTrackingSummaryService,
   getProfileStatsService,
   getScheduleService,
+  listEmployeeProjectPhotosService,
+  listEmployeeProjectTasksService,
   listMobileCustomersService,
   listMobileInspectionsService,
   listMobilePhasesService,
@@ -409,6 +412,87 @@ export const getTimeTrackingProjectsController = asyncHandler(
     res.status(200).json({
       success: true,
       message: 'Time tracking projects fetched successfully.',
+      meta,
+      data: items,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `GET /mobile/employee/projects/:projectId` (Assignment / Project Detail).
+ *
+ * @param {Request} req - Express request with trusted employee + project.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const getEmployeeProjectDetailController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const project = req.project as Project;
+    const data = await getEmployeeProjectDetailService({ user, project });
+
+    res.status(200).json({
+      success: true,
+      message: 'Employee project detail fetched successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `GET /mobile/employee/projects/:projectId/photos` (View All).
+ *
+ * @param {Request} req - Express request with trusted project + query.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const listEmployeeProjectPhotosController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const project = req.project as Project;
+    const query = req.validatedQuery as TGetProjectListQuery;
+    const { items, total, page, limit } =
+      await listEmployeeProjectPhotosService({ user, project, query });
+    const meta = buildPaginationMeta({ total, page, limit, req });
+
+    res.status(200).json({
+      success: true,
+      message: 'Project photos fetched successfully.',
+      meta,
+      data: items,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `GET /mobile/employee/projects/:projectId/tasks` (own assigned tasks).
+ *
+ * @param {Request} req - Express request with trusted project + query.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const listEmployeeProjectTasksController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const user = req.user as User;
+    const project = req.project as Project;
+    const query = req.validatedQuery as TGetProjectTasksQuery;
+    const { items, total, page, limit } = await listEmployeeProjectTasksService(
+      { user, project, query }
+    );
+    const meta = buildPaginationMeta({ total, page, limit, req });
+
+    res.status(200).json({
+      success: true,
+      message: 'Employee project tasks fetched successfully.',
       meta,
       data: items,
       traceId,

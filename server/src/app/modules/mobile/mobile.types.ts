@@ -622,3 +622,25 @@ export type TListMobileCustomersServiceParams = {
   query: TGetMobileCustomersQuery;
 };
 
+/**
+ * Service params for employee read-only project / assignment detail.
+ */
+export type TGetEmployeeProjectDetailServiceParams = {
+  /** Authenticated employee. */
+  user: User;
+  /** Trusted assigned project from middleware. */
+  project: Project;
+};
+
+/**
+ * Service params for employee project child lists (photos / own tasks).
+ */
+export type TListEmployeeProjectChildServiceParams = {
+  /** Authenticated employee. */
+  user: User;
+  /** Trusted assigned project from middleware. */
+  project: Project;
+  /** Validated page/limit (and optional task status). */
+  query: TGetProjectListQuery | TGetProjectTasksQuery;
+};
+
