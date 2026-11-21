@@ -963,14 +963,16 @@ export class MobileConfigDTO {
   /**
    * @param {Language} defaultLanguage - Company default language.
    * @param {Language[]} enabledLanguages - Languages enabled for the mobile UI.
+   * @param {Language} preferredLanguage - Authenticated user's UserPreference.language.
    * @param {boolean} allowEmployeeManualTime - Whether employees may submit manual time.
    * @param {boolean} allowSiteManagerCreateProject - Whether SMs may create projects from the field.
-   * @param {MobileLegalContentDTO[]} legalContents - Published legal documents.
+   * @param {MobileLegalContentDTO[]} legalContents - Published legal documents (localized via ALS).
    * @param {MobileEnumsDTO} enums - All API enum value lists for client validation.
    */
   constructor(
     public defaultLanguage: Language,
     public enabledLanguages: Language[],
+    public preferredLanguage: Language,
     public allowEmployeeManualTime: boolean,
     public allowSiteManagerCreateProject: boolean,
     public legalContents: MobileLegalContentDTO[],

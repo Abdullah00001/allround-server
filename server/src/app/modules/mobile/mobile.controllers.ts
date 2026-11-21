@@ -103,9 +103,10 @@ import {
  * @returns {Promise<void>}
  */
 export const getMobileConfigController = asyncHandler(
-  async (_req: Request, res: Response): Promise<void> => {
+  async (req: Request, res: Response): Promise<void> => {
     const traceId = getTraceId();
-    const data = await getMobileConfigService();
+    const user = req.user as User;
+    const data = await getMobileConfigService({ user });
 
     res.status(200).json({
       success: true,

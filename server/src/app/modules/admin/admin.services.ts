@@ -37,6 +37,7 @@ import {
 import { Language } from '@prisma/client';
 import { hashPassword } from '@/app/utils/password.utils';
 import { clearCompanyDefaultLanguageCache } from '@/app/middlewares/locale.middlewares';
+import { setLocale } from '@/app/configs/requestContext.configs';
 import {
   buildCsvDocument,
   buildExportFilename,
@@ -257,6 +258,10 @@ export const updateAdminProfileService = async ({
       });
     }
   });
+
+  if (language !== undefined) {
+    setLocale(language.toLowerCase().slice(0, 2));
+  }
 
   const refreshed = await prisma.user.findUniqueOrThrow({
     where: { id: user.id },

@@ -6,6 +6,7 @@ import {
   checkUserAccessTokenMiddleware,
   checkUserExistenceMiddleware,
 } from '@/app/modules/auth/auth.middlewares';
+import { syncLocaleFromAuthenticatedUserMiddleware } from '@/app/middlewares/locale.middlewares';
 import { changePasswordController } from '@/app/modules/settings/settings.controllers';
 import { checkCurrentPasswordMiddleware } from '@/app/modules/settings/settings.middlewares';
 import { changePasswordSchema } from '@/app/modules/settings/settings.schema';
@@ -14,12 +15,14 @@ const router = Router();
 
 /**
  * Mobile bearer auth (EMPLOYEE + SITE_MANAGER use the same chain).
+ * Syncs UserPreference.language into ALS after auth (alua parity).
  */
 const mobileAuth = [
   checkUserAccessTokenMiddleware,
   checkUserExistenceMiddleware,
   checkAccountStatus,
   checkDeviceSessionMiddleware,
+  syncLocaleFromAuthenticatedUserMiddleware,
 ] as const;
 
 /**

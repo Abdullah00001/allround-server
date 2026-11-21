@@ -8521,7 +8521,7 @@ paths:
     get:
       tags: [MobileConfig]
       summary: Get mobile app configuration
-      description: Returns company default/enabled languages, allowEmployeeManualTime, and LegalContent rows for Settings and Legal screens. Uses mobile bearerAuth chain.
+      description: Returns company default/enabled languages, the user's preferredLanguage, feature flags, enums, and LegalContent rows (localized from UserPreference). Uses mobile bearerAuth chain.
       operationId: getMobileConfig
       security: [{bearerAuth: []}]
       responses:
@@ -16878,6 +16878,7 @@ components:
       required:
         - defaultLanguage
         - enabledLanguages
+        - preferredLanguage
         - allowEmployeeManualTime
         - allowSiteManagerCreateProject
         - legalContents
@@ -16891,6 +16892,10 @@ components:
           items:
             type: string
             enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU]
+        preferredLanguage:
+          type: string
+          enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU]
+          description: Authenticated user's UserPreference.language (drives legal localization after auth)
         allowEmployeeManualTime:
           type: boolean
         allowSiteManagerCreateProject:

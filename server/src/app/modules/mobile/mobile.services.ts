@@ -18,6 +18,7 @@ import {
 } from '@prisma/client';
 import prisma from '@/app/configs/db.configs';
 import logger from '@/app/configs/logger.configs';
+import { setLocale } from '@/app/configs/requestContext.configs';
 import { triggerRawPushNotification } from '@/app/utils/notification.utils';
 import {
   aggregateLoggedHours,
@@ -330,13 +331,16 @@ const getLoggedHoursByProjectId = async (
 
 /**
  * Loads mobile app configuration for Settings / Legal screens.
- * Missing company profile falls back to safe defaults
- * (`DE`, `[DE, EN]`, manual time allowed).
+ * Legal bodies follow the request ALS locale (UserPreference after auth sync,
+ * or explicit `x-locale`). Missing company profile falls back to safe defaults.
  *
+ * @param {TMobileUserServiceParams} params - Authenticated user (for preferredLanguage).
  * @returns {Promise<MobileConfigDTO>} Config payload for the authenticated mobile client.
  */
-export const getMobileConfigService = async (): Promise<MobileConfigDTO> => {
-  const [profile, legalRows] = await Promise.all([
+export const getMobileConfigService = async ({
+  user,
+}: TMobileUserServiceParams): Promise<MobileConfigDTO> => {
+  const [profile, preference, legalRows] = await Promise.all([
     prisma.companyProfile.findUnique({
       where: { id: 'global' },
       select: {
@@ -345,6 +349,10 @@ export const getMobileConfigService = async (): Promise<MobileConfigDTO> => {
         allowEmployeeManualTime: true,
         allowSiteManagerCreateProject: true,
       },
+    }),
+    prisma.userPreference.findUnique({
+      where: { userId: user.id },
+      select: { language: true },
     }),
     prisma.legalContent.findMany({
       orderBy: { legalContentType: 'asc' },
@@ -396,6 +404,7 @@ export const getMobileConfigService = async (): Promise<MobileConfigDTO> => {
     profile?.enabledLanguages?.length
       ? profile.enabledLanguages
       : [Language.DE, Language.EN],
+    preference?.language ?? Language.EN,
     profile?.allowEmployeeManualTime ?? true,
     profile?.allowSiteManagerCreateProject ?? false,
     legalContents,
@@ -1230,6 +1239,11 @@ export const updateMobileProfileService = async ({
       });
     }
   });
+
+  // Alua parity: apply new preference to this request's ALS immediately.
+  if (language !== undefined) {
+    setLocale(language.toLowerCase().slice(0, 2));
+  }
 
   const refreshed = await prisma.user.findUniqueOrThrow({
     where: { id: user.id },

@@ -10,6 +10,7 @@ import {
   checkUserAccessTokenMiddleware,
   checkUserExistenceMiddleware,
 } from '@/app/modules/auth/auth.middlewares';
+import { syncLocaleFromAuthenticatedUserMiddleware } from '@/app/middlewares/locale.middlewares';
 import { checkInspectionExistenceMiddleware } from '@/app/modules/inspection/inspection.middlewares';
 import { checkPhaseExistenceMiddleware } from '@/app/modules/project/project.middlewares';
 import {
@@ -129,13 +130,15 @@ const router = Router();
 
 /**
  * Shared mobile bearer auth chain (no CSRF / admin middleware).
- * Mirrors the authenticated mobile session validation used by `/auth/logout`.
+ * After auth, applies `UserPreference.language` to ALS (alua/admin parity)
+ * unless the client sent an explicit `x-locale` / `?locale=` override.
  */
 const mobileAuth = [
   checkUserAccessTokenMiddleware,
   checkUserExistenceMiddleware,
   checkAccountStatus,
   checkDeviceSessionMiddleware,
+  syncLocaleFromAuthenticatedUserMiddleware,
 ] as const;
 
 /**
