@@ -1,9 +1,13 @@
 import { Absence, AbsenceType, User } from '@prisma/client';
+import type { ILocalizationMeta } from '@/app/services/translation/translation.types';
 
 /**
  * Nested user projection for absence responses.
  */
 export class AbsenceUserDTO {
+  /** Alua localization metadata for `firstName` / `lastName`. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - User UUID.
    * @param {string} firstName - First name.

@@ -33,6 +33,8 @@ import {
   localizeCustomer,
   localizeInspection,
   localizeMany,
+  localizeProject,
+  localizeProjectMeasurement,
 } from '@/app/services/translation/entityLocalizers';
 
 const enqueueInspectionPreTranslate = (
@@ -93,6 +95,62 @@ const localizeInspectionDto = async (dto: InspectionDTO) => {
   dto.customer.name = customerLocalized.name;
   dto.customer.localization = customerLocalized.localization;
   return dto;
+};
+
+const localizeConvertInspectionDto = async (
+  dto: ConvertInspectionDTO
+): Promise<ConvertInspectionDTO> => {
+  const [projectLocalized, clientLocalized, measurementLocalized] =
+    await Promise.all([
+      localizeProject({
+        id: dto.project.id,
+        name: dto.project.name,
+        siteAccessNotes: null,
+      }),
+      localizeCustomer({
+        id: dto.project.client.id,
+        name: dto.project.client.name,
+      }),
+      dto.measurement
+        ? localizeProjectMeasurement({
+            id: dto.measurement.id,
+            position: null,
+            remark: null,
+            scaffoldType: dto.measurement.scaffoldType,
+          })
+        : Promise.resolve(null),
+    ]);
+
+  const measurement =
+    dto.measurement && measurementLocalized
+      ? {
+          ...dto.measurement,
+          scaffoldType:
+            (measurementLocalized.scaffoldType as string | null) ??
+            dto.measurement.scaffoldType,
+          localization: measurementLocalized.localization,
+        }
+      : dto.measurement;
+
+  return Object.assign(dto, {
+    project: {
+      ...dto.project,
+      name: projectLocalized.name,
+      localization: projectLocalized.localization,
+      client: {
+        ...dto.project.client,
+        name: clientLocalized.name,
+        localization: clientLocalized.localization,
+      },
+      specs: measurement
+        ? {
+            ...dto.project.specs,
+            scaffoldType: measurement.scaffoldType,
+          }
+        : dto.project.specs,
+    },
+    measurement,
+  });
 };
 
 const photoInclude = {
@@ -689,11 +747,12 @@ export const convertInspectionToProjectService = async ({
     );
   }
 
-  return ConvertInspectionDTO.build(
+  const response = ConvertInspectionDTO.build(
     inspectionDto,
     result.project,
     result.converted.customer,
     result.phase,
     result.measurement
   );
+  return localizeConvertInspectionDto(response);
 };

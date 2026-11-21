@@ -1007,7 +1007,7 @@ Worker data keys typically include `title`, `body`/`message`, `type`, `click_act
 4. Cache **`data.enums`** and validate dropdowns against those lists (never invent statuses like `PLANNED`).  
 5. Render Privacy / Terms from `legalContents` — bodies follow the user’s preferred language after auth (Translation pipeline). Public `GET /legal/:type` still needs `x-locale` (no user session).  
 6. Optional override: send `x-locale` / `?locale=` to force a locale for one request (wins over preference).  
-7. **Alua `localization` meta** — translated entities include:
+7. **Alua `localization` meta (full system)** — every client-facing **employee / SM / admin** API that returns dynamic entity text includes:
 
 ```json
 "localization": {
@@ -1018,7 +1018,8 @@ Worker data keys typically include `title`, `body`/`message`, `type`, `click_act
 }
 ```
 
-   Applies to legal, notifications, projects, customers/contacts, inspections, tasks, notes, measurements, vehicles, users, and audit history (auth APIs excluded). Use `translationStatus` (`PENDING` / `PROCESSING` / `READY` / `FAILED`) to know when to refresh.
+   **Excluded:** `/auth/*`, `/recover/*`, password change, media binary, CSV exports, id-only deletes, static enums.  
+   Nested objects (customer on project, user on timelog, etc.) carry their own `localization` when they have translatable fields. Use `translationStatus` (`PENDING` / `PROCESSING` / `READY` / `FAILED`) to know when to refresh.
 
 ---
 

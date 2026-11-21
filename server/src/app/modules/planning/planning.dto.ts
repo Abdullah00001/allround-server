@@ -15,6 +15,7 @@ import {
 } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { formatUtcDay } from '@/app/modules/planning/planning.helpers';
+import type { ILocalizationMeta } from '@/app/services/translation/translation.types';
 
 /**
  * Converts a Prisma Decimal into a plain number.
@@ -28,6 +29,9 @@ const decimalToNumber = (value: Decimal): number => Number(value);
  * Compact user DTO for planning UI (name + avatar).
  */
 export class PlanningUserDTO {
+  /** Alua localization metadata for firstName/lastName. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - User UUID.
    * @param {string} firstName - First name.
@@ -63,6 +67,9 @@ export class PlanningUserDTO {
  * Compact vehicle DTO for planning UI.
  */
 export class PlanningVehicleDTO {
+  /** Alua localization metadata for name. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Vehicle UUID.
    * @param {string} name - Vehicle display name.
@@ -173,6 +180,9 @@ export class DailyPlanVehicleAssignmentDTO {
  * Customer reference nested under a daily plan project.
  */
 export class DailyPlanCustomerDTO {
+  /** Alua localization metadata for name. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Customer UUID.
    * @param {string} name - Customer name.
@@ -197,6 +207,9 @@ export class DailyPlanCustomerDTO {
  * Project summary nested under a daily plan phase.
  */
 export class DailyPlanProjectDTO {
+  /** Alua localization metadata for name. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Project UUID.
    * @param {string} name - Project name.
@@ -318,6 +331,9 @@ export class DailyPlanPhaseDTO {
  * Detailed employee resource status for the assign modal.
  */
 export class AvailableEmployeeResourceDTO {
+  /** Alua localization metadata for firstName/lastName. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - User UUID.
    * @param {string} firstName - First name.
@@ -353,6 +369,9 @@ export class AvailableEmployeeResourceDTO {
  * Detailed vehicle resource status for the assign modal.
  */
 export class AvailableVehicleResourceDTO {
+  /** Alua localization metadata for name. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Vehicle UUID.
    * @param {string} name - Vehicle name.
@@ -409,6 +428,9 @@ export class DailyPlanSummaryDTO {
  * Employee entry in the daily planning right sidebar.
  */
 export class DailyPlanSidebarEmployeeDTO {
+  /** Alua localization metadata for firstName/lastName. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - User UUID.
    * @param {string} firstName - First name.
@@ -433,6 +455,9 @@ export class DailyPlanSidebarEmployeeDTO {
  * Vehicle entry in the daily planning right sidebar.
  */
 export class DailyPlanSidebarVehicleDTO {
+  /** Alua localization metadata for name. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Vehicle UUID.
    * @param {string} name - Vehicle name.
@@ -523,6 +548,9 @@ export class WeeklyPlanDayCellDTO {
  * Worker row in weekly staff planning grid.
  */
 export class WeeklyPlanEmployeeDTO {
+  /** Alua localization metadata for firstName/lastName. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Worker UUID.
    * @param {string} firstName - First name.

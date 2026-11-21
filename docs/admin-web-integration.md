@@ -565,7 +565,7 @@ Content-Type: application/json
 
 Response `data`: `{ defaultLanguage, enabledLanguages, languages: [{ code, displayCode, name, locale, enabled, isDefault }] }`.
 
-Mobile bootstrap already exposes the same company flags via `GET /mobile/config` → `defaultLanguage` / `enabledLanguages`. Localized APIs honor preference / `x-locale` / `?locale=` against the 18 supported locales and return alua `localization` meta (`sourceLocale`, `displayedLocale`, `isTranslated`, `translationStatus`) on translated entities. Publishing legal content pre-translates into every enabled language. Auth/recover routes are excluded.
+Mobile bootstrap already exposes the same company flags via `GET /mobile/config` → `defaultLanguage` / `enabledLanguages`. **Full system:** every client-facing admin/employee/SM API that returns dynamic entity text includes alua `localization` meta (`sourceLocale`, `displayedLocale`, `isTranslated`, `translationStatus`), including nested entities. Locale from preference / `x-locale` / `?locale=`. Publishing legal content pre-translates into every enabled language. **Excluded:** `/auth/*`, `/recover/*`, password, media binary, CSV exports, id-only deletes.
 
 ### 3.6c Settings → Legal (LegalContent)
 

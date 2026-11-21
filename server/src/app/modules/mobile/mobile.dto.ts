@@ -49,8 +49,11 @@ const decimalToNumber = (value: Decimal | null | undefined): number | null => {
 export type TUpcomingTaskSiteManager = {
   id: string;
   name: string;
+  firstName: string;
+  lastName: string;
   phone: string | null;
   email: string | null;
+  localization?: ILocalizationMeta;
 };
 
 /**
@@ -61,6 +64,7 @@ export type TUpcomingTaskProject = {
   name: string;
   address: string;
   coordinates: { lat: number; lng: number } | null;
+  localization?: ILocalizationMeta;
 };
 
 /**
@@ -129,6 +133,9 @@ export class MobileDashboardStatsDTO {
  * Phase-centric project list card (one row per phase).
  */
 export class MobileProjectPhaseCardDTO {
+  /** Alua localization metadata for `projectName`. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} phaseId - Phase UUID.
    * @param {PhaseType} type - Phase type.
@@ -157,7 +164,12 @@ export class MobileProjectPhaseCardDTO {
     public projectId: string,
     public projectName: string,
     public coordinates: { lat: number; lng: number } | null,
-    public customer: { id: string; name: string; category: CustomerCategory },
+    public customer: {
+      id: string;
+      name: string;
+      category: CustomerCategory;
+      localization?: ILocalizationMeta;
+    },
     public assigneeName: string | null,
     public budgetedHours?: number,
     public totalLoggedHours?: number,
@@ -169,6 +181,9 @@ export class MobileProjectPhaseCardDTO {
  * Map pin for the mobile home map.
  */
 export class MobileMapPinDTO {
+  /** Alua localization metadata for `name` (project). */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Project UUID.
    * @param {string} name - Project name.
@@ -192,6 +207,7 @@ export type TMobileEmployeeDashboardUser = {
   lastName: string;
   role: Role;
   avatarUrl: string | null;
+  localization?: ILocalizationMeta;
 };
 
 /**
@@ -278,6 +294,9 @@ export type TMobileProjectDtoSource = {
  * Financial fields are only present for `SITE_MANAGER` via `getProjectDto`.
  */
 export class MobileProjectDTO {
+  /** Alua localization metadata for project `name` / site access notes. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Project UUID.
    * @param {string} name - Project name.
@@ -292,7 +311,11 @@ export class MobileProjectDTO {
     public id: string,
     public name: string,
     public address: string,
-    public customer: { id: string; name: string },
+    public customer: {
+      id: string;
+      name: string;
+      localization?: ILocalizationMeta;
+    },
     public phases: MobileProjectPhaseDTO[],
     public budgetedHours?: number,
     public totalLoggedHours?: number,
@@ -378,7 +401,12 @@ export class MobileSchedulePhaseDTO {
     public priority: Priority,
     public startDate: string,
     public endDate: string,
-    public project: { id: string; name: string; address: string }
+    public project: {
+      id: string;
+      name: string;
+      address: string;
+      localization?: ILocalizationMeta;
+    }
   ) {}
 }
 
@@ -418,11 +446,17 @@ export class EmployeeSchedulePhaseDTO {
     public priority: Priority,
     public startDate: string,
     public endDate: string,
-    public project: { id: string; name: string; address: string },
+    public project: {
+      id: string;
+      name: string;
+      address: string;
+      localization?: ILocalizationMeta;
+    },
     public siteManagers: Array<{
       id: string;
       firstName: string;
       lastName: string;
+      localization?: ILocalizationMeta;
     }>,
     public assignedHours: number
   ) {}
@@ -446,6 +480,9 @@ export class EmployeeScheduleDayDTO {
  * Map-tab pin for a project with an active phase.
  */
 export class MobileMapProjectDTO {
+  /** Alua localization metadata for `name` (project). */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Project UUID.
    * @param {string} name - Project name.
@@ -484,7 +521,12 @@ export class MobileCrewBreakdownDTO {
    * @param {boolean} synced - `true` when every included log has a `clientSyncId`.
    */
   constructor(
-    public user: { id: string; firstName: string; lastName: string },
+    public user: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      localization?: ILocalizationMeta;
+    },
     public totalHours: number,
     public synced: boolean
   ) {}
@@ -512,6 +554,9 @@ export class MobileCrewTimeDTO {
  * Mobile profile tab payload with weekly stats.
  */
 export class MobileProfileDTO {
+  /** Alua localization metadata for `firstName` / `lastName`. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - User UUID.
    * @param {string} firstName - First name.
@@ -579,6 +624,9 @@ export class MobileProfileDTO {
  * Nested user projection for crew-time responses.
  */
 export class MobileTimeLogUserDTO {
+  /** Alua localization metadata for `firstName` / `lastName`. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - User UUID.
    * @param {string} firstName - First name.
@@ -688,7 +736,11 @@ export class EmployeeTimeLogDTO {
     public netHours: number,
     public createdAt: string,
     public updatedAt: string,
-    public project: { id: string; name: string },
+    public project: {
+      id: string;
+      name: string;
+      localization?: ILocalizationMeta;
+    },
     public synced: boolean
   ) {}
 
@@ -733,6 +785,9 @@ export class EmployeeTimeLogDTO {
  * (`Start New Timer` / `Add Time Entry`).
  */
 export class MobileTimeTrackingProjectDTO {
+  /** Alua localization metadata for `name` (project). */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Project UUID (`projectId` for start/manual).
    * @param {string} name - Project display name.
@@ -791,6 +846,9 @@ export class MobileSyncResultDTO {
  * Mobile inspection DTO for Site Manager survey flows (no admin-only extras).
  */
 export class MobileInspectionDTO {
+  /** Alua localization metadata for translatable inspection fields. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Inspection UUID.
    * @param {string} siteTitle - Site title.
@@ -806,6 +864,7 @@ export class MobileInspectionDTO {
    * @param {InspectionStatus} status - Inspection status.
    * @param {string | null} projectId - Linked project after convert.
    * @param {{ id: string; name: string; category?: CustomerCategory }} customer - Customer summary.
+   * @param {{ id: string; firstName: string; lastName: string } | null} siteManager - Assigned site manager.
    * @param {string} createdAt - ISO creation timestamp.
    * @param {string} updatedAt - ISO update timestamp.
    * @param {{ id: string; name: string } | undefined} [convertedProject] - Project created when convertToProject ran.
@@ -825,6 +884,11 @@ export class MobileInspectionDTO {
     public status: InspectionStatus,
     public projectId: string | null,
     public customer: { id: string; name: string; category?: CustomerCategory },
+    public siteManager: {
+      id: string;
+      firstName: string;
+      lastName: string;
+    } | null,
     public createdAt: string,
     public updatedAt: string,
     public convertedProject?: { id: string; name: string }
@@ -834,6 +898,7 @@ export class MobileInspectionDTO {
    * Builds a mobile inspection DTO.
    *
    * @param {Inspection & { customer: { id: string; name: string; category?: CustomerCategory } }} inspection - Inspection with customer.
+   * @param {{ id: string; firstName: string; lastName: string } | null} [siteManager] - Optional site manager user.
    * @param {{ id: string; name: string } | undefined} [convertedProject] - Optional converted project summary.
    * @returns {MobileInspectionDTO} API-safe inspection object.
    */
@@ -841,6 +906,11 @@ export class MobileInspectionDTO {
     inspection: Inspection & {
       customer: { id: string; name: string; category?: CustomerCategory };
     },
+    siteManager: {
+      id: string;
+      firstName: string;
+      lastName: string;
+    } | null = null,
     convertedProject?: { id: string; name: string }
   ) {
     const linkedProject =
@@ -870,6 +940,7 @@ export class MobileInspectionDTO {
           ? { category: inspection.customer.category }
           : {}),
       },
+      siteManager,
       inspection.createdAt.toISOString(),
       inspection.updatedAt.toISOString(),
       linkedProject
@@ -897,7 +968,12 @@ export class MobileManagedPhaseDTO {
     public priority: Priority,
     public startDate: string | null,
     public endDate: string | null,
-    public project: { id: string; name: string; address: string }
+    public project: {
+      id: string;
+      name: string;
+      address: string;
+      localization?: ILocalizationMeta;
+    }
   ) {}
 }
 
@@ -1027,6 +1103,9 @@ export class MobileTaskEmployeeDTO {
  * Workforce row for the SM task-creation employee picker.
  */
 export class MobileProjectEmployeeDTO {
+  /** Alua localization metadata for `firstName` / `lastName`. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - User UUID (use as create-task `employeeId`).
    * @param {string} firstName - First name.
@@ -1512,6 +1591,9 @@ export class MobileProjectHistoryDTO {
  * Primary contact summary attached to a mobile customer card.
  */
 export class MobileCustomerPrimaryContactDTO {
+  /** Alua localization metadata for `name` / `role`. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Contact UUID.
    * @param {string} name - Contact full name.
@@ -1542,6 +1624,9 @@ export class MobileCustomerPrimaryContactDTO {
  * Mobile customer directory item.
  */
 export class MobileCustomerListItemDTO {
+  /** Alua localization metadata for `name`. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Customer UUID.
    * @param {string} name - Customer company or display name.

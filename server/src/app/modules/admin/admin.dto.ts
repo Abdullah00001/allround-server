@@ -1,5 +1,6 @@
 import { Language, Role, User, UserStatus } from '@prisma/client';
 import { LANGUAGE_CATALOG } from '@/const';
+import type { ILocalizationMeta } from '@/app/services/translation/translation.types';
 
 export class AdminDTO {
   constructor(
@@ -45,6 +46,9 @@ export class AdminSessionDTO {
  * Self-profile payload for the admin dashboard Settings / Profile screen.
  */
 export class AdminProfileDTO {
+  /** Alua localization metadata for `firstName` / `lastName`. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Admin user UUID.
    * @param {string} firstName - First name.

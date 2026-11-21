@@ -15,6 +15,7 @@ import {
   AvailableVehicleResourceDTO,
   DailyPlanBoardDTO,
   DailyPlanPhaseDTO,
+  DailyPlanProjectDTO,
   DailyPlanSidebarDTO,
   DailyPlanSidebarEmployeeDTO,
   DailyPlanSidebarVehicleDTO,
@@ -40,6 +41,14 @@ import {
   TUnassignVehicleServiceParams,
 } from '@/app/modules/planning/planning.types';
 import { triggerPushNotification } from '@/app/utils/notification.utils';
+import {
+  localizeCustomer,
+  localizeMany,
+  localizeProject,
+  localizeUser,
+  localizeVehicle,
+} from '@/app/services/translation/entityLocalizers';
+import type { ILocalizationMeta } from '@/app/services/translation/translation.types';
 
 const userSelect = {
   id: true,
@@ -54,6 +63,97 @@ const vehicleSelect = {
   plateNumber: true,
   imageUrl: true,
 } as const;
+
+const localizePlanningUser = async <
+  T extends {
+    id: string;
+    firstName: string;
+    lastName: string;
+    localization?: ILocalizationMeta;
+  },
+>(
+  dto: T
+): Promise<T> => {
+  const localized = await localizeUser({
+    id: dto.id,
+    firstName: dto.firstName,
+    lastName: dto.lastName,
+  });
+  dto.firstName = localized.firstName;
+  dto.lastName = localized.lastName;
+  dto.localization = localized.localization;
+  return dto;
+};
+
+const localizePlanningVehicle = async <
+  T extends { id: string; name: string; localization?: ILocalizationMeta },
+>(
+  dto: T
+): Promise<T> => {
+  const localized = await localizeVehicle({ id: dto.id, name: dto.name });
+  dto.name = localized.name;
+  dto.localization = localized.localization;
+  return dto;
+};
+
+const localizeDailyPlanProject = async (project: DailyPlanProjectDTO) => {
+  const localized = await localizeProject({
+    id: project.id,
+    name: project.name,
+  });
+  project.name = localized.name;
+  project.localization = localized.localization;
+  if (project.customer) {
+    const customerLocalized = await localizeCustomer({
+      id: project.customer.id,
+      name: project.customer.name,
+    });
+    project.customer.name = customerLocalized.name;
+    project.customer.localization = customerLocalized.localization;
+  }
+  if (project.siteManager) {
+    await localizePlanningUser(project.siteManager);
+  }
+  return project;
+};
+
+const localizeDailyPlanPhase = async (phase: DailyPlanPhaseDTO) => {
+  await localizeDailyPlanProject(phase.project);
+  await Promise.all([
+    ...phase.crewAssignments.map((assignment) =>
+      localizePlanningUser(assignment.user)
+    ),
+    ...phase.vehicleAssignments.map(async (assignment) => {
+      await localizePlanningUser(assignment.user);
+      await localizePlanningVehicle(assignment.vehicle);
+    }),
+  ]);
+  return phase;
+};
+
+const localizeDailyPlanBoard = async (board: DailyPlanBoardDTO) => {
+  board.phases = await localizeMany(board.phases, localizeDailyPlanPhase);
+  board.sidebar.employees = await localizeMany(
+    board.sidebar.employees,
+    localizePlanningUser
+  );
+  board.sidebar.vehicles = await localizeMany(
+    board.sidebar.vehicles,
+    localizePlanningVehicle
+  );
+  return board;
+};
+
+const localizeLocalizedProjectName = async (project: {
+  id: string;
+  name: string;
+}): Promise<string> => {
+  const localized = await localizeProject({
+    id: project.id,
+    name: project.name,
+  });
+  return localized.name;
+};
 
 /**
  * Loads the daily planning board for a calendar date.
@@ -165,7 +265,7 @@ export const getDailyPlanService = async ({
           select: {
             phase: {
               select: {
-                project: { select: { name: true } },
+                project: { select: { id: true, name: true } },
               },
             },
           },
@@ -219,19 +319,24 @@ export const getDailyPlanService = async ({
     }
   );
 
-  const sidebarVehicles: DailyPlanSidebarVehicleDTO[] = allVehicles.map(
-    (vehicle) => {
+  const sidebarVehicles: DailyPlanSidebarVehicleDTO[] = await Promise.all(
+    allVehicles.map(async (vehicle) => {
       const assignment = vehicle.assignments[0];
       const isAssigned = Boolean(assignment);
+      const project = assignment?.phase?.project;
+      const assignedProjectName =
+        project !== undefined
+          ? await localizeLocalizedProjectName(project)
+          : null;
       return new DailyPlanSidebarVehicleDTO(
         vehicle.id,
         vehicle.name,
         vehicle.plateNumber,
         vehicle.imageUrl,
         isAssigned ? 'ASSIGNED' : 'FREE',
-        assignment?.phase?.project?.name ?? null
+        assignedProjectName
       );
-    }
+    })
   );
 
   const summary = new DailyPlanSummaryDTO(
@@ -241,10 +346,12 @@ export const getDailyPlanService = async ({
     absentWorkers
   );
 
-  return new DailyPlanBoardDTO(
-    summary,
-    phases.map((phase) => DailyPlanPhaseDTO.build(phase)),
-    new DailyPlanSidebarDTO(sidebarEmployees, sidebarVehicles)
+  return localizeDailyPlanBoard(
+    new DailyPlanBoardDTO(
+      summary,
+      phases.map((phase) => DailyPlanPhaseDTO.build(phase)),
+      new DailyPlanSidebarDTO(sidebarEmployees, sidebarVehicles)
+    )
   );
 };
 
@@ -301,7 +408,9 @@ export const assignCrewService = async ({
     }
   );
 
-  return AssignCrewDTO.build(assignment);
+  const dto = AssignCrewDTO.build(assignment);
+  await localizePlanningUser(dto.user);
+  return dto;
 };
 
 /**
@@ -332,7 +441,10 @@ export const assignVehicleService = async ({
     },
   });
 
-  return AssignVehicleDTO.build(assignment);
+  const dto = AssignVehicleDTO.build(assignment);
+  await localizePlanningUser(dto.user);
+  await localizePlanningVehicle(dto.vehicle);
+  return dto;
 };
 
 /**
@@ -389,7 +501,7 @@ export const getAvailableResourcesService = async ({
             phaseId: true,
             phase: {
               select: {
-                project: { select: { name: true } },
+                project: { select: { id: true, name: true } },
               },
             },
           },
@@ -457,36 +569,49 @@ export const getAvailableResourcesService = async ({
     }
   );
 
-  const vehicleDtos: AvailableVehicleResourceDTO[] = vehicles.map((vehicle) => {
-    const assignment = vehicle.assignments[0];
-    const isAssigned = Boolean(assignment);
-    const isAssignedToPhase = query.phaseId
-      ? assignment?.phaseId === query.phaseId
-      : false;
+  const vehicleDtos: AvailableVehicleResourceDTO[] = await Promise.all(
+    vehicles.map(async (vehicle) => {
+      const assignment = vehicle.assignments[0];
+      const isAssigned = Boolean(assignment);
+      const isAssignedToPhase = query.phaseId
+        ? assignment?.phaseId === query.phaseId
+        : false;
 
-    let status: 'AVAILABLE' | 'ASSIGNED' | 'MAINTENANCE' = isAssigned
-      ? 'ASSIGNED'
-      : 'AVAILABLE';
-    let assignedProjectName: string | null = null;
+      const status: 'AVAILABLE' | 'ASSIGNED' | 'MAINTENANCE' = isAssigned
+        ? 'ASSIGNED'
+        : 'AVAILABLE';
+      let assignedProjectName: string | null = null;
 
-    if (isAssigned && !isAssignedToPhase) {
-      assignedProjectName = assignment?.phase?.project?.name
-        ? `On ${assignment.phase.project.name}`
-        : 'Assigned';
-    }
+      if (isAssigned && !isAssignedToPhase) {
+        const project = assignment?.phase?.project;
+        if (project) {
+          const localizedName = await localizeLocalizedProjectName(project);
+          assignedProjectName = `On ${localizedName}`;
+        } else {
+          assignedProjectName = 'Assigned';
+        }
+      }
 
-    return new AvailableVehicleResourceDTO(
-      vehicle.id,
-      vehicle.name,
-      vehicle.plateNumber,
-      vehicle.imageUrl,
-      status,
-      isAssignedToPhase,
-      assignedProjectName
-    );
-  });
+      const dto = new AvailableVehicleResourceDTO(
+        vehicle.id,
+        vehicle.name,
+        vehicle.plateNumber,
+        vehicle.imageUrl,
+        status,
+        isAssignedToPhase,
+        assignedProjectName
+      );
+      await localizePlanningVehicle(dto);
+      return dto;
+    })
+  );
 
-  return new AvailableResourcesDTO(employeeDtos, vehicleDtos);
+  const localizedEmployees = await localizeMany(
+    employeeDtos,
+    localizePlanningUser
+  );
+
+  return new AvailableResourcesDTO(localizedEmployees, vehicleDtos);
 };
 
 /**
@@ -643,6 +768,16 @@ export const getWeeklyPlanService = async ({
     );
   });
 
-  return new WeeklyPlanDTO(startDateStr, endDateStr, rangeDates, employeeRows);
+  const localizedEmployees = await localizeMany(
+    employeeRows,
+    localizePlanningUser
+  );
+
+  return new WeeklyPlanDTO(
+    startDateStr,
+    endDateStr,
+    rangeDates,
+    localizedEmployees
+  );
 };
 

@@ -10,11 +10,15 @@ import {
   calculateNetHours,
   sumBreakMinutes,
 } from '@/app/modules/timelog/timelog.helpers';
+import type { ILocalizationMeta } from '@/app/services/translation/translation.types';
 
 /**
  * Nested user projection for time-log responses.
  */
 export class TimeLogUserDTO {
+  /** Alua localization metadata for `firstName` / `lastName`. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - User UUID.
    * @param {string} firstName - First name.
@@ -44,12 +48,12 @@ export class TimeLogPhaseDTO {
   /**
    * @param {string} id - Phase UUID.
    * @param {PhaseType} type - Phase type.
-   * @param {{ id: string; name: string }} project - Parent project summary.
+   * @param {{ id: string; name: string; localization?: ILocalizationMeta }} project - Parent project summary.
    */
   constructor(
     public id: string,
     public type: PhaseType,
-    public project: { id: string; name: string }
+    public project: { id: string; name: string; localization?: ILocalizationMeta }
   ) {}
 
   /**

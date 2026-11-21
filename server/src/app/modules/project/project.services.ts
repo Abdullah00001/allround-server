@@ -665,23 +665,38 @@ export const listAdminPhasesService = async ({
     }),
   ]);
 
+  const localizeManagedPhaseProject = async (item: MobileManagedPhaseDTO) => {
+    const localized = await localizeProject({
+      id: item.project.id,
+      name: item.project.name,
+    });
+    item.project = {
+      ...item.project,
+      name: localized.name,
+      localization: localized.localization,
+    };
+    return item;
+  };
+
+  const items = phases.map(
+    (phase) =>
+      new MobileManagedPhaseDTO(
+        phase.id,
+        phase.type,
+        phase.status,
+        phase.priority,
+        phase.startDate ? phase.startDate.toISOString() : null,
+        phase.endDate ? phase.endDate.toISOString() : null,
+        {
+          id: phase.project.id,
+          name: phase.project.name,
+          address: phase.project.address,
+        }
+      )
+  );
+
   return {
-    items: phases.map(
-      (phase) =>
-        new MobileManagedPhaseDTO(
-          phase.id,
-          phase.type,
-          phase.status,
-          phase.priority,
-          phase.startDate ? phase.startDate.toISOString() : null,
-          phase.endDate ? phase.endDate.toISOString() : null,
-          {
-            id: phase.project.id,
-            name: phase.project.name,
-            address: phase.project.address,
-          }
-        )
-    ),
+    items: await localizeMany(items, localizeManagedPhaseProject),
     total,
     page,
     limit,
@@ -777,7 +792,22 @@ export const getAdminScheduleService = async ({
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, dayPhases]) => new MobileScheduleDayDTO(date, dayPhases));
 
-  return paginateArray(days, page, limit);
+  const localizedDays = await Promise.all(
+    days.map(async (day) => {
+      day.phases = await localizeMany(day.phases, async (phase) => {
+        const localized = await localizeProject({
+          id: phase.project.id,
+          name: phase.project.name,
+        });
+        phase.project.name = localized.name;
+        phase.project.localization = localized.localization;
+        return phase;
+      });
+      return day;
+    })
+  );
+
+  return paginateArray(localizedDays, page, limit);
 };
 
 /**
@@ -833,7 +863,14 @@ export const getAdminMapService = async ({
     );
   }
 
-  return paginateArray([...pinByProject.values()], page, limit);
+  const pins = await localizeMany([...pinByProject.values()], async (pin) => {
+    const localized = await localizeProject({ id: pin.id, name: pin.name });
+    pin.name = localized.name;
+    pin.localization = localized.localization;
+    return pin;
+  });
+
+  return paginateArray(pins, page, limit);
 };
 
 /**

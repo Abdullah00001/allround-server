@@ -9,6 +9,7 @@ import { hashPassword } from '@/app/utils/password.utils';
 import {
   ManagedUserDetailDTO,
   ManagedUserListItemDTO,
+  ManagedUserProjectDTO,
   ManagedUserSummaryDTO,
 } from '@/app/modules/user/user.dto';
 import {
@@ -21,6 +22,7 @@ import {
 import {
   enqueuePreTranslate,
   localizeMany,
+  localizeProject,
   localizeUser,
 } from '@/app/services/translation/entityLocalizers';
 import type { ILocalizationMeta } from '@/app/services/translation/translation.types';
@@ -42,6 +44,17 @@ const localizeManagedUserDto = async <
   });
   dto.firstName = localized.firstName;
   dto.lastName = localized.lastName;
+  dto.localization = localized.localization;
+  return dto;
+};
+
+const localizeManagedUserProjectDto = async (dto: ManagedUserProjectDTO) => {
+  const localized = await localizeProject({
+    id: dto.id,
+    name: dto.name,
+    siteAccessNotes: null,
+  });
+  dto.name = localized.name;
   dto.localization = localized.localization;
   return dto;
 };
@@ -199,7 +212,9 @@ export const getUserByIdService = async ({
     },
   });
 
-  return localizeManagedUserDto(ManagedUserDetailDTO.build(record));
+  const dto = await localizeManagedUserDto(ManagedUserDetailDTO.build(record));
+  await localizeMany(dto.assignedProjects, localizeManagedUserProjectDto);
+  return dto;
 };
 
 /**

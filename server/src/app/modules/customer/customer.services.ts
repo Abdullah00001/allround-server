@@ -4,6 +4,7 @@ import {
   CustomerContactDTO,
   CustomerDetailDTO,
   CustomerListItemDTO,
+  CustomerProjectDTO,
   CustomerSummaryDTO,
 } from '@/app/modules/customer/customer.dto';
 import {
@@ -18,6 +19,7 @@ import {
   localizeCustomer,
   localizeCustomerContact,
   localizeMany,
+  localizeProject,
 } from '@/app/services/translation/entityLocalizers';
 
 const localizeCustomerContactDto = async (dto: CustomerContactDTO) => {
@@ -47,11 +49,23 @@ const localizeCustomerSummaryDto = async (dto: CustomerSummaryDTO) => {
   return dto;
 };
 
+const localizeCustomerProjectDto = async (dto: CustomerProjectDTO) => {
+  const localized = await localizeProject({
+    id: dto.id,
+    name: dto.name,
+    siteAccessNotes: null,
+  });
+  dto.name = localized.name;
+  dto.localization = localized.localization;
+  return dto;
+};
+
 const localizeCustomerDetailDto = async (dto: CustomerDetailDTO) => {
   const localized = await localizeCustomer({ id: dto.id, name: dto.name });
   dto.name = localized.name;
   dto.localization = localized.localization;
   await localizeMany(dto.contacts, localizeCustomerContactDto);
+  await localizeMany(dto.projects, localizeCustomerProjectDto);
   return dto;
 };
 

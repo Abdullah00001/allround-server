@@ -8,6 +8,11 @@ import {
   TUpdateTimeLogServiceParams,
 } from '@/app/modules/timelog/timelog.types';
 import { triggerPushNotification } from '@/app/utils/notification.utils';
+import {
+  localizeMany,
+  localizeProject,
+  localizeUser,
+} from '@/app/services/translation/entityLocalizers';
 
 const timeLogInclude = {
   breaks: true,
@@ -20,6 +25,30 @@ const timeLogInclude = {
     },
   },
 } as const;
+
+const localizeTimeLogDto = async (dto: TimeLogDTO) => {
+  const userLocalized = await localizeUser({
+    id: dto.user.id,
+    firstName: dto.user.firstName,
+    lastName: dto.user.lastName,
+  });
+  dto.user.firstName = userLocalized.firstName;
+  dto.user.lastName = userLocalized.lastName;
+  dto.user.localization = userLocalized.localization;
+
+  const projectLocalized = await localizeProject({
+    id: dto.phase.project.id,
+    name: dto.phase.project.name,
+    siteAccessNotes: null,
+  });
+  dto.phase.project.name = projectLocalized.name;
+  dto.phase.project.localization = projectLocalized.localization;
+  return dto;
+};
+
+const buildLocalizedTimeLogDto = async (
+  timeLog: Parameters<typeof TimeLogDTO.build>[0]
+) => localizeTimeLogDto(TimeLogDTO.build(timeLog));
 
 /**
  * Lists time logs with filters, pagination, nested user/phase, and netHours.
@@ -69,8 +98,13 @@ export const listTimeLogsService = async ({
     }),
   ]);
 
+  const items = await localizeMany(
+    timeLogs.map(TimeLogDTO.build),
+    localizeTimeLogDto
+  );
+
   return {
-    items: timeLogs.map(TimeLogDTO.build),
+    items,
     total,
     page,
     limit,
@@ -117,7 +151,7 @@ export const createTimeLogService = async ({
     include: timeLogInclude,
   });
 
-  return TimeLogDTO.build(timeLog);
+  return buildLocalizedTimeLogDto(timeLog);
 };
 
 /**
@@ -144,7 +178,7 @@ export const approveTimeLogService = async ({
     { date: timeLog.startTime.toISOString().slice(0, 10) }
   );
 
-  return TimeLogDTO.build(updated);
+  return buildLocalizedTimeLogDto(updated);
 };
 
 /**
@@ -171,7 +205,7 @@ export const rejectTimeLogService = async ({
     { date: timeLog.startTime.toISOString().slice(0, 10) }
   );
 
-  return TimeLogDTO.build(updated);
+  return buildLocalizedTimeLogDto(updated);
 };
 
 /**
@@ -243,5 +277,5 @@ export const updateTimeLogService = async ({
     });
   });
 
-  return TimeLogDTO.build(updated);
+  return buildLocalizedTimeLogDto(updated);
 };

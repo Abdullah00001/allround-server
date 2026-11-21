@@ -7,7 +7,6 @@ import {
   getLegalContentService,
   updateLegalContentService,
 } from '@/app/modules/legal/legal.services';
-import { LegalContentDTO } from '@/app/modules/legal/legal.dto';
 import { TUpdateLegalContentPayload } from '@/app/modules/legal/legal.types';
 import { AuthErrorType } from '@/const';
 
@@ -81,12 +80,12 @@ export const updateLegalContentController = asyncHandler(
     const traceId = getTraceId();
     const type = req.params.type as LegalContentType;
     const { content } = req.body as TUpdateLegalContentPayload;
-    const row = await updateLegalContentService({ type, content });
+    const data = await updateLegalContentService({ type, content });
 
     res.status(200).json({
       success: true,
       message: 'Legal content updated successfully.',
-      data: LegalContentDTO.build(row),
+      data,
       traceId,
     });
     return;

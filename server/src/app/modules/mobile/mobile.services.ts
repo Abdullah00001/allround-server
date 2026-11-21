@@ -2,6 +2,7 @@ import {
   ActivityType,
   AttachmentCategory,
   CustomerCategory,
+  Inspection,
   InspectionStatus,
   Language,
   MeasurementUnit,
@@ -47,6 +48,7 @@ import {
   MobileMeasurementsListDTO,
   MobilePhaseDatesDTO,
   MobilePhaseTypeStatsDTO,
+  MobileProjectDTO,
   MobileProjectDetailDTO,
   MobileProjectHistoryDTO,
   MobileProjectNoteDTO,
@@ -144,6 +146,7 @@ import {
   localizeProjectTask,
   localizeUser,
 } from '@/app/services/translation/entityLocalizers';
+import type { ILocalizationMeta } from '@/app/services/translation/translation.types';
 
 const timeLogInclude = {
   breaks: true,
@@ -158,6 +161,114 @@ const ACTIVE_PHASE_STATUSES: PhaseStatus[] = [
   PhaseStatus.IN_PROGRESS,
   PhaseStatus.ORDER_CONFIRMED,
 ];
+
+type TMobileInspectionSiteManagerRef = {
+  id: string;
+  firstName: string;
+  lastName: string;
+};
+
+/**
+ * Loads a site-manager projection by user id, or null when absent.
+ *
+ * @param {string | null | undefined} siteManagerId - Optional user UUID.
+ * @returns {Promise<TMobileInspectionSiteManagerRef | null>} Site manager fields or null.
+ */
+const loadMobileInspectionSiteManager = async (
+  siteManagerId: string | null | undefined
+): Promise<TMobileInspectionSiteManagerRef | null> => {
+  if (!siteManagerId) return null;
+  return prisma.user.findUnique({
+    where: { id: siteManagerId },
+    select: { id: true, firstName: true, lastName: true },
+  });
+};
+
+/**
+ * Loads site managers for a set of ids in one query and returns a lookup map.
+ *
+ * @param {Array<string | null>} siteManagerIds - Possibly-null site manager ids.
+ * @returns {Promise<Map<string, TMobileInspectionSiteManagerRef>>} Id → user projection map.
+ */
+const loadMobileInspectionSiteManagersMap = async (
+  siteManagerIds: Array<string | null>
+): Promise<Map<string, TMobileInspectionSiteManagerRef>> => {
+  const uniqueIds = [
+    ...new Set(siteManagerIds.filter((id): id is string => !!id)),
+  ];
+  if (uniqueIds.length === 0) return new Map();
+  const users = await prisma.user.findMany({
+    where: { id: { in: uniqueIds } },
+    select: { id: true, firstName: true, lastName: true },
+  });
+  return new Map(users.map((user) => [user.id, user]));
+};
+
+const enqueueMobileInspectionPreTranslate = (
+  row: Pick<
+    Inspection,
+    | 'id'
+    | 'siteTitle'
+    | 'siteAccessInstructions'
+    | 'specialRequirements'
+    | 'scaffoldType'
+  >
+) => {
+  enqueuePreTranslate({
+    contentType: 'INSPECTION',
+    contentId: row.id,
+    fields: {
+      siteTitle: row.siteTitle,
+      siteAccessInstructions: row.siteAccessInstructions,
+      specialRequirements: row.specialRequirements,
+      scaffoldType: row.scaffoldType,
+    },
+  });
+};
+
+const localizeMobileInspectionDto = async (
+  dto: MobileInspectionDTO
+): Promise<MobileInspectionDTO> => {
+  const localized = await localizeInspection({
+    id: dto.id,
+    siteTitle: dto.siteTitle,
+    siteAccessInstructions: dto.siteAccessInstructions,
+    specialRequirements: dto.specialRequirements,
+    scaffoldType: dto.scaffoldType,
+  });
+
+  const customerLocalized = await localizeCustomer({
+    id: dto.customer.id,
+    name: dto.customer.name,
+  });
+
+  let siteManager = dto.siteManager;
+  if (dto.siteManager) {
+    const localizedUser = await localizeUser({
+      id: dto.siteManager.id,
+      firstName: dto.siteManager.firstName,
+      lastName: dto.siteManager.lastName,
+    });
+    siteManager = {
+      ...dto.siteManager,
+      firstName: localizedUser.firstName,
+      lastName: localizedUser.lastName,
+    };
+  }
+
+  return Object.assign(dto, {
+    siteTitle: localized.siteTitle,
+    siteAccessInstructions: localized.siteAccessInstructions ?? null,
+    specialRequirements: localized.specialRequirements ?? null,
+    scaffoldType: localized.scaffoldType ?? null,
+    localization: localized.localization,
+    customer: {
+      ...dto.customer,
+      name: customerLocalized.name,
+    },
+    siteManager,
+  });
+};
 
 /**
  * Known `CompanyProfile.siteManagerAccessRule` values.
@@ -189,6 +300,226 @@ const upcomingPhaseProjectSelect = {
     },
   },
 } as const;
+
+const localizeMobileProjectDto = async (
+  dto: MobileProjectDTO
+): Promise<MobileProjectDTO> => {
+  const localized = await localizeProject({
+    id: dto.id,
+    name: dto.name,
+    siteAccessNotes: null,
+  });
+  dto.name = localized.name;
+  dto.localization = localized.localization;
+  const custLocalized = await localizeCustomer({
+    id: dto.customer.id,
+    name: dto.customer.name,
+  });
+  dto.customer = {
+    ...dto.customer,
+    name: custLocalized.name,
+    localization: custLocalized.localization,
+  };
+  return dto;
+};
+
+const localizeProjectNameRef = async (ref: {
+  id: string;
+  name: string;
+  localization?: ILocalizationMeta;
+}) => {
+  const localized = await localizeProject({
+    id: ref.id,
+    name: ref.name,
+    siteAccessNotes: null,
+  });
+  ref.name = localized.name;
+  ref.localization = localized.localization;
+  return ref;
+};
+
+const localizeMobileProjectPhaseCard = async (card: MobileProjectPhaseCardDTO) => {
+  const localized = await localizeProject({
+    id: card.projectId,
+    name: card.projectName,
+    siteAccessNotes: null,
+  });
+  card.projectName = localized.name;
+  card.localization = localized.localization;
+  const custLocalized = await localizeCustomer({
+    id: card.customer.id,
+    name: card.customer.name,
+  });
+  card.customer = {
+    ...card.customer,
+    name: custLocalized.name,
+    localization: custLocalized.localization,
+  };
+  return card;
+};
+
+const localizeUpcomingTaskDto = async (task: MobileUpcomingTaskDTO) => {
+  await localizeProjectNameRef(task.project);
+  if (task.siteManager) {
+    const localized = await localizeUser({
+      id: task.siteManager.id,
+      firstName: task.siteManager.firstName,
+      lastName: task.siteManager.lastName,
+    });
+    task.siteManager = {
+      ...task.siteManager,
+      firstName: localized.firstName,
+      lastName: localized.lastName,
+      name: `${localized.firstName} ${localized.lastName}`.trim(),
+      localization: localized.localization,
+    };
+  }
+  return task;
+};
+
+const localizeEmployeeDashboardUser = async (
+  summary: MobileEmployeeDashboardDTO['user']
+) => {
+  const localized = await localizeUser({
+    id: summary.id,
+    firstName: summary.firstName,
+    lastName: summary.lastName,
+  });
+  return {
+    ...summary,
+    firstName: localized.firstName,
+    lastName: localized.lastName,
+    localization: localized.localization,
+  };
+};
+
+const localizeMobileCustomerListItem = async (dto: MobileCustomerListItemDTO) => {
+  const localized = await localizeCustomer({ id: dto.id, name: dto.name });
+  dto.name = localized.name;
+  dto.localization = localized.localization;
+  if (dto.primaryContact) {
+    const contactLocalized = await localizeCustomerContact({
+      id: dto.primaryContact.id,
+      name: dto.primaryContact.name,
+      role: dto.primaryContact.role,
+    });
+    dto.primaryContact = Object.assign(dto.primaryContact, {
+      name: contactLocalized.name,
+      role: contactLocalized.role,
+      localization: contactLocalized.localization,
+    });
+  }
+  return dto;
+};
+
+const localizeMobileManagedPhaseDto = async (dto: MobileManagedPhaseDTO) => {
+  await localizeProjectNameRef(dto.project);
+  return dto;
+};
+
+const localizeSchedulePhaseDto = async (phase: MobileSchedulePhaseDTO) => {
+  await localizeProjectNameRef(phase.project);
+  return phase;
+};
+
+const localizeEmployeeSchedulePhaseDto = async (phase: EmployeeSchedulePhaseDTO) => {
+  await localizeProjectNameRef(phase.project);
+  phase.siteManagers = await Promise.all(
+    phase.siteManagers.map(async (pm) => {
+      const localized = await localizeUser({
+        id: pm.id,
+        firstName: pm.firstName,
+        lastName: pm.lastName,
+      });
+      return {
+        ...pm,
+        firstName: localized.firstName,
+        lastName: localized.lastName,
+        localization: localized.localization,
+      };
+    })
+  );
+  return phase;
+};
+
+const localizeMapPinDto = async (pin: MobileMapPinDTO | MobileMapProjectDTO) => {
+  const localized = await localizeProject({
+    id: pin.id,
+    name: pin.name,
+    siteAccessNotes: null,
+  });
+  pin.name = localized.name;
+  pin.localization = localized.localization;
+  return pin;
+};
+
+const localizeTimeTrackingProjectDto = async (row: MobileTimeTrackingProjectDTO) => {
+  const localized = await localizeProject({
+    id: row.id,
+    name: row.name,
+    siteAccessNotes: null,
+  });
+  row.name = localized.name;
+  row.localization = localized.localization;
+  return row;
+};
+
+const localizeEmployeeTimeLogDto = async (dto: EmployeeTimeLogDTO) => {
+  await localizeProjectNameRef(dto.project);
+  return dto;
+};
+
+const localizeProjectEmployeeDto = async (dto: MobileProjectEmployeeDTO) => {
+  const localized = await localizeUser({
+    id: dto.id,
+    firstName: dto.firstName,
+    lastName: dto.lastName,
+  });
+  dto.firstName = localized.firstName;
+  dto.lastName = localized.lastName;
+  dto.localization = localized.localization;
+  return dto;
+};
+
+const localizeCrewBreakdownDto = async (row: MobileCrewBreakdownDTO) => {
+  const localized = await localizeUser({
+    id: row.user.id,
+    firstName: row.user.firstName,
+    lastName: row.user.lastName,
+  });
+  row.user = {
+    ...row.user,
+    firstName: localized.firstName,
+    lastName: localized.lastName,
+    localization: localized.localization,
+  };
+  return row;
+};
+
+const localizeTimeLogUserDto = async (log: MobileTimeLogDTO) => {
+  if (!log.user) return log;
+  const localized = await localizeUser({
+    id: log.user.id,
+    firstName: log.user.firstName,
+    lastName: log.user.lastName,
+  });
+  log.user.firstName = localized.firstName;
+  log.user.lastName = localized.lastName;
+  log.user.localization = localized.localization;
+  return log;
+};
+
+const localizeMobileProfileDto = async (dto: MobileProfileDTO) => {
+  const localized = await localizeUser({
+    id: dto.id,
+    firstName: dto.firstName,
+    lastName: dto.lastName,
+  });
+  dto.firstName = localized.firstName;
+  dto.lastName = localized.lastName;
+  dto.localization = localized.localization;
+  return dto;
+};
 
 /**
  * Formats a Date into a human-friendly string like "Tuesday, November 17".
@@ -557,6 +888,8 @@ export const getDashboardDataService = async ({
       pm
         ? {
             id: pm.id,
+            firstName: pm.firstName,
+            lastName: pm.lastName,
             name: `${pm.firstName} ${pm.lastName}`.trim(),
             phone: pm.phone ?? null,
             email: pm.email ?? null,
@@ -587,19 +920,26 @@ export const getDashboardDataService = async ({
   const tasksPage = paginateArray(upcomingTasks, page, limit);
   const pinsPage = paginateArray(allPins, page, limit);
 
+  const [localizedTasks, localizedPins, localizedDashboardUser] =
+    await Promise.all([
+      localizeMany(tasksPage.items, localizeUpcomingTaskDto),
+      localizeMany(pinsPage.items, localizeMapPinDto),
+      localizeEmployeeDashboardUser({
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        avatarUrl: user.avatarUrl ?? null,
+      }),
+    ]);
+
   const now = new Date();
   const employeeDashboard = new MobileEmployeeDashboardDTO(
-    {
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      role: user.role,
-      avatarUrl: user.avatarUrl ?? null,
-    },
+    localizedDashboardUser,
     now.toISOString(),
     formatDashboardDate(now),
     upcomingTasks.length,
-    tasksPage.items
+    localizedTasks
   );
 
   return {
@@ -611,8 +951,8 @@ export const getDashboardDataService = async ({
         countPlannedRunning(erectionPhases),
         countPlannedRunning(dismantlingPhases)
       ),
-      tasksPage.items,
-      pinsPage.items,
+      localizedTasks,
+      localizedPins,
       employeeDashboard
     ),
     total: Math.max(tasksPage.total, pinsPage.total),
@@ -683,6 +1023,8 @@ export const getEmployeeDashboardService = async ({
       pm
         ? {
             id: pm.id,
+            firstName: pm.firstName,
+            lastName: pm.lastName,
             name: `${pm.firstName} ${pm.lastName}`.trim(),
             phone: pm.phone ?? null,
             email: pm.email ?? null,
@@ -695,18 +1037,23 @@ export const getEmployeeDashboardService = async ({
   const now = new Date();
   const tasksPage = paginateArray(upcomingTasks, page, limit);
 
-  const employeeDashboard = new MobileEmployeeDashboardDTO(
-    {
+  const [localizedTasks, localizedDashboardUser] = await Promise.all([
+    localizeMany(tasksPage.items, localizeUpcomingTaskDto),
+    localizeEmployeeDashboardUser({
       id: user.id,
       firstName: user.firstName,
       lastName: user.lastName,
       role: user.role,
       avatarUrl: user.avatarUrl ?? null,
-    },
+    }),
+  ]);
+
+  const employeeDashboard = new MobileEmployeeDashboardDTO(
+    localizedDashboardUser,
     now.toISOString(),
     formatDashboardDate(now),
     upcomingTasks.length,
-    tasksPage.items
+    localizedTasks
   );
 
   return {
@@ -1110,7 +1457,8 @@ export const getMyProjectsService = async ({
     );
   }
 
-  return paginateArray(cards, page, limit);
+  const localizedCards = await localizeMany(cards, localizeMobileProjectPhaseCard);
+  return paginateArray(localizedCards, page, limit);
 };
 
 /**
@@ -1211,12 +1559,14 @@ export const getProfileStatsService = async ({
     );
   }
 
-  return MobileProfileDTO.build(
-    user,
-    preference?.language ?? Language.EN,
-    hoursThisWeek,
-    activeProjectsCount,
-    completedProjectsCount
+  return localizeMobileProfileDto(
+    MobileProfileDTO.build(
+      user,
+      preference?.language ?? Language.EN,
+      hoursThisWeek,
+      activeProjectsCount,
+      completedProjectsCount
+    )
   );
 };
 
@@ -1263,6 +1613,17 @@ export const updateMobileProfileService = async ({
     where: { id: user.id },
   });
 
+  if (firstName !== undefined || lastName !== undefined) {
+    enqueuePreTranslate({
+      contentType: 'USER',
+      contentId: refreshed.id,
+      fields: {
+        firstName: refreshed.firstName,
+        lastName: refreshed.lastName,
+      },
+    });
+  }
+
   return getProfileStatsService({ user: refreshed });
 };
 
@@ -1308,10 +1669,11 @@ export const startTimerService = async ({
 
   const loggedByProject = await getLoggedHoursByProjectId([project.id]);
 
-  return new MobileStartTimerDTO(
-    MobileTimeLogDTO.build(timeLog),
+  const projectDto = await localizeMobileProjectDto(
     getProjectDto(project, user.role, loggedByProject.get(project.id) ?? 0)
   );
+
+  return new MobileStartTimerDTO(MobileTimeLogDTO.build(timeLog), projectDto);
 };
 
 /**
@@ -1479,8 +1841,13 @@ export const getEmployeeTimeLogsService = async ({
     }),
   ]);
 
+  const items = await localizeMany(
+    timeLogs.map(EmployeeTimeLogDTO.build),
+    localizeEmployeeTimeLogDto
+  );
+
   return {
-    items: timeLogs.map(EmployeeTimeLogDTO.build),
+    items,
     total,
     page,
     limit,
@@ -1602,17 +1969,20 @@ export const getTimeTrackingProjectsService = async ({
     }),
   ]);
 
-  const items = projects
-    .filter((project) => project.phases.length > 0)
-    .map((project) => {
-      const phase = selectPrimaryPhase(project.phases);
-      return new MobileTimeTrackingProjectDTO(
-        project.id,
-        project.name,
-        phase.id,
-        phase.type
-      );
-    });
+  const items = await localizeMany(
+    projects
+      .filter((project) => project.phases.length > 0)
+      .map((project) => {
+        const phase = selectPrimaryPhase(project.phases);
+        return new MobileTimeTrackingProjectDTO(
+          project.id,
+          project.name,
+          phase.id,
+          phase.type
+        );
+      }),
+    localizeTimeTrackingProjectDto
+  );
 
   return { items, total, page, limit };
 };
@@ -1705,14 +2075,19 @@ export const getCrewTimeService = async ({
     limit
   );
 
+  const [localizedCrew, localizedLogs] = await Promise.all([
+    localizeMany(crewBreakdown, localizeCrewBreakdownDto),
+    localizeMany(logsPage.items, localizeTimeLogUserDto),
+  ]);
+
   return {
     data: new MobileCrewTimeDTO(
       totalLoggedHours,
       hoursByActivity.map(
         (row) => new MobileHoursByActivityDTO(row.activityType, row.hours)
       ),
-      crewBreakdown,
-      logsPage.items
+      localizedCrew,
+      localizedLogs
     ),
     total: logsPage.total,
     page,
@@ -1858,6 +2233,10 @@ export const getEmployeeScheduleService = async ({
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, dayPhases]) => new EmployeeScheduleDayDTO(date, dayPhases));
 
+  for (const day of days) {
+    day.phases = await localizeMany(day.phases, localizeEmployeeSchedulePhaseDto);
+  }
+
   return paginateArray(days, page, limit);
 };
 
@@ -1954,6 +2333,9 @@ export const getScheduleService = async ({
   }
 
   const days = buildScheduleDayBuckets(byDate, rangeStart, rangeEndExclusive);
+  for (const day of days) {
+    day.phases = await localizeMany(day.phases, localizeSchedulePhaseDto);
+  }
   return paginateArray(days, page, limit);
 };
 
@@ -2020,7 +2402,11 @@ export const getMapDataService = async ({
     );
   }
 
-  return paginateArray([...pinByProject.values()], page, limit);
+  const localizedPins = await localizeMany(
+    [...pinByProject.values()],
+    localizeMapPinDto
+  );
+  return paginateArray(localizedPins, page, limit);
 };
 
 /**
@@ -2152,10 +2538,24 @@ export const listMobileInspectionsService = async ({
     }),
   ]);
 
-  return {
-    items: inspections.map((inspection) =>
-      MobileInspectionDTO.build(inspection)
+  const siteManagers = await loadMobileInspectionSiteManagersMap(
+    inspections.map((item) => item.siteManagerId)
+  );
+
+  const items = await localizeMany(
+    inspections.map((inspection) =>
+      MobileInspectionDTO.build(
+        inspection,
+        inspection.siteManagerId
+          ? (siteManagers.get(inspection.siteManagerId) ?? null)
+          : null
+      )
     ),
+    localizeMobileInspectionDto
+  );
+
+  return {
+    items,
     total,
     page,
     limit,
@@ -2179,7 +2579,9 @@ export const getMobileInspectionByIdService = async ({
     },
   });
 
-  return MobileInspectionDTO.build(record);
+  const siteManager = await loadMobileInspectionSiteManager(record.siteManagerId);
+  const dto = MobileInspectionDTO.build(record, siteManager);
+  return localizeMobileInspectionDto(dto);
 };
 
 /**
@@ -2226,7 +2628,14 @@ export const completeMobileInspectionService = async ({
           customer: { select: { id: true, name: true, category: true } },
         },
       });
-      return { inspection: updated, project: null as { id: string; name: string } | null };
+      return {
+        inspection: updated,
+        project: null as {
+          id: string;
+          name: string;
+          siteAccessNotes: string | null;
+        } | null,
+      };
     }
 
     const project = await tx.project.create({
@@ -2286,14 +2695,38 @@ export const completeMobileInspectionService = async ({
 
     return {
       inspection: updated,
-      project: { id: project.id, name: project.name },
+      project: {
+        id: project.id,
+        name: project.name,
+        siteAccessNotes: project.siteAccessNotes,
+      },
     };
   });
 
-  return MobileInspectionDTO.build(
-    result.inspection,
-    result.project ?? undefined
+  const siteManager = await loadMobileInspectionSiteManager(
+    result.inspection.siteManagerId
   );
+  const dto = await localizeMobileInspectionDto(
+    MobileInspectionDTO.build(
+      result.inspection,
+      siteManager,
+      result.project ? { id: result.project.id, name: result.project.name } : undefined
+    )
+  );
+
+  enqueueMobileInspectionPreTranslate(result.inspection);
+  if (result.project) {
+    enqueuePreTranslate({
+      contentType: 'PROJECT',
+      contentId: result.project.id,
+      fields: {
+        name: result.project.name,
+        siteAccessNotes: result.project.siteAccessNotes,
+      },
+    });
+  }
+
+  return dto;
 };
 
 /**
@@ -2346,8 +2779,8 @@ export const listMobilePhasesService = async ({
     }),
   ]);
 
-  return {
-    items: phases.map(
+  const items = await localizeMany(
+    phases.map(
       (phase) =>
         new MobileManagedPhaseDTO(
           phase.id,
@@ -2363,6 +2796,11 @@ export const listMobilePhasesService = async ({
           }
         )
     ),
+    localizeMobileManagedPhaseDto
+  );
+
+  return {
+    items,
     total,
     page,
     limit,
@@ -2416,18 +2854,20 @@ export const updateMobilePhaseStatusService = async ({
     return nextPhase;
   });
 
-  return new MobileManagedPhaseDTO(
-    updated.id,
-    updated.type,
-    updated.status,
-    updated.priority,
-    updated.startDate ? updated.startDate.toISOString() : null,
-    updated.endDate ? updated.endDate.toISOString() : null,
-    {
-      id: updated.project.id,
-      name: updated.project.name,
-      address: updated.project.address,
-    }
+  return localizeMobileManagedPhaseDto(
+    new MobileManagedPhaseDTO(
+      updated.id,
+      updated.type,
+      updated.status,
+      updated.priority,
+      updated.startDate ? updated.startDate.toISOString() : null,
+      updated.endDate ? updated.endDate.toISOString() : null,
+      {
+        id: updated.project.id,
+        name: updated.project.name,
+        address: updated.project.address,
+      }
+    )
   );
 };
 
@@ -2491,8 +2931,13 @@ export const listProjectEmployeesService = async ({
     }),
   ]);
 
+  const items = await localizeMany(
+    rows.map((row) => MobileProjectEmployeeDTO.build(row)),
+    localizeProjectEmployeeDto
+  );
+
   return {
-    items: rows.map((row) => MobileProjectEmployeeDTO.build(row)),
+    items,
     total,
     page,
     limit,
@@ -3399,6 +3844,81 @@ export const createMobileProjectService = async ({
     },
   });
 
+  const isNewCustomer = payload.customer.mode !== 'EXISTING';
+  const scaffoldAreaValue =
+    payload.scaffoldSpecification?.area ?? payload.scaffoldArea;
+  const scaffoldHeight = payload.scaffoldSpecification?.height;
+  const scaffoldType = payload.scaffoldSpecification?.type;
+
+  const [primaryContact, latestNote, seedMeasurement] = await Promise.all([
+    prisma.customerContact.findFirst({
+      where: { customerId: created.customerId, isPrimary: true },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true, name: true, role: true },
+    }),
+    payload.note
+      ? prisma.projectNote.findFirst({
+          where: { projectId: created.id },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true, content: true },
+        })
+      : Promise.resolve(null),
+    scaffoldAreaValue !== undefined ||
+    scaffoldHeight !== undefined ||
+    scaffoldType !== undefined
+      ? prisma.projectMeasurement.findFirst({
+          where: { projectId: created.id },
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            position: true,
+            remark: true,
+            scaffoldType: true,
+          },
+        })
+      : Promise.resolve(null),
+  ]);
+
+  if (isNewCustomer) {
+    const customerRow = await prisma.customer.findUniqueOrThrow({
+      where: { id: created.customerId },
+      select: { id: true, name: true },
+    });
+    enqueuePreTranslate({
+      contentType: 'CUSTOMER',
+      contentId: customerRow.id,
+      fields: { name: customerRow.name },
+    });
+  }
+
+  if (primaryContact) {
+    enqueuePreTranslate({
+      contentType: 'CUSTOMER_CONTACT',
+      contentId: primaryContact.id,
+      fields: { name: primaryContact.name, role: primaryContact.role },
+    });
+  }
+
+  if (latestNote) {
+    enqueuePreTranslate({
+      contentType: 'PROJECT_NOTE',
+      contentId: latestNote.id,
+      fields: { content: latestNote.content },
+    });
+  }
+
+  if (seedMeasurement) {
+    enqueuePreTranslate({
+      contentType: 'PROJECT_MEASUREMENT',
+      contentId: seedMeasurement.id,
+      fields: {
+        position: seedMeasurement.position,
+        remark: seedMeasurement.remark,
+        scaffoldType: seedMeasurement.scaffoldType,
+      },
+    });
+  }
+
   return getMobileProjectByIdService({ user, project: created });
 };
 
@@ -3582,6 +4102,13 @@ export const getMobileProjectByIdService = async ({
   );
 
   dto.localization = localizedProject.localization;
+  Object.assign(dto.customer, { localization: localizedCustomer.localization });
+  if (primary && localizedContact && dto.customer.primaryContact) {
+    Object.assign(dto.customer.primaryContact, {
+      name: localizedContact.name,
+      localization: localizedContact.localization,
+    });
+  }
   return dto;
 };
 
@@ -3685,6 +4212,7 @@ export const listProjectHistoryService = async ({
         ...dto.user,
         firstName: localizedUser.firstName,
         lastName: localizedUser.lastName,
+        localization: localizedUser.localization,
       },
     });
   });
@@ -3866,8 +4394,13 @@ export const listMobileCustomersService = async ({
     }),
   ]);
 
+  const items = await localizeMany(
+    customers.map(MobileCustomerListItemDTO.build),
+    localizeMobileCustomerListItem
+  );
+
   return {
-    items: customers.map(MobileCustomerListItemDTO.build),
+    items,
     total,
     page,
     limit,

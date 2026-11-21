@@ -42,6 +42,22 @@ import {
   buildCsvDocument,
   buildExportFilename,
 } from '@/app/modules/admin/admin.export.utils';
+import {
+  enqueuePreTranslate,
+  localizeUser,
+} from '@/app/services/translation/entityLocalizers';
+
+const localizeAdminProfileDto = async (dto: AdminProfileDTO) => {
+  const localized = await localizeUser({
+    id: dto.id,
+    firstName: dto.firstName,
+    lastName: dto.lastName,
+  });
+  dto.firstName = localized.firstName;
+  dto.lastName = localized.lastName;
+  dto.localization = localized.localization;
+  return dto;
+};
 
 /**
  * Admin login: update lastLoginAt, issue tokens, register Redis refresh session.
@@ -223,7 +239,9 @@ export const getAdminProfileService = async ({
     select: { language: true },
   });
 
-  return AdminProfileDTO.build(user, preference?.language ?? Language.EN);
+  return localizeAdminProfileDto(
+    AdminProfileDTO.build(user, preference?.language ?? Language.EN)
+  );
 };
 
 /**
@@ -266,6 +284,17 @@ export const updateAdminProfileService = async ({
   const refreshed = await prisma.user.findUniqueOrThrow({
     where: { id: user.id },
   });
+
+  if (firstName !== undefined || lastName !== undefined) {
+    enqueuePreTranslate({
+      contentType: 'USER',
+      contentId: refreshed.id,
+      fields: {
+        firstName: refreshed.firstName,
+        lastName: refreshed.lastName,
+      },
+    });
+  }
 
   return getAdminProfileService({ user: refreshed });
 };

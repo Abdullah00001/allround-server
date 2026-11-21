@@ -21,6 +21,8 @@ const decimalToNumber = (value: Decimal): number => Number(value);
  * Compact project reference for user detail assignments.
  */
 export class ManagedUserProjectDTO {
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Project UUID.
    * @param {string} name - Project name.

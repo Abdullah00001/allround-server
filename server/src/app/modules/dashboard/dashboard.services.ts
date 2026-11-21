@@ -20,6 +20,61 @@ import {
   toUtcDayEnd,
 } from '@/app/modules/planning/planning.helpers';
 import { paginateArray } from '@/app/utils/pagination.utils';
+import {
+  localizeCustomer,
+  localizeMany,
+  localizeProject,
+  localizeUser,
+} from '@/app/services/translation/entityLocalizers';
+
+const localizeDashboardMapPin = async (pin: AdminDashboardMapPinDTO) => {
+  const localized = await localizeProject({
+    id: pin.projectId,
+    name: pin.name,
+  });
+  pin.name = localized.name;
+  pin.localization = localized.localization;
+  return pin;
+};
+
+const localizeTodaysOperation = async (
+  row: AdminTodaysOperationDTO,
+  manager: {
+    id: string;
+    firstName: string;
+    lastName: string;
+  } | null
+) => {
+  const projectLocalized = await localizeProject({
+    id: row.projectId,
+    name: row.projectName,
+  });
+  row.projectName = projectLocalized.name;
+  row.projectLocalization = projectLocalized.localization;
+
+  if (row.customerId) {
+    const customerLocalized = await localizeCustomer({
+      id: row.customerId,
+      name: row.customerName,
+    });
+    row.customerName = customerLocalized.name;
+    row.customerLocalization = customerLocalized.localization;
+  }
+
+  if (manager) {
+    const managerLocalized = await localizeUser({
+      id: manager.id,
+      firstName: manager.firstName,
+      lastName: manager.lastName,
+    });
+    row.managerId = manager.id;
+    row.managerName =
+      `${managerLocalized.firstName} ${managerLocalized.lastName}`.trim();
+    row.managerLocalization = managerLocalized.localization;
+  }
+
+  return row;
+};
 
 const ACTIVE_PHASE_STATUSES: PhaseStatus[] = [
   PhaseStatus.IN_PROGRESS,
@@ -168,12 +223,14 @@ export const getAdminDashboardService = async ({
           select: {
             id: true,
             name: true,
-            customer: { select: { name: true } },
+            customer: { select: { id: true, name: true } },
             projectManagers: {
               take: 1,
               orderBy: { assignedAt: 'asc' },
               select: {
-                user: { select: { firstName: true, lastName: true } },
+                user: {
+                  select: { id: true, firstName: true, lastName: true },
+                },
               },
             },
           },
@@ -201,7 +258,10 @@ export const getAdminDashboardService = async ({
     );
   }
 
-  const pins = [...pinByProject.values()];
+  const pins = await localizeMany(
+    [...pinByProject.values()],
+    localizeDashboardMapPin
+  );
   let erectionPins = 0;
   let standingPins = 0;
   let dismantlingPins = 0;
@@ -211,20 +271,23 @@ export const getAdminDashboardService = async ({
     else if (pin.phaseType === PhaseType.DISMANTLING) dismantlingPins += 1;
   }
 
-  const operations = todayPhases.map((phase) => {
-    const manager = phase.project.projectManagers[0]?.user;
-    return new AdminTodaysOperationDTO(
-      phase.id,
-      phase.project.id,
-      phase.project.name,
-      phase.project.customer.name,
-      manager ? `${manager.firstName} ${manager.lastName}` : null,
-      phase.type,
-      phase.crewAssignments.length
-    );
-  });
-
-  const operationsPage = paginateArray(operations, page, limit);
+  const localizedOperations = await Promise.all(
+    todayPhases.map(async (phase) => {
+      const manager = phase.project.projectManagers[0]?.user ?? null;
+      const row = new AdminTodaysOperationDTO(
+        phase.id,
+        phase.project.id,
+        phase.project.name,
+        phase.project.customer.name,
+        manager ? `${manager.firstName} ${manager.lastName}` : null,
+        phase.type,
+        phase.crewAssignments.length
+      );
+      row.customerId = phase.project.customer.id;
+      return localizeTodaysOperation(row, manager);
+    })
+  );
+  const operationsPage = paginateArray(localizedOperations, page, limit);
 
   return {
     data: new AdminDashboardDTO(

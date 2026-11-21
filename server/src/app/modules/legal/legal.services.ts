@@ -1,4 +1,3 @@
-import { LegalContent } from '@prisma/client';
 import prisma from '@/app/configs/db.configs';
 import logger from '@/app/configs/logger.configs';
 import { LegalContentDTO } from '@/app/modules/legal/legal.dto';
@@ -59,7 +58,20 @@ export const getAdminLegalContentService = async ({
     where: { legalContentType: type },
   });
   if (!row) return LegalContentDTO.empty(type);
-  return LegalContentDTO.build(row);
+
+  const base = LegalContentDTO.build(row);
+  const localized = await localizeLegalContent({
+    id: row.id,
+    content: base.content,
+  });
+
+  return new LegalContentDTO(
+    row.id,
+    row.legalContentType,
+    localized.content,
+    row.updatedAt,
+    localized.localization
+  );
 };
 
 /**
@@ -67,12 +79,12 @@ export const getAdminLegalContentService = async ({
  * Invalidates stale translations and pre-translates into enabled company languages.
  *
  * @param {TUpdateLegalContentServiceParams} params - Type and HTML/markdown body.
- * @returns {Promise<LegalContent>} Upserted Prisma row.
+ * @returns {Promise<LegalContentDTO>} Upserted row with localization meta (source locale).
  */
 export const updateLegalContentService = async ({
   type,
   content,
-}: TUpdateLegalContentServiceParams): Promise<LegalContent> => {
+}: TUpdateLegalContentServiceParams): Promise<LegalContentDTO> => {
   const legalContent = await prisma.legalContent.upsert({
     where: { legalContentType: type },
     update: { content },
@@ -99,5 +111,16 @@ export const updateLegalContentService = async ({
     logger.error('Failed to pre-translate legal content:', err);
   });
 
-  return legalContent;
+  const localized = await localizeLegalContent({
+    id: legalContent.id,
+    content: legalContent.content,
+  });
+
+  return new LegalContentDTO(
+    legalContent.id,
+    legalContent.legalContentType,
+    localized.content,
+    legalContent.updatedAt,
+    localized.localization
+  );
 };

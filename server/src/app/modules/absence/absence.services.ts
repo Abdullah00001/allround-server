@@ -5,10 +5,26 @@ import {
   TDeleteAbsenceServiceParams,
   TListAbsencesServiceParams,
 } from '@/app/modules/absence/absence.types';
+import {
+  localizeMany,
+  localizeUser,
+} from '@/app/services/translation/entityLocalizers';
 
 const absenceInclude = {
   user: { select: { id: true, firstName: true, lastName: true } },
 } as const;
+
+const localizeAbsenceDto = async (dto: AbsenceDTO) => {
+  const localized = await localizeUser({
+    id: dto.user.id,
+    firstName: dto.user.firstName,
+    lastName: dto.user.lastName,
+  });
+  dto.user.firstName = localized.firstName;
+  dto.user.lastName = localized.lastName;
+  dto.user.localization = localized.localization;
+  return dto;
+};
 
 /**
  * Lists absences with optional user and overlapping date-range filters.
@@ -50,8 +66,13 @@ export const listAbsencesService = async ({
     }),
   ]);
 
+  const items = await localizeMany(
+    absences.map(AbsenceDTO.build),
+    localizeAbsenceDto
+  );
+
   return {
-    items: absences.map(AbsenceDTO.build),
+    items,
     total,
     page,
     limit,
@@ -79,7 +100,7 @@ export const createAbsenceService = async ({
     include: absenceInclude,
   });
 
-  return AbsenceDTO.build(absence);
+  return localizeAbsenceDto(AbsenceDTO.build(absence));
 };
 
 /**

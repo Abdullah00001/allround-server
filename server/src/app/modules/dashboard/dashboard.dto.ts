@@ -1,4 +1,5 @@
 import { PhaseType } from '@prisma/client';
+import type { ILocalizationMeta } from '@/app/services/translation/translation.types';
 
 /**
  * KPI counters for the admin home dashboard cards.
@@ -42,6 +43,9 @@ export class AdminDashboardMapCountsDTO {
  * Admin map pin for a project with an active phase.
  */
 export class AdminDashboardMapPinDTO {
+  /** Alua localization metadata for project name. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} projectId - Project UUID.
    * @param {string} name - Project name.
@@ -74,6 +78,17 @@ export class AdminDashboardMapDTO {
  * One row in the "Today's operations" table.
  */
 export class AdminTodaysOperationDTO {
+  /** Alua localization metadata for projectName. */
+  projectLocalization?: ILocalizationMeta;
+  /** Customer UUID (for translation lookups). */
+  customerId?: string;
+  /** Alua localization metadata for customerName. */
+  customerLocalization?: ILocalizationMeta;
+  /** Primary project manager user id when present. */
+  managerId?: string | null;
+  /** Alua localization metadata for managerName. */
+  managerLocalization?: ILocalizationMeta;
+
   /**
    * @param {string} phaseId - Phase UUID.
    * @param {string} projectId - Project UUID.

@@ -92,6 +92,8 @@ export class CustomerContactDTO {
  * Compact linked-project DTO for customer detail views.
  */
 export class CustomerProjectDTO {
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Project UUID.
    * @param {string} name - Project name.
