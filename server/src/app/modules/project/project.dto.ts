@@ -12,6 +12,7 @@ import {
   TProjectCrewMemberRef,
   TProjectCustomerRef,
 } from '@/app/modules/project/project.types';
+import type { ILocalizationMeta } from '@/app/services/translation/translation.types';
 
 /**
  * Converts a Prisma Decimal (or null) into a plain number (or null).
@@ -28,6 +29,8 @@ const decimalToNumber = (value: Decimal | null | undefined): number | null => {
  * Nested customer reference DTO for project responses.
  */
 export class ProjectCustomerDTO {
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Customer UUID.
    * @param {string} name - Customer display name.
@@ -150,6 +153,8 @@ export class HoursByActivityDTO {
  * Project list-item DTO with customer name and all phases.
  */
 export class ProjectListItemDTO {
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Project UUID.
    * @param {string} name - Project name.
@@ -200,6 +205,8 @@ export class ProjectListItemDTO {
  * Project detail DTO including hour aggregates and assigned crew.
  */
 export class ProjectDetailDTO {
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Project UUID.
    * @param {string} customerId - Linked customer UUID.
@@ -282,6 +289,8 @@ export class ProjectDetailDTO {
  * Lightweight project summary returned after master-data updates.
  */
 export class ProjectSummaryDTO {
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Project UUID.
    * @param {string} customerId - Linked customer UUID.
@@ -351,6 +360,8 @@ export class AdminProjectAssigneeDTO {
  * Admin Projects card-view row (one card per phase, matching mobile phase cards + admin extras).
  */
 export class AdminProjectPhaseCardDTO {
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} phaseId - Phase UUID.
    * @param {PhaseType} type - Phase type.
@@ -385,7 +396,12 @@ export class AdminProjectPhaseCardDTO {
     public address: string,
     public city: string | null,
     public coordinates: { lat: number; lng: number } | null,
-    public customer: { id: string; name: string; category: CustomerCategory },
+    public customer: {
+      id: string;
+      name: string;
+      category: CustomerCategory;
+      localization?: ILocalizationMeta;
+    },
     public assigneeName: string | null,
     public assignedCrew: AdminProjectAssigneeDTO[],
     public coverUrl: string | null,

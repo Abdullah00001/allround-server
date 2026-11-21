@@ -7,6 +7,7 @@ import {
   ProjectPhase,
 } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
+import type { ILocalizationMeta } from '@/app/services/translation/translation.types';
 
 /**
  * Customer record including nested contacts.
@@ -44,6 +45,8 @@ const decimalToNumber = (value: Decimal | null): number | null => {
  * Sanitized contact person DTO (excludes customerId internals beyond need).
  */
 export class CustomerContactDTO {
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Contact UUID.
    * @param {string} name - Contact full name.
@@ -125,6 +128,8 @@ export class CustomerProjectDTO {
  * List-row customer DTO (no nested contacts/projects; includes contactsCount).
  */
 export class CustomerListItemDTO {
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Customer UUID.
    * @param {string} name - Customer name.
@@ -174,6 +179,8 @@ export class CustomerListItemDTO {
  * Intentionally omits `deletedAt`.
  */
 export class CustomerDetailDTO {
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Customer UUID.
    * @param {string} name - Customer name.
@@ -226,6 +233,8 @@ export class CustomerDetailDTO {
  * Intentionally omits `deletedAt`.
  */
 export class CustomerSummaryDTO {
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Customer UUID.
    * @param {string} name - Customer name.

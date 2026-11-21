@@ -26,10 +26,17 @@ import {
   AdminProjectListDTO,
   AdminProjectPhaseCardDTO,
   AdminProjectTabCountsDTO,
+  ProjectCustomerDTO,
   ProjectDetailDTO,
   ProjectPhaseDTO,
   ProjectSummaryDTO,
 } from '@/app/modules/project/project.dto';
+import {
+  enqueuePreTranslate,
+  localizeCustomer,
+  localizeMany,
+  localizeProject,
+} from '@/app/services/translation/entityLocalizers';
 import {
   aggregateLoggedHours,
   calculateDurationDays,
@@ -49,6 +56,72 @@ import {
   TUpdatePhaseStatusServiceParams,
   TUpdateProjectServiceParams,
 } from '@/app/modules/project/project.types';
+
+const localizeProjectCustomerRef = async (customer: ProjectCustomerDTO) => {
+  const localized = await localizeCustomer({
+    id: customer.id,
+    name: customer.name,
+  });
+  customer.name = localized.name;
+  customer.localization = localized.localization;
+  return customer;
+};
+
+const applyProjectLocalization = async <
+  T extends ProjectSummaryDTO | ProjectDetailDTO,
+>(
+  dto: T
+): Promise<T> => {
+  const localized = await localizeProject({
+    id: dto.id,
+    name: dto.name,
+    siteAccessNotes: dto.siteAccessNotes,
+  });
+  dto.name = localized.name;
+  if (localized.siteAccessNotes !== undefined) {
+    dto.siteAccessNotes = localized.siteAccessNotes as string | null;
+  }
+  dto.localization = localized.localization;
+  await localizeProjectCustomerRef(dto.customer);
+  return dto;
+};
+
+const localizeAdminProjectCard = async (card: AdminProjectPhaseCardDTO) => {
+  const localized = await localizeProject({
+    id: card.projectId,
+    name: card.projectName,
+    siteAccessNotes: null,
+  });
+  card.projectName = localized.name;
+  card.localization = localized.localization;
+  const custLocalized = await localizeCustomer({
+    id: card.customer.id,
+    name: card.customer.name,
+  });
+  card.customer = {
+    ...card.customer,
+    name: custLocalized.name,
+    localization: custLocalized.localization,
+  };
+  return card;
+};
+
+const enqueueProjectPreTranslate = (
+  id: string,
+  fields: { name?: string; siteAccessNotes?: string | null }
+) => {
+  const payload: Record<string, string | null | undefined> = {};
+  if (fields.name !== undefined) payload.name = fields.name;
+  if (fields.siteAccessNotes !== undefined) {
+    payload.siteAccessNotes = fields.siteAccessNotes;
+  }
+  if (Object.keys(payload).length === 0) return;
+  enqueuePreTranslate({
+    contentType: 'PROJECT',
+    contentId: id,
+    fields: payload,
+  });
+};
 
 /** Active phase statuses used for admin map pins (mobile parity). */
 const ACTIVE_PHASE_STATUSES: PhaseStatus[] = [
@@ -534,8 +607,13 @@ export const listProjectsService = async ({
     limit
   );
 
+  const localizedItems = await localizeMany(
+    pageSlice.items,
+    localizeAdminProjectCard
+  );
+
   return {
-    data: new AdminProjectListDTO(pageSlice.items, tabCounts),
+    data: new AdminProjectListDTO(localizedItems, tabCounts),
     total: pageSlice.total,
     page: pageSlice.page,
     limit: pageSlice.limit,
@@ -825,12 +903,14 @@ export const getProjectByIdService = async ({
     crewById.set(assignment.user.id, assignment.user);
   }
 
-  return ProjectDetailDTO.build(
+  const dto = ProjectDetailDTO.build(
     record,
     totalLoggedHours,
     hoursByActivity,
     [...crewById.values()]
   );
+
+  return applyProjectLocalization(dto);
 };
 
 /**
@@ -940,7 +1020,14 @@ export const updateProjectService = async ({
     },
   });
 
-  return ProjectSummaryDTO.build(updated);
+  enqueueProjectPreTranslate(updated.id, {
+    ...(rest.name !== undefined ? { name: updated.name } : {}),
+    ...(rest.siteAccessNotes !== undefined
+      ? { siteAccessNotes: updated.siteAccessNotes }
+      : {}),
+  });
+
+  return applyProjectLocalization(ProjectSummaryDTO.build(updated));
 };
 
 /**

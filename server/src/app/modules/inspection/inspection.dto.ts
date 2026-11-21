@@ -12,6 +12,7 @@ import {
   TInspectionCustomerRef,
   TInspectionSiteManagerRef,
 } from '@/app/modules/inspection/inspection.types';
+import type { ILocalizationMeta } from '@/app/services/translation/translation.types';
 
 /**
  * Converts a Prisma Decimal (or null) into a plain number (or null).
@@ -28,6 +29,8 @@ const decimalToNumber = (value: Decimal | null): number | null => {
  * Nested customer reference DTO for inspection responses.
  */
 export class InspectionCustomerDTO {
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Customer UUID.
    * @param {string} name - Customer display name.
@@ -157,6 +160,8 @@ export class InspectionTabCountsDTO {
  * Omits `deletedAt`.
  */
 export class InspectionDTO {
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Inspection UUID.
    * @param {string} customerId - Linked customer UUID.

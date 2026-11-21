@@ -1,7 +1,6 @@
 import { LegalContent } from '@prisma/client';
 import prisma from '@/app/configs/db.configs';
 import logger from '@/app/configs/logger.configs';
-import { getLocale } from '@/app/configs/requestContext.configs';
 import { LegalContentDTO } from '@/app/modules/legal/legal.dto';
 import {
   TGetAdminLegalContentServiceParams,
@@ -10,16 +9,15 @@ import {
 } from '@/app/modules/legal/legal.types';
 import {
   computeSourceHash,
-  getOrTranslateContent,
   invalidateStaleTranslations,
   preTranslateContent,
 } from '@/app/services/translation/translation.service';
+import { localizeLegalContent } from '@/app/services/translation/entityLocalizers';
 import { TRANSLATION_CONFIG } from '@/const';
 
 /**
  * Fetches published legal content by type for public / unauthenticated clients.
- * Localizes `content` to the active request locale when a translation exists
- * (or enqueues async translation and returns source meanwhile).
+ * Localizes `content` to the active request locale (alua `localization` meta).
  *
  * @param {TGetLegalContentServiceParams} params - Legal content type.
  * @returns {Promise<LegalContentDTO | null>} DTO or null when missing.
@@ -32,26 +30,18 @@ export const getLegalContentService = async ({
   });
   if (!row) return null;
 
-  const targetLocale = getLocale();
-  const sourceLocale = TRANSLATION_CONFIG.DEFAULT_LOCALE;
-
-  const translationResult = await getOrTranslateContent({
-    contentType: 'LEGAL_CONTENT',
-    contentId: row.id,
-    sourceLocale,
-    targetLocale,
-    fields: { content: row.content },
+  const base = LegalContentDTO.build(row);
+  const localized = await localizeLegalContent({
+    id: row.id,
+    content: base.content,
   });
 
-  const localizedContent =
-    typeof translationResult.fields.content === 'string'
-      ? translationResult.fields.content
-      : row.content;
-
   return new LegalContentDTO(
+    row.id,
     row.legalContentType,
-    localizedContent,
-    row.updatedAt
+    localized.content,
+    row.updatedAt,
+    localized.localization
   );
 };
 

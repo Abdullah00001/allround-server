@@ -7,6 +7,7 @@ import {
   UserStatus,
 } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
+import type { ILocalizationMeta } from '@/app/services/translation/translation.types';
 
 /**
  * Converts a Prisma Decimal into a plain number.
@@ -77,6 +78,8 @@ export class ManagedUserTimeLogDTO {
  * User list-item DTO with assignment counts (never includes passwordHash).
  */
 export class ManagedUserListItemDTO {
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - User UUID.
    * @param {string} firstName - First name.
@@ -141,6 +144,8 @@ export class ManagedUserListItemDTO {
  * User summary DTO returned after create/update (never includes passwordHash).
  */
 export class ManagedUserSummaryDTO {
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - User UUID.
    * @param {string} firstName - First name.
@@ -198,6 +203,8 @@ export class ManagedUserSummaryDTO {
  * User detail DTO including assigned projects and recent time logs.
  */
 export class ManagedUserDetailDTO {
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - User UUID.
    * @param {string} firstName - First name.

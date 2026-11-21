@@ -125,8 +125,20 @@ import {
   TUpdateProjectNoteServiceParams,
 } from '@/app/modules/mobile/mobile.types';
 import { paginateArray } from '@/app/utils/pagination.utils';
-import { localizeFields } from '@/app/services/translation/localize.helper';
-import { TRANSLATION_CONFIG } from '@/const';
+import {
+  enqueuePreTranslate,
+  localizeAuditLog,
+  localizeCustomer,
+  localizeCustomerContact,
+  localizeInspection,
+  localizeLegalContent,
+  localizeMany,
+  localizeProject,
+  localizeProjectMeasurement,
+  localizeProjectNote,
+  localizeProjectTask,
+  localizeUser,
+} from '@/app/services/translation/entityLocalizers';
 
 const timeLogInclude = {
   breaks: true,
@@ -367,18 +379,15 @@ export const getMobileConfigService = async ({
 
   const legalContents = await Promise.all(
     legalRows.map(async (row) => {
-      const { fields } = await localizeFields({
-        contentType: 'LEGAL_CONTENT',
-        contentId: row.id,
-        fields: { content: row.content },
-        sourceLocale: TRANSLATION_CONFIG.DEFAULT_LOCALE,
+      const localized = await localizeLegalContent({
+        id: row.id,
+        content: row.content,
       });
-      const localizedContent =
-        typeof fields.content === 'string' ? fields.content : row.content;
       return new MobileLegalContentDTO(
         row.legalContentType,
-        localizedContent,
-        row.updatedAt.toISOString()
+        localized.content,
+        row.updatedAt.toISOString(),
+        localized.localization
       );
     })
   );
@@ -2518,12 +2527,21 @@ export const listProjectTasksService = async ({
     orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
   });
 
+  const localizeTaskDto = async (
+    task: (typeof tasks)[number]
+  ): Promise<MobileProjectTaskDTO> => {
+    const dto = MobileProjectTaskDTO.build(task);
+    const localized = await localizeProjectTask(dto);
+    return Object.assign(dto, {
+      title: localized.title,
+      description: localized.description ?? null,
+      localization: localized.localization,
+    });
+  };
+
   if (status === 'OPEN' || status === 'COMPLETED') {
-    const sliced = paginateArray(
-      tasks.map((task) => MobileProjectTaskDTO.build(task)),
-      page,
-      limit
-    );
+    const localizedTasks = await localizeMany(tasks, localizeTaskDto);
+    const sliced = paginateArray(localizedTasks, page, limit);
     return {
       data: sliced.items,
       total: sliced.total,
@@ -2532,12 +2550,14 @@ export const listProjectTasksService = async ({
     };
   }
 
-  const open = tasks
-    .filter((task) => !task.isCompleted)
-    .map((task) => MobileProjectTaskDTO.build(task));
-  const completed = tasks
-    .filter((task) => task.isCompleted)
-    .map((task) => MobileProjectTaskDTO.build(task));
+  const open = await localizeMany(
+    tasks.filter((task) => !task.isCompleted),
+    localizeTaskDto
+  );
+  const completed = await localizeMany(
+    tasks.filter((task) => task.isCompleted),
+    localizeTaskDto
+  );
   const openPage = paginateArray(open, page, limit);
   const completedPage = paginateArray(completed, page, limit);
 
@@ -2576,7 +2596,19 @@ export const createProjectTaskService = async ({
     },
   });
 
-  return MobileProjectTaskDTO.build(task);
+  enqueuePreTranslate({
+    contentType: 'PROJECT_TASK',
+    contentId: task.id,
+    fields: { title: task.title, description: task.description },
+  });
+
+  const dto = MobileProjectTaskDTO.build(task);
+  const localized = await localizeProjectTask(dto);
+  return Object.assign(dto, {
+    title: localized.title,
+    description: localized.description ?? null,
+    localization: localized.localization,
+  });
 };
 
 /**
@@ -2598,7 +2630,13 @@ export const toggleProjectTaskService = async ({
     },
   });
 
-  return MobileProjectTaskDTO.build(updated);
+  const dto = MobileProjectTaskDTO.build(updated);
+  const localized = await localizeProjectTask(dto);
+  return Object.assign(dto, {
+    title: localized.title,
+    description: localized.description ?? null,
+    localization: localized.localization,
+  });
 };
 
 /**
@@ -2650,11 +2688,19 @@ export const listProjectMeasurementsService = async ({
     (aggregate._sum.area ? Number(aggregate._sum.area) : 0).toFixed(2)
   );
 
+  const items = await localizeMany(rows, async (row) => {
+    const dto = MobileMeasurementDTO.build(row);
+    const localized = await localizeProjectMeasurement(dto);
+    return Object.assign(dto, {
+      position: localized.position ?? null,
+      remark: localized.remark ?? null,
+      scaffoldType: localized.scaffoldType ?? null,
+      localization: localized.localization,
+    });
+  });
+
   return {
-    data: new MobileMeasurementsListDTO(
-      rows.map((row) => MobileMeasurementDTO.build(row)),
-      totalArea
-    ),
+    data: new MobileMeasurementsListDTO(items, totalArea),
     total,
     page,
     limit,
@@ -2702,7 +2748,24 @@ export const createProjectMeasurementService = async ({
     return created;
   });
 
-  return MobileMeasurementDTO.build(measurement);
+  enqueuePreTranslate({
+    contentType: 'PROJECT_MEASUREMENT',
+    contentId: measurement.id,
+    fields: {
+      position: measurement.position,
+      remark: measurement.remark,
+      scaffoldType: measurement.scaffoldType,
+    },
+  });
+
+  const dto = MobileMeasurementDTO.build(measurement);
+  const localized = await localizeProjectMeasurement(dto);
+  return Object.assign(dto, {
+    position: localized.position ?? null,
+    remark: localized.remark ?? null,
+    scaffoldType: localized.scaffoldType ?? null,
+    localization: localized.localization,
+  });
 };
 
 /**
@@ -2765,8 +2828,17 @@ export const listProjectNotesService = async ({
     }),
   ]);
 
+  const items = await localizeMany(notes, async (note) => {
+    const dto = MobileProjectNoteDTO.build(note);
+    const localized = await localizeProjectNote(dto);
+    return Object.assign(dto, {
+      content: localized.content,
+      localization: localized.localization,
+    });
+  });
+
   return {
-    items: notes.map((note) => MobileProjectNoteDTO.build(note)),
+    items,
     total,
     page,
     limit,
@@ -2795,7 +2867,19 @@ export const createProjectNoteService = async ({
       author: { select: { id: true, firstName: true, lastName: true } },
     },
   });
-  return MobileProjectNoteDTO.build(note);
+
+  enqueuePreTranslate({
+    contentType: 'PROJECT_NOTE',
+    contentId: note.id,
+    fields: { content: note.content },
+  });
+
+  const dto = MobileProjectNoteDTO.build(note);
+  const localized = await localizeProjectNote(dto);
+  return Object.assign(dto, {
+    content: localized.content,
+    localization: localized.localization,
+  });
 };
 
 /**
@@ -2911,7 +2995,26 @@ export const updateMobileProjectService = async ({
     include: { phases: { orderBy: { createdAt: 'desc' } } },
   });
 
-  return MobileProjectSettingsDTO.build(refreshed);
+  enqueuePreTranslate({
+    contentType: 'PROJECT',
+    contentId: refreshed.id,
+    fields: {
+      name: refreshed.name,
+      siteAccessNotes: refreshed.siteAccessNotes,
+    },
+  });
+
+  const dto = MobileProjectSettingsDTO.build(refreshed);
+  const localized = await localizeProject({
+    id: dto.id,
+    name: dto.name,
+    siteAccessNotes: dto.siteAccessNotes,
+  });
+  return Object.assign(dto, {
+    name: localized.name,
+    siteAccessNotes: localized.siteAccessNotes ?? null,
+    localization: localized.localization,
+  });
 };
 
 /**
@@ -3282,6 +3385,15 @@ export const createMobileProjectService = async ({
     where: { id: projectId },
   });
 
+  enqueuePreTranslate({
+    contentType: 'PROJECT',
+    contentId: created.id,
+    fields: {
+      name: created.name,
+      siteAccessNotes: created.siteAccessNotes,
+    },
+  });
+
   return getMobileProjectByIdService({ user, project: created });
 };
 
@@ -3378,15 +3490,41 @@ export const getMobileProjectByIdService = async ({
     return max;
   }, null);
 
-  return new MobileProjectDetailDTO(
+  const [localizedProject, localizedCustomer, localizedContact, localizedInspection] =
+    await Promise.all([
+      localizeProject({
+        id: record.id,
+        name: record.name,
+        siteAccessNotes: record.siteAccessNotes,
+      }),
+      localizeCustomer({
+        id: record.customer.id,
+        name: record.customer.name,
+      }),
+      primary
+        ? localizeCustomerContact({
+            id: primary.id,
+            name: primary.name,
+            role: primary.role,
+          })
+        : Promise.resolve(null),
+      nextInspection
+        ? localizeInspection({
+            id: nextInspection.id,
+            siteTitle: nextInspection.siteTitle,
+          })
+        : Promise.resolve(null),
+    ]);
+
+  const dto = new MobileProjectDetailDTO(
     record.id,
-    record.name,
+    localizedProject.name,
     toCoordinates(
       decimalToNumber(record.latitude),
       decimalToNumber(record.longitude)
     ),
     record.siteAccessCode,
-    record.siteAccessNotes,
+    localizedProject.siteAccessNotes ?? null,
     {
       area: decimalToNumber(record.scaffoldArea),
       height: scaffoldHeight,
@@ -3403,7 +3541,7 @@ export const getMobileProjectByIdService = async ({
       ? {
           id: nextInspection.id,
           appointmentDate: nextInspection.appointmentDate.toISOString(),
-          siteTitle: nextInspection.siteTitle,
+          siteTitle: localizedInspection?.siteTitle ?? nextInspection.siteTitle,
           address: nextInspection.address,
           city: nextInspection.city,
         }
@@ -3414,11 +3552,11 @@ export const getMobileProjectByIdService = async ({
     record.phases.map((phase) => MobilePhaseDatesDTO.build(phase)),
     {
       id: record.customer.id,
-      name: record.customer.name,
+      name: localizedCustomer.name,
       category: record.customer.category,
       primaryContact: primary
         ? {
-            name: primary.name,
+            name: localizedContact?.name ?? primary.name,
             phone: primary.phone,
             email: primary.email,
           }
@@ -3437,6 +3575,9 @@ export const getMobileProjectByIdService = async ({
     ),
     { photos: photoCount, pdfPlans: pdfCount }
   );
+
+  dto.localization = localizedProject.localization;
+  return dto;
 };
 
 /**
@@ -3511,22 +3652,40 @@ export const listProjectHistoryService = async ({
     }),
   ]);
 
+  const items = await localizeMany(rows, async (row) => {
+    const dto = new MobileProjectHistoryDTO(
+      row.id,
+      row.action,
+      row.details,
+      row.createdAt.toISOString(),
+      {
+        id: row.user.id,
+        firstName: row.user.firstName,
+        lastName: row.user.lastName,
+        role: row.user.role,
+      }
+    );
+    const [localizedDetails, localizedUser] = await Promise.all([
+      localizeAuditLog({ id: row.id, details: row.details }),
+      localizeUser({
+        id: row.user.id,
+        firstName: row.user.firstName,
+        lastName: row.user.lastName,
+      }),
+    ]);
+    return Object.assign(dto, {
+      details: localizedDetails.details,
+      localization: localizedDetails.localization,
+      user: {
+        ...dto.user,
+        firstName: localizedUser.firstName,
+        lastName: localizedUser.lastName,
+      },
+    });
+  });
+
   return {
-    items: rows.map(
-      (row) =>
-        new MobileProjectHistoryDTO(
-          row.id,
-          row.action,
-          row.details,
-          row.createdAt.toISOString(),
-          {
-            id: row.user.id,
-            firstName: row.user.firstName,
-            lastName: row.user.lastName,
-            role: row.user.role,
-          }
-        )
-    ),
+    items,
     total,
     page,
     limit,
@@ -3553,7 +3712,18 @@ export const updateProjectNoteService = async ({
       author: { select: { id: true, firstName: true, lastName: true } },
     },
   });
-  return MobileProjectNoteDTO.build(updated);
+  enqueuePreTranslate({
+    contentType: 'PROJECT_NOTE',
+    contentId: updated.id,
+    fields: { content: updated.content },
+  });
+
+  const dto = MobileProjectNoteDTO.build(updated);
+  const localized = await localizeProjectNote(dto);
+  return Object.assign(dto, {
+    content: localized.content,
+    localization: localized.localization,
+  });
 };
 
 /**
@@ -3612,7 +3782,24 @@ export const updateProjectMeasurementService = async ({
     return row;
   });
 
-  return MobileMeasurementDTO.build(updated);
+  enqueuePreTranslate({
+    contentType: 'PROJECT_MEASUREMENT',
+    contentId: updated.id,
+    fields: {
+      position: updated.position,
+      remark: updated.remark,
+      scaffoldType: updated.scaffoldType,
+    },
+  });
+
+  const dto = MobileMeasurementDTO.build(updated);
+  const localized = await localizeProjectMeasurement(dto);
+  return Object.assign(dto, {
+    position: localized.position ?? null,
+    remark: localized.remark ?? null,
+    scaffoldType: localized.scaffoldType ?? null,
+    localization: localized.localization,
+  });
 };
 
 /**

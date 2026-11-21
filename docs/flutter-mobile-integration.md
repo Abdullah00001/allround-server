@@ -989,7 +989,19 @@ Worker data keys typically include `title`, `body`/`message`, `type`, `click_act
 3. Change language with **`PATCH /mobile/profile`** `{ "language": "PL" }` — server upserts preference and applies it to subsequent authenticated requests (alua parity).  
 4. Cache **`data.enums`** and validate dropdowns against those lists (never invent statuses like `PLANNED`).  
 5. Render Privacy / Terms from `legalContents` — bodies follow the user’s preferred language after auth (Translation pipeline). Public `GET /legal/:type` still needs `x-locale` (no user session).  
-6. Optional override: send `x-locale` / `?locale=` to force a locale for one request (wins over preference).
+6. Optional override: send `x-locale` / `?locale=` to force a locale for one request (wins over preference).  
+7. **Alua `localization` meta** — translated entities include:
+
+```json
+"localization": {
+  "sourceLocale": "de",
+  "displayedLocale": "en",
+  "isTranslated": true,
+  "translationStatus": "READY"
+}
+```
+
+   Applies to legal, notifications, projects, customers/contacts, inspections, tasks, notes, measurements, vehicles, users, and audit history (auth APIs excluded). Use `translationStatus` (`PENDING` / `PROCESSING` / `READY` / `FAILED`) to know when to refresh.
 
 ---
 

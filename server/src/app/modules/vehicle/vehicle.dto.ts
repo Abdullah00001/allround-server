@@ -1,9 +1,11 @@
 import { Vehicle } from '@prisma/client';
+import type { ILocalizationMeta } from '@/app/services/translation/translation.types';
 
 /**
  * Standard vehicle response DTO (omits `deletedAt`).
  */
 export class VehicleDTO {
+  localization?: ILocalizationMeta;
   /**
    * @param {string} id - Vehicle UUID.
    * @param {string} name - Display name.

@@ -13,6 +13,67 @@ import {
   TListCustomersServiceParams,
   TUpdateCustomerServiceParams,
 } from '@/app/modules/customer/customer.types';
+import {
+  enqueuePreTranslate,
+  localizeCustomer,
+  localizeCustomerContact,
+  localizeMany,
+} from '@/app/services/translation/entityLocalizers';
+
+const localizeCustomerContactDto = async (dto: CustomerContactDTO) => {
+  const localized = await localizeCustomerContact({
+    id: dto.id,
+    name: dto.name,
+    role: dto.role,
+  });
+  dto.name = localized.name;
+  dto.role = localized.role;
+  dto.localization = localized.localization;
+  return dto;
+};
+
+const localizeCustomerListItemDto = async (dto: CustomerListItemDTO) => {
+  const localized = await localizeCustomer({ id: dto.id, name: dto.name });
+  dto.name = localized.name;
+  dto.localization = localized.localization;
+  return dto;
+};
+
+const localizeCustomerSummaryDto = async (dto: CustomerSummaryDTO) => {
+  const localized = await localizeCustomer({ id: dto.id, name: dto.name });
+  dto.name = localized.name;
+  dto.localization = localized.localization;
+  await localizeMany(dto.contacts, localizeCustomerContactDto);
+  return dto;
+};
+
+const localizeCustomerDetailDto = async (dto: CustomerDetailDTO) => {
+  const localized = await localizeCustomer({ id: dto.id, name: dto.name });
+  dto.name = localized.name;
+  dto.localization = localized.localization;
+  await localizeMany(dto.contacts, localizeCustomerContactDto);
+  return dto;
+};
+
+const enqueueCustomerPreTranslate = (id: string, name: string) => {
+  enqueuePreTranslate({
+    contentType: 'CUSTOMER',
+    contentId: id,
+    fields: { name },
+  });
+};
+
+const enqueueCustomerContactPreTranslate = (
+  id: string,
+  name: string,
+  role: string
+) => {
+  enqueuePreTranslate({
+    contentType: 'CUSTOMER_CONTACT',
+    contentId: id,
+    fields: { name, role },
+  });
+};
 
 /**
  * Creates a customer and optional nested contacts inside a Prisma transaction.
@@ -67,7 +128,12 @@ export const createCustomerService = async ({
     });
   });
 
-  return CustomerSummaryDTO.build(customer);
+  enqueueCustomerPreTranslate(customer.id, customer.name);
+  for (const contact of customer.contacts) {
+    enqueueCustomerContactPreTranslate(contact.id, contact.name, contact.role);
+  }
+
+  return localizeCustomerSummaryDto(CustomerSummaryDTO.build(customer));
 };
 
 /**
@@ -113,8 +179,13 @@ export const listCustomersService = async ({
     }),
   ]);
 
+  const items = await localizeMany(
+    customers.map(CustomerListItemDTO.build),
+    localizeCustomerListItemDto
+  );
+
   return {
-    items: customers.map(CustomerListItemDTO.build),
+    items,
     total,
     page,
     limit,
@@ -150,7 +221,7 @@ export const getCustomerByIdService = async ({
     },
   });
 
-  return CustomerDetailDTO.build(customer);
+  return localizeCustomerDetailDto(CustomerDetailDTO.build(customer));
 };
 
 /**
@@ -186,7 +257,11 @@ export const updateCustomerService = async ({
     include: { contacts: { orderBy: { createdAt: 'asc' } } },
   });
 
-  return CustomerSummaryDTO.build(updated);
+  if (payload.name !== undefined) {
+    enqueueCustomerPreTranslate(updated.id, updated.name);
+  }
+
+  return localizeCustomerSummaryDto(CustomerSummaryDTO.build(updated));
 };
 
 /**
@@ -222,5 +297,7 @@ export const addCustomerContactService = async ({
     });
   });
 
-  return CustomerContactDTO.build(contact);
+  enqueueCustomerContactPreTranslate(contact.id, contact.name, contact.role);
+
+  return localizeCustomerContactDto(CustomerContactDTO.build(contact));
 };

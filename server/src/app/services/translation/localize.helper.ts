@@ -92,3 +92,15 @@ export const applyLocalization = async <T extends Record<string, unknown>>({
   }
   return next;
 };
+
+/**
+ * Localizes a list of items in parallel.
+ *
+ * @param {T[]} items - Items to localize.
+ * @param {(item: T) => Promise<R>} localize - Per-item localizer.
+ * @returns {Promise<R[]>} Localized items.
+ */
+export const localizeMany = async <T, R>(
+  items: T[],
+  localize: (item: T) => Promise<R>
+): Promise<R[]> => Promise.all(items.map(localize));

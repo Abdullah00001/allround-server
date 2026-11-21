@@ -18,6 +18,45 @@ import {
   TListUsersServiceParams,
   TUpdateUserServiceParams,
 } from '@/app/modules/user/user.types';
+import {
+  enqueuePreTranslate,
+  localizeMany,
+  localizeUser,
+} from '@/app/services/translation/entityLocalizers';
+import type { ILocalizationMeta } from '@/app/services/translation/translation.types';
+
+const localizeManagedUserDto = async <
+  T extends {
+    id: string;
+    firstName: string;
+    lastName: string;
+    localization?: ILocalizationMeta;
+  },
+>(
+  dto: T
+) => {
+  const localized = await localizeUser({
+    id: dto.id,
+    firstName: dto.firstName,
+    lastName: dto.lastName,
+  });
+  dto.firstName = localized.firstName;
+  dto.lastName = localized.lastName;
+  dto.localization = localized.localization;
+  return dto;
+};
+
+const enqueueUserNamePreTranslate = (
+  id: string,
+  firstName: string,
+  lastName: string
+) => {
+  enqueuePreTranslate({
+    contentType: 'USER',
+    contentId: id,
+    fields: { firstName, lastName },
+  });
+};
 
 /**
  * Creates an admin-provisioned user with hashed password and default preferences.
@@ -58,7 +97,9 @@ export const createUserService = async ({
     },
   });
 
-  return ManagedUserSummaryDTO.build(user);
+  enqueueUserNamePreTranslate(user.id, user.firstName, user.lastName);
+
+  return localizeManagedUserDto(ManagedUserSummaryDTO.build(user));
 };
 
 /**
@@ -112,8 +153,13 @@ export const listUsersService = async ({
     }),
   ]);
 
+  const items = await localizeMany(
+    users.map(ManagedUserListItemDTO.build),
+    localizeManagedUserDto
+  );
+
   return {
-    items: users.map(ManagedUserListItemDTO.build),
+    items,
     total,
     page,
     limit,
@@ -153,7 +199,7 @@ export const getUserByIdService = async ({
     },
   });
 
-  return ManagedUserDetailDTO.build(record);
+  return localizeManagedUserDto(ManagedUserDetailDTO.build(record));
 };
 
 /**
@@ -182,7 +228,15 @@ export const updateUserService = async ({
     },
   });
 
-  return ManagedUserSummaryDTO.build(updated);
+  if (rest.firstName !== undefined || rest.lastName !== undefined) {
+    enqueueUserNamePreTranslate(
+      updated.id,
+      updated.firstName,
+      updated.lastName
+    );
+  }
+
+  return localizeManagedUserDto(ManagedUserSummaryDTO.build(updated));
 };
 
 /**

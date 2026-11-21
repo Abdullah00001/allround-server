@@ -30,6 +30,7 @@ import {
   calculateNetHours,
   sumBreakMinutes,
 } from '@/app/modules/timelog/timelog.helpers';
+import type { ILocalizationMeta } from '@/app/services/translation/translation.types';
 
 /**
  * Converts a Prisma Decimal (or null) into a plain number (or null).
@@ -904,16 +905,23 @@ export class MobileManagedPhaseDTO {
  * Legal content row for the mobile Legal Information screen.
  */
 export class MobileLegalContentDTO {
+  /** Alua localization metadata for `content`. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {LegalContentType} legalContentType - Content category.
    * @param {string} content - HTML/text body.
    * @param {string} updatedAt - ISO last-updated timestamp.
+   * @param {ILocalizationMeta} [localization] - Localization meta.
    */
   constructor(
     public legalContentType: LegalContentType,
     public content: string,
-    public updatedAt: string
-  ) {}
+    public updatedAt: string,
+    localization?: ILocalizationMeta
+  ) {
+    this.localization = localization;
+  }
 }
 
 /**
@@ -1057,6 +1065,9 @@ export class MobileProjectEmployeeDTO {
  * Project task row for open/completed lists.
  */
 export class MobileProjectTaskDTO {
+  /** Alua localization metadata for title/description. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Task UUID.
    * @param {string} projectId - Parent project UUID.
@@ -1143,6 +1154,9 @@ export class MobileMeasurementsListDTO {
  * Measurement line-item DTO.
  */
 export class MobileMeasurementDTO {
+  /** Alua localization metadata for position/remark/scaffoldType. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Measurement UUID.
    * @param {string} projectId - Parent project UUID.
@@ -1197,6 +1211,9 @@ export class MobileMeasurementDTO {
  * Project note DTO with author projection.
  */
 export class MobileProjectNoteDTO {
+  /** Alua localization metadata for `content`. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Note UUID.
    * @param {string} projectId - Parent project UUID.
@@ -1292,6 +1309,9 @@ export class MobilePhaseDatesDTO {
  * Contact info comes from `customer.primaryContact` on detail; location from `coordinates`.
  */
 export class MobileProjectSettingsDTO {
+  /** Alua localization metadata for name/siteAccessNotes. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Project UUID.
    * @param {string} name - Project name.
@@ -1394,6 +1414,9 @@ export class MobileAttachmentDTO {
  * Location via `coordinates`; contacts via `customer.primaryContact` (not duplicated).
  */
 export class MobileProjectDetailDTO {
+  /** Alua localization metadata for name/siteAccessNotes. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Project UUID.
    * @param {string} name - Project name.
@@ -1461,6 +1484,9 @@ export class MobileProjectDetailDTO {
  * Project history / audit timeline row.
  */
 export class MobileProjectHistoryDTO {
+  /** Alua localization metadata for `details`. */
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - Audit log UUID.
    * @param {string} action - Action key.

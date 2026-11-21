@@ -69,6 +69,82 @@ const fetchTargetEntityFields = async (
     });
     return item ? { title: item.title, description: item.description } : null;
   }
+  if (contentType === 'PROJECT') {
+    const item = await prisma.project.findUnique({
+      where: { id: contentId },
+      select: { name: true, siteAccessNotes: true },
+    });
+    return item
+      ? { name: item.name, siteAccessNotes: item.siteAccessNotes }
+      : null;
+  }
+  if (contentType === 'CUSTOMER') {
+    const item = await prisma.customer.findUnique({
+      where: { id: contentId },
+      select: { name: true },
+    });
+    return item ? { name: item.name } : null;
+  }
+  if (contentType === 'CUSTOMER_CONTACT') {
+    const item = await prisma.customerContact.findUnique({
+      where: { id: contentId },
+      select: { name: true, role: true },
+    });
+    return item ? { name: item.name, role: item.role } : null;
+  }
+  if (contentType === 'INSPECTION') {
+    const item = await prisma.inspection.findUnique({
+      where: { id: contentId },
+      select: {
+        siteTitle: true,
+        siteAccessInstructions: true,
+        specialRequirements: true,
+        scaffoldType: true,
+      },
+    });
+    return item
+      ? {
+          siteTitle: item.siteTitle,
+          siteAccessInstructions: item.siteAccessInstructions,
+          specialRequirements: item.specialRequirements,
+          scaffoldType: item.scaffoldType,
+        }
+      : null;
+  }
+  if (contentType === 'PROJECT_MEASUREMENT') {
+    const item = await prisma.projectMeasurement.findUnique({
+      where: { id: contentId },
+      select: { position: true, remark: true, scaffoldType: true },
+    });
+    return item
+      ? {
+          position: item.position,
+          remark: item.remark,
+          scaffoldType: item.scaffoldType,
+        }
+      : null;
+  }
+  if (contentType === 'VEHICLE') {
+    const item = await prisma.vehicle.findUnique({
+      where: { id: contentId },
+      select: { name: true },
+    });
+    return item ? { name: item.name } : null;
+  }
+  if (contentType === 'AUDIT_LOG') {
+    const item = await prisma.auditLog.findUnique({
+      where: { id: contentId },
+      select: { details: true },
+    });
+    return item ? { details: item.details } : null;
+  }
+  if (contentType === 'USER') {
+    const item = await prisma.user.findUnique({
+      where: { id: contentId },
+      select: { firstName: true, lastName: true },
+    });
+    return item ? { firstName: item.firstName, lastName: item.lastName } : null;
+  }
   return null;
 };
 

@@ -11907,6 +11907,23 @@ components:
         - message
         - traceId
 
+    LocalizationMeta:
+      type: object
+      description: Alua-compatible localization metadata on translated entities
+      required: [sourceLocale, displayedLocale, isTranslated, translationStatus]
+      properties:
+        sourceLocale:
+          type: string
+          example: de
+        displayedLocale:
+          type: string
+          example: en
+        isTranslated:
+          type: boolean
+        translationStatus:
+          type: string
+          enum: [PENDING, PROCESSING, READY, FAILED]
+
     NotificationDTO:
       type: object
       required: [id, type, title, message, isRead, createdAt]
@@ -11934,6 +11951,8 @@ components:
         createdAt:
           type: string
           format: date-time
+        localization:
+          $ref: '#/components/schemas/LocalizationMeta'
 
     GetNotificationsResponse:
       allOf:
@@ -15283,6 +15302,11 @@ components:
       type: object
       required: [legalContentType, content, updatedAt]
       properties:
+        id:
+          type: string
+          format: uuid
+          nullable: true
+          description: null for empty admin unpublished placeholder
         legalContentType:
           $ref: '#/components/schemas/LegalContentType'
         content:
@@ -15293,6 +15317,8 @@ components:
           format: date-time
           nullable: true
           description: null when admin GET finds an unpublished type
+        localization:
+          $ref: '#/components/schemas/LocalizationMeta'
     UpdateLegalContentRequest:
       type: object
       required: [content]
@@ -15392,6 +15418,8 @@ components:
             - $ref: '#/components/schemas/MobileTaskEmployeeDTO'
         createdAt: {type: string, format: date-time}
         updatedAt: {type: string, format: date-time}
+        localization:
+          $ref: '#/components/schemas/LocalizationMeta'
     MobileProjectTasksListDTO:
       type: object
       required: [open, completed]
@@ -15521,6 +15549,8 @@ components:
             firstName: {type: string}
             lastName: {type: string}
         createdAt: {type: string, format: date-time}
+        localization:
+          $ref: '#/components/schemas/LocalizationMeta'
     GetMobileProjectNotesResponse:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
@@ -16789,6 +16819,8 @@ components:
         updatedAt:
           type: string
           format: date-time
+        localization:
+          $ref: '#/components/schemas/LocalizationMeta'
     MobileEnumsDTO:
       type: object
       required:

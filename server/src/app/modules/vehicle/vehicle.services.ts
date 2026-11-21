@@ -7,6 +7,18 @@ import {
   TListVehiclesServiceParams,
   TUpdateVehicleServiceParams,
 } from '@/app/modules/vehicle/vehicle.types';
+import {
+  enqueuePreTranslate,
+  localizeMany,
+  localizeVehicle,
+} from '@/app/services/translation/entityLocalizers';
+
+const localizeVehicleDto = async (dto: VehicleDTO) => {
+  const localized = await localizeVehicle({ id: dto.id, name: dto.name });
+  dto.name = localized.name;
+  dto.localization = localized.localization;
+  return dto;
+};
 
 /**
  * Creates a new vehicle.
@@ -26,7 +38,13 @@ export const createVehicleService = async ({
     },
   });
 
-  return VehicleDTO.build(vehicle);
+  enqueuePreTranslate({
+    contentType: 'VEHICLE',
+    contentId: vehicle.id,
+    fields: { name: vehicle.name },
+  });
+
+  return localizeVehicleDto(VehicleDTO.build(vehicle));
 };
 
 /**
@@ -68,8 +86,13 @@ export const listVehiclesService = async ({
     }),
   ]);
 
+  const items = await localizeMany(
+    vehicles.map(VehicleDTO.build),
+    localizeVehicleDto
+  );
+
   return {
-    items: vehicles.map(VehicleDTO.build),
+    items,
     total,
     page,
     limit,
@@ -97,7 +120,15 @@ export const updateVehicleService = async ({
     },
   });
 
-  return VehicleDTO.build(updated);
+  if (payload.name !== undefined) {
+    enqueuePreTranslate({
+      contentType: 'VEHICLE',
+      contentId: updated.id,
+      fields: { name: updated.name },
+    });
+  }
+
+  return localizeVehicleDto(VehicleDTO.build(updated));
 };
 
 /**

@@ -1,5 +1,6 @@
 import {
   AttachmentCategory,
+  Inspection,
   InspectionStatus,
   NotificationType,
   PhaseStatus,
@@ -27,6 +28,72 @@ import {
   getUtcDayEndExclusive,
   getUtcDayStart,
 } from '@/app/modules/mobile/mobile.helpers';
+import {
+  enqueuePreTranslate,
+  localizeCustomer,
+  localizeInspection,
+  localizeMany,
+} from '@/app/services/translation/entityLocalizers';
+
+const enqueueInspectionPreTranslate = (
+  row: Pick<
+    Inspection,
+    | 'id'
+    | 'siteTitle'
+    | 'siteAccessInstructions'
+    | 'specialRequirements'
+    | 'scaffoldType'
+  >
+) => {
+  enqueuePreTranslate({
+    contentType: 'INSPECTION',
+    contentId: row.id,
+    fields: {
+      siteTitle: row.siteTitle,
+      siteAccessInstructions: row.siteAccessInstructions,
+      specialRequirements: row.specialRequirements,
+      scaffoldType: row.scaffoldType,
+    },
+  });
+};
+
+const enqueuePrimaryContactPreTranslate = async (customerId: string) => {
+  const primary = await prisma.customerContact.findFirst({
+    where: { customerId, isPrimary: true },
+    select: { id: true, name: true, role: true },
+  });
+  if (!primary) return;
+  enqueuePreTranslate({
+    contentType: 'CUSTOMER_CONTACT',
+    contentId: primary.id,
+    fields: { name: primary.name, role: primary.role },
+  });
+};
+
+const localizeInspectionDto = async (dto: InspectionDTO) => {
+  const localized = await localizeInspection({
+    id: dto.id,
+    siteTitle: dto.siteTitle,
+    siteAccessInstructions: dto.siteAccessInstructions,
+    specialRequirements: dto.specialRequirements,
+    scaffoldType: dto.scaffoldType,
+  });
+  dto.siteTitle = localized.siteTitle;
+  dto.siteAccessInstructions = localized.siteAccessInstructions as
+    | string
+    | null;
+  dto.specialRequirements = localized.specialRequirements as string | null;
+  dto.scaffoldType = localized.scaffoldType as string | null;
+  dto.localization = localized.localization;
+
+  const customerLocalized = await localizeCustomer({
+    id: dto.customer.id,
+    name: dto.customer.name,
+  });
+  dto.customer.name = customerLocalized.name;
+  dto.customer.localization = customerLocalized.localization;
+  return dto;
+};
 
 const photoInclude = {
   where: { category: AttachmentCategory.PHOTO },
@@ -289,7 +356,21 @@ export const createInspectionService = async ({
   });
 
   const siteManager = await loadSiteManager(inspection.siteManagerId);
-  return InspectionDTO.build(inspection, siteManager);
+  enqueueInspectionPreTranslate(inspection);
+  if (customerInput.mode === 'NEW') {
+    enqueuePreTranslate({
+      contentType: 'CUSTOMER',
+      contentId: inspection.customerId,
+      fields: { name: inspection.customer.name },
+    });
+  }
+  if (contact) {
+    await enqueuePrimaryContactPreTranslate(inspection.customerId);
+  }
+
+  return localizeInspectionDto(
+    InspectionDTO.build(inspection, siteManager)
+  );
 };
 
 /**
@@ -356,13 +437,16 @@ export const listInspectionsService = async ({
     inspections.map((item) => item.siteManagerId)
   );
 
-  const items = inspections.map((inspection) =>
-    InspectionDTO.build(
-      inspection,
-      inspection.siteManagerId
-        ? (siteManagers.get(inspection.siteManagerId) ?? null)
-        : null
-    )
+  const items = await localizeMany(
+    inspections.map((inspection) =>
+      InspectionDTO.build(
+        inspection,
+        inspection.siteManagerId
+          ? (siteManagers.get(inspection.siteManagerId) ?? null)
+          : null
+      )
+    ),
+    localizeInspectionDto
   );
 
   const totalSpecsArea = Number(
@@ -413,7 +497,7 @@ export const getInspectionByIdService = async ({
     include: inspectionInclude,
   });
   const siteManager = await loadSiteManager(record.siteManagerId);
-  return InspectionDTO.build(record, siteManager);
+  return localizeInspectionDto(InspectionDTO.build(record, siteManager));
 };
 
 /**
@@ -480,7 +564,12 @@ export const updateInspectionService = async ({
   });
 
   const siteManager = await loadSiteManager(updated.siteManagerId);
-  return InspectionDTO.build(updated, siteManager);
+  enqueueInspectionPreTranslate(updated);
+  if (contact) {
+    await enqueuePrimaryContactPreTranslate(inspection.customerId);
+  }
+
+  return localizeInspectionDto(InspectionDTO.build(updated, siteManager));
 };
 
 /**
@@ -565,7 +654,27 @@ export const convertInspectionToProjectService = async ({
   });
 
   const siteManager = await loadSiteManager(result.converted.siteManagerId);
-  const inspectionDto = InspectionDTO.build(result.converted, siteManager);
+  const inspectionDto = await localizeInspectionDto(
+    InspectionDTO.build(result.converted, siteManager)
+  );
+
+  enqueuePreTranslate({
+    contentType: 'PROJECT',
+    contentId: result.project.id,
+    fields: {
+      name: result.project.name,
+      siteAccessNotes: result.project.siteAccessNotes,
+    },
+  });
+  enqueuePreTranslate({
+    contentType: 'PROJECT_MEASUREMENT',
+    contentId: result.measurement.id,
+    fields: {
+      position: result.measurement.position,
+      remark: result.measurement.remark,
+      scaffoldType: result.measurement.scaffoldType,
+    },
+  });
 
   if (result.converted.siteManagerId) {
     await triggerPushNotification(

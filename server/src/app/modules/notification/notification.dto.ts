@@ -1,4 +1,5 @@
 import { Notification, NotificationType } from '@prisma/client';
+import type { ILocalizationMeta } from '@/app/services/translation/translation.types';
 
 /**
  * Public notification payload for REST and socket clients.
@@ -11,6 +12,7 @@ export class NotificationDTO {
   link: string | null;
   isRead: boolean;
   createdAt: Date;
+  localization?: ILocalizationMeta;
 
   /**
    * Creates a DTO from explicit field values.
@@ -25,6 +27,7 @@ export class NotificationDTO {
     this.link = data.link;
     this.isRead = data.isRead;
     this.createdAt = data.createdAt;
+    this.localization = data.localization;
   }
 
   /**

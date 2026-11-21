@@ -5,11 +5,15 @@ import {
   IGetNotificationsParams,
   IMarkAllAsReadParams,
 } from '@/app/modules/notification/notification.types';
+import {
+  localizeMany,
+  localizeNotification,
+} from '@/app/services/translation/entityLocalizers';
 import { DEFAULT_LIMIT, DEFAULT_PAGE } from '@/const';
 
 /**
  * Lists paginated notifications for a user and the current unread count.
- * Copy is already localized at write time via static i18n (recipient language).
+ * Copy is localized at read time (alua Translation pipeline + localization meta).
  *
  * @param {IGetNotificationsParams} params - User id and optional pagination.
  * @returns {Promise<{ data: NotificationDTO[]; total: number; page: number; limit: number; unreadCount: number }>}
@@ -38,10 +42,23 @@ export const getNotificationsService = async ({
     prisma.notification.count({ where: { userId, isRead: false } }),
   ]);
 
+  const data = await localizeMany(notifications, async (notification) => {
+    const base = NotificationDTO.build(notification);
+    const localized = await localizeNotification({
+      id: notification.id,
+      title: notification.title,
+      message: notification.message,
+    });
+    return new NotificationDTO({
+      ...base,
+      title: localized.title,
+      message: localized.message,
+      localization: localized.localization,
+    });
+  });
+
   return {
-    data: notifications.map((notification) =>
-      NotificationDTO.build(notification)
-    ),
+    data,
     total,
     page,
     limit,
