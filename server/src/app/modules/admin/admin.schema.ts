@@ -63,6 +63,39 @@ export const changeAdminPasswordSchema = z
   .strict();
 
 /**
+ * Site-manager project visibility rule stored on CompanyProfile.
+ */
+export const siteManagerAccessRuleEnum = z.enum(
+  ['RESTRICT_TO_ASSIGNED', 'GLOBAL_ACCESS'],
+  { message: 'Invalid siteManagerAccessRule' }
+);
+
+/**
+ * Request body for `PATCH /admin/settings/company`
+ * (General branding + Access policies). At least one field required.
+ */
+export const updateAdminCompanySettingsSchema = z
+  .object({
+    displayName: z.string().trim().min(1).optional(),
+    officialName: z.string().trim().min(1).optional(),
+    taxId: z.string().trim().min(1).nullable().optional(),
+    headOffice: z.string().trim().min(1).nullable().optional(),
+    logoUrl: z
+      .string()
+      .url({ message: 'Invalid logo URL' })
+      .nullable()
+      .optional(),
+    siteManagerAccessRule: siteManagerAccessRuleEnum.optional(),
+    allowEmployeeManualTime: z.boolean().optional(),
+    allowSiteManagerCreateProject: z.boolean().optional(),
+    requireReasonForTimeEdit: z.boolean().optional(),
+  })
+  .strict()
+  .refine((data) => Object.keys(data).length > 0, {
+    message: 'At least one field is required to update',
+  });
+
+/**
  * Request body for `PATCH /admin/settings/languages` (Available languages UI).
  * Default must always be included in `enabledLanguages` when both are sent.
  */

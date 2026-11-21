@@ -21,6 +21,7 @@ import {
   checkMobileProjectExistenceMiddleware,
   checkEmployeeRoleMiddleware,
   checkNoActiveTimerMiddleware,
+  checkSiteManagerCreateProjectAllowedMiddleware,
   checkOwnedActiveTimeLogMiddleware,
   resolveTimerPhaseFromProjectMiddleware,
   checkPhaseBelongsToProjectMiddleware,
@@ -192,6 +193,7 @@ router
   )
   .post(
     ...siteManagerAuth,
+    checkSiteManagerCreateProjectAllowedMiddleware,
     validateReqBody(createMobileProjectSchema),
     checkMobileCreateProjectRefsMiddleware,
     createMobileProjectController

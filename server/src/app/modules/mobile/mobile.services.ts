@@ -343,6 +343,7 @@ export const getMobileConfigService = async (): Promise<MobileConfigDTO> => {
         defaultLanguage: true,
         enabledLanguages: true,
         allowEmployeeManualTime: true,
+        allowSiteManagerCreateProject: true,
       },
     }),
     prisma.legalContent.findMany({
@@ -396,6 +397,7 @@ export const getMobileConfigService = async (): Promise<MobileConfigDTO> => {
       ? profile.enabledLanguages
       : [Language.DE, Language.EN],
     profile?.allowEmployeeManualTime ?? true,
+    profile?.allowSiteManagerCreateProject ?? false,
     legalContents,
     enums
   );

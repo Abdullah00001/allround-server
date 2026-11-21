@@ -4,17 +4,23 @@ import { asyncHandler } from '@/app/utils/system.utils';
 import {
   changeAdminPasswordService,
   checkAdminService,
+  exportAdminCustomersCsvService,
+  exportAdminProjectsCsvService,
+  exportAdminTimeLogsCsvService,
+  getAdminCompanySettingsService,
   getAdminLanguagesService,
   getAdminProfileService,
   loginAdminService,
   logoutAdminService,
   refreshAdminService,
+  updateAdminCompanySettingsService,
   updateAdminLanguagesService,
   updateAdminProfileService,
 } from '@/app/modules/admin/admin.services';
 import {
   TAdminLoginPayload,
   TChangeAdminPasswordPayload,
+  TUpdateAdminCompanySettingsPayload,
   TUpdateAdminLanguagesPayload,
   TUpdateAdminProfilePayload,
 } from '@/app/modules/admin/admin.types';
@@ -280,6 +286,53 @@ export const changeAdminPasswordController = asyncHandler(
 );
 
 /**
+ * Handles `GET /admin/settings/company`.
+ * Returns branding + access-policy settings for System & company settings.
+ *
+ * @param {Request} _req - Express request.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const getAdminCompanySettingsController = asyncHandler(
+  async (_req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const data = await getAdminCompanySettingsService();
+
+    res.status(200).json({
+      success: true,
+      message: 'Company settings fetched successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
+ * Handles `PATCH /admin/settings/company`.
+ * Updates branding and/or access-policy fields on CompanyProfile.
+ *
+ * @param {Request} req - Express request with validated body.
+ * @param {Response} res - Express response.
+ * @returns {Promise<void>}
+ */
+export const updateAdminCompanySettingsController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const traceId = getTraceId();
+    const payload = req.body as TUpdateAdminCompanySettingsPayload;
+    const data = await updateAdminCompanySettingsService(payload);
+
+    res.status(200).json({
+      success: true,
+      message: 'Company settings updated successfully.',
+      data,
+      traceId,
+    });
+    return;
+  }
+);
+
+/**
  * Handles `GET /admin/settings/languages`.
  * Returns all 18 catalog languages with company enabled/default toggles.
  *
@@ -323,5 +376,66 @@ export const updateAdminLanguagesController = asyncHandler(
       traceId,
     });
     return;
+  }
+);
+
+/**
+ * Sends a CSV file download response for Settings → Data export.
+ *
+ * @param {Response} res - Express response.
+ * @param {{ filename: string; csv: string }} file - Export payload.
+ * @returns {void}
+ */
+const sendAdminCsvDownload = (
+  res: Response,
+  file: { filename: string; csv: string }
+): void => {
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="${file.filename}"`
+  );
+  res.status(200).send(file.csv);
+};
+
+/**
+ * Handles `GET /admin/settings/export/projects`.
+ *
+ * @param {Request} _req - Express request.
+ * @param {Response} res - Express response (CSV download).
+ * @returns {Promise<void>}
+ */
+export const exportAdminProjectsController = asyncHandler(
+  async (_req: Request, res: Response): Promise<void> => {
+    const file = await exportAdminProjectsCsvService();
+    sendAdminCsvDownload(res, file);
+  }
+);
+
+/**
+ * Handles `GET /admin/settings/export/customers`.
+ *
+ * @param {Request} _req - Express request.
+ * @param {Response} res - Express response (CSV download).
+ * @returns {Promise<void>}
+ */
+export const exportAdminCustomersController = asyncHandler(
+  async (_req: Request, res: Response): Promise<void> => {
+    const file = await exportAdminCustomersCsvService();
+    sendAdminCsvDownload(res, file);
+  }
+);
+
+/**
+ * Handles `GET /admin/settings/export/time-logs`.
+ *
+ * @param {Request} _req - Express request.
+ * @param {Response} res - Express response (CSV download).
+ * @returns {Promise<void>}
+ */
+export const exportAdminTimeLogsController = asyncHandler(
+  async (_req: Request, res: Response): Promise<void> => {
+    const file = await exportAdminTimeLogsCsvService();
+    sendAdminCsvDownload(res, file);
   }
 );

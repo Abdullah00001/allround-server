@@ -85,6 +85,8 @@ Mismatch → **403** with `errorType: "FORBIDDEN"`.
 | `GET /admin/profile` | Yes | Self-profile (`firstName`, `lastName`, `email`, `phone`, `avatarUrl`, `role`, `language`, `createdAt`) |
 | `PATCH /admin/profile` | Yes | Self-update: optional `firstName`, `lastName`, `phone`, `avatarUrl`, `language` (≥1 field) |
 | `POST /admin/settings/password` | Yes | Change password; clears Redis sessions + cookies — re-login required |
+| `GET /admin/settings/company` | Yes | Branding + access policies (`CompanyProfile`) |
+| `PATCH /admin/settings/company` | Yes | Save Settings (displayName, logoUrl, siteManagerAccessRule, …) |
 | `GET /admin/settings/languages` | Yes | Available languages grid (all 18 + enabled/default) |
 | `PATCH /admin/settings/languages` | Yes | Update `defaultLanguage` / `enabledLanguages` |
 
@@ -618,16 +620,60 @@ Not patchable: `email`, `role`, `status`, `password`. Upload avatar via `POST /m
 
 ### 3.7 Settings & access policies
 
-**There is no admin company-settings REST controller today.** Company policies such as:
+System & company settings UI maps to:
 
-- `siteManagerAccessRule` (`RESTRICT_TO_ASSIGNED` \| `GLOBAL_ACCESS`)
-- `allowEmployeeManualTime`
-- `requireReasonForTimeEdit`
-- `defaultLanguage` / `enabledLanguages`
+| Tab / action | API |
+| --- | --- |
+| General branding + Access policies (Save Settings) | `GET` / `PATCH /admin/settings/company` |
+| Languages (18) | `GET` / `PATCH /admin/settings/languages` |
+| Legal | `GET` / `PATCH /admin/legal/:type` |
+| Sync overview / Clear local cache & re-sync | Client-only (no server route) |
+| Export all projects | `GET /admin/settings/export/projects` → CSV download |
+| Export time logs | `GET /admin/settings/export/time-logs` → CSV download |
+| Export customers | `GET /admin/settings/export/customers` → CSV download |
+| Company logo upload | `POST /media` → then `PATCH` with `logoUrl` |
 
-are stored on `CompanyProfile` (`id: "global"`) and enforced by the API / seeded via Prisma. Mobile apps read a subset through `GET /mobile/config` (mobile bearer auth only).
+```http
+GET /api/v1/admin/settings/export/projects
+Cookie: access_token=...
+x-csrf-token: ...
+```
 
-Until an admin company-settings API ships, change those policies via DB/seed/admin tooling—not via a dashboard HTTP route.
+Response: `Content-Type: text/csv; charset=utf-8` + `Content-Disposition: attachment; filename="projects-YYYY-MM-DD.csv"`. Same pattern for `/customers` and `/time-logs`.
+
+```http
+GET /api/v1/admin/settings/company
+Cookie: access_token=...
+x-csrf-token: ...
+
+PATCH /api/v1/admin/settings/company
+Cookie: access_token=...
+x-csrf-token: ...
+Content-Type: application/json
+
+{
+  "displayName": "Allround Cockpit",
+  "officialName": "Allround Gerüstbau GmbH",
+  "taxId": "HRB 88412 - Köln",
+  "headOffice": "Gottfriedstraße 12, 50968 Köln",
+  "logoUrl": "https://cdn.example.com/logo.png",
+  "siteManagerAccessRule": "RESTRICT_TO_ASSIGNED",
+  "allowEmployeeManualTime": true,
+  "allowSiteManagerCreateProject": false,
+  "requireReasonForTimeEdit": false
+}
+```
+
+`data`: `{ displayName, officialName, taxId, headOffice, logoUrl, siteManagerAccessRule, allowEmployeeManualTime, allowSiteManagerCreateProject, requireReasonForTimeEdit, updatedAt }`.
+
+| Field | UI | Enforcement |
+| --- | --- | --- |
+| `siteManagerAccessRule` | Restrict / Grant global access | Mobile SM project scope |
+| `allowEmployeeManualTime` | Employees can log manual time | Employee manual timer → 403 when false |
+| `allowSiteManagerCreateProject` | SMs can create projects from the field | `POST /mobile/projects` → 403 when false |
+| `requireReasonForTimeEdit` | Require reason when editing logged hours | Admin time-log PATCH |
+
+Mobile reads the flags via `GET /mobile/config`.
 
 Media uploads (shared): `POST /api/v1/media`, `DELETE /api/v1/media` (see OpenAPI `Media` tag; follow the auth chain documented there).
 

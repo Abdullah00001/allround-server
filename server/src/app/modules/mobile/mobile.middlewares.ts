@@ -64,6 +64,40 @@ export const checkEmployeeManualTimeAllowedMiddleware = asyncHandler(
 );
 
 /**
+ * Blocks Site Manager project create when company policy disables field create.
+ * Admin actors are not affected (they use `/admin/projects`).
+ *
+ * @param {Request} req - Express request (authenticated site manager).
+ * @param {Response} res - Express response used for the 403 envelope.
+ * @param {NextFunction} next - Continues when create is allowed.
+ * @returns {Promise<void>}
+ */
+export const checkSiteManagerCreateProjectAllowedMiddleware = asyncHandler(
+  async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const traceId = getTraceId();
+
+    const profile = await prisma.companyProfile.findUnique({
+      where: { id: 'global' },
+      select: { allowSiteManagerCreateProject: true },
+    });
+
+    const allowed = profile?.allowSiteManagerCreateProject ?? false;
+    if (!allowed) {
+      res.status(403).json({
+        success: false,
+        message:
+          'Creating projects from the field is disabled by your administrator.',
+        errorType: AuthErrorType.FORBIDDEN,
+        traceId,
+      });
+      return;
+    }
+
+    next();
+  }
+);
+
+/**
  * Blocks starting a new timer when the user already has an open `TimeLog`
  * (`endTime: null`). Responds with 409 `ACTIVE_TIMER_EXISTS`.
  *

@@ -567,8 +567,9 @@ model CompanyProfile {
   siteManagerAccessRule     String // "RESTRICT_TO_ASSIGNED" or "GLOBAL_ACCESS"
   defaultLanguage           Language   @default(DE)
   enabledLanguages          Language[] @default([DE, EN])
-  allowEmployeeManualTime   Boolean    @default(true)
-  requireReasonForTimeEdit  Boolean    @default(false)
+  allowEmployeeManualTime        Boolean    @default(true)
+  allowSiteManagerCreateProject  Boolean    @default(false)
+  requireReasonForTimeEdit       Boolean    @default(false)
 
   updatedAt                 DateTime   @updatedAt
 }

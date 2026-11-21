@@ -11,6 +11,7 @@ import {
   generateRefreshToken,
 } from '@/app/utils/jwt.utils';
 import {
+  AdminCompanySettingsDTO,
   AdminDTO,
   AdminLanguagesDTO,
   AdminProfileDTO,
@@ -23,6 +24,7 @@ import {
   IRefreshAdminServiceParams,
   TChangeAdminPasswordServiceParams,
   TGetAdminProfileServiceParams,
+  TUpdateAdminCompanySettingsPayload,
   TUpdateAdminLanguagesPayload,
   TUpdateAdminProfileServiceParams,
 } from '@/app/modules/admin/admin.types';
@@ -35,6 +37,10 @@ import {
 import { Language } from '@prisma/client';
 import { hashPassword } from '@/app/utils/password.utils';
 import { clearCompanyDefaultLanguageCache } from '@/app/middlewares/locale.middlewares';
+import {
+  buildCsvDocument,
+  buildExportFilename,
+} from '@/app/modules/admin/admin.export.utils';
 
 /**
  * Admin login: update lastLoginAt, issue tokens, register Redis refresh session.
@@ -289,6 +295,115 @@ export const changeAdminPasswordService = async ({
   }
 };
 
+/** Default seed values when CompanyProfile row is missing. */
+const DEFAULT_COMPANY_PROFILE = {
+  id: 'global' as const,
+  displayName: 'Allround Cockpit',
+  officialName: 'Allround Gerüstbau GmbH',
+  taxId: null as string | null,
+  headOffice: null as string | null,
+  logoUrl: null as string | null,
+  siteManagerAccessRule: 'RESTRICT_TO_ASSIGNED',
+  allowEmployeeManualTime: true,
+  allowSiteManagerCreateProject: false,
+  requireReasonForTimeEdit: false,
+};
+
+const companySettingsSelect = {
+  displayName: true,
+  officialName: true,
+  taxId: true,
+  headOffice: true,
+  logoUrl: true,
+  siteManagerAccessRule: true,
+  allowEmployeeManualTime: true,
+  allowSiteManagerCreateProject: true,
+  requireReasonForTimeEdit: true,
+  updatedAt: true,
+} as const;
+
+/**
+ * Ensures the singleton CompanyProfile exists and returns settings fields.
+ *
+ * @returns {Promise<Parameters<typeof AdminCompanySettingsDTO.build>[0]>} Profile row.
+ */
+const ensureCompanyProfile = async (): Promise<
+  Parameters<typeof AdminCompanySettingsDTO.build>[0]
+> => {
+  const existing = await prisma.companyProfile.findUnique({
+    where: { id: 'global' },
+    select: companySettingsSelect,
+  });
+  if (existing) return existing;
+
+  return prisma.companyProfile.create({
+    data: {
+      ...DEFAULT_COMPANY_PROFILE,
+      defaultLanguage: Language.DE,
+      enabledLanguages: [Language.DE, Language.EN],
+    },
+    select: companySettingsSelect,
+  });
+};
+
+/**
+ * Loads company branding + access-policy settings for the admin Settings UI.
+ *
+ * @returns {Promise<AdminCompanySettingsDTO>} Company settings payload.
+ */
+export const getAdminCompanySettingsService =
+  async (): Promise<AdminCompanySettingsDTO> => {
+    const profile = await ensureCompanyProfile();
+    return AdminCompanySettingsDTO.build(profile);
+  };
+
+/**
+ * Patches company branding and/or access-policy fields on CompanyProfile.
+ *
+ * @param {TUpdateAdminCompanySettingsPayload} payload - Partial settings patch.
+ * @returns {Promise<AdminCompanySettingsDTO>} Updated settings payload.
+ */
+export const updateAdminCompanySettingsService = async (
+  payload: TUpdateAdminCompanySettingsPayload
+): Promise<AdminCompanySettingsDTO> => {
+  await ensureCompanyProfile();
+
+  const updated = await prisma.companyProfile.update({
+    where: { id: 'global' },
+    data: {
+      ...(payload.displayName !== undefined
+        ? { displayName: payload.displayName }
+        : {}),
+      ...(payload.officialName !== undefined
+        ? { officialName: payload.officialName }
+        : {}),
+      ...(payload.taxId !== undefined ? { taxId: payload.taxId } : {}),
+      ...(payload.headOffice !== undefined
+        ? { headOffice: payload.headOffice }
+        : {}),
+      ...(payload.logoUrl !== undefined ? { logoUrl: payload.logoUrl } : {}),
+      ...(payload.siteManagerAccessRule !== undefined
+        ? { siteManagerAccessRule: payload.siteManagerAccessRule }
+        : {}),
+      ...(payload.allowEmployeeManualTime !== undefined
+        ? { allowEmployeeManualTime: payload.allowEmployeeManualTime }
+        : {}),
+      ...(payload.allowSiteManagerCreateProject !== undefined
+        ? {
+            allowSiteManagerCreateProject:
+              payload.allowSiteManagerCreateProject,
+          }
+        : {}),
+      ...(payload.requireReasonForTimeEdit !== undefined
+        ? { requireReasonForTimeEdit: payload.requireReasonForTimeEdit }
+        : {}),
+    },
+    select: companySettingsSelect,
+  });
+
+  return AdminCompanySettingsDTO.build(updated);
+};
+
 /**
  * Loads company Available languages settings (all 18 + toggles).
  *
@@ -369,3 +484,199 @@ export const updateAdminLanguagesService = async (
     updated.enabledLanguages
   );
 };
+
+/**
+ * CSV file payload for admin Settings → Data export downloads.
+ */
+export type TAdminCsvExport = {
+  /** Suggested download filename. */
+  filename: string;
+  /** CSV body (UTF-8 with BOM). */
+  csv: string;
+};
+
+/**
+ * Exports non-deleted projects as CSV for Settings → Export all projects.
+ *
+ * @returns {Promise<TAdminCsvExport>} CSV filename + body.
+ */
+export const exportAdminProjectsCsvService =
+  async (): Promise<TAdminCsvExport> => {
+    const projects = await prisma.project.findMany({
+      where: { deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        customer: { select: { name: true, category: true } },
+        projectManagers: {
+          take: 1,
+          orderBy: { assignedAt: 'asc' },
+          select: {
+            user: { select: { firstName: true, lastName: true, email: true } },
+          },
+        },
+      },
+    });
+
+    const headers = [
+      'id',
+      'name',
+      'address',
+      'city',
+      'customerName',
+      'customerCategory',
+      'siteManagerName',
+      'siteManagerEmail',
+      'budgetedHours',
+      'scaffoldArea',
+      'contactName',
+      'contactPhone',
+      'contactEmail',
+      'createdAt',
+    ];
+
+    const rows = projects.map((project) => {
+      const sm = project.projectManagers[0]?.user;
+      return [
+        project.id,
+        project.name,
+        project.address,
+        project.city,
+        project.customer.name,
+        project.customer.category,
+        sm ? `${sm.firstName} ${sm.lastName}` : '',
+        sm?.email ?? '',
+        Number(project.budgetedHours),
+        project.scaffoldArea === null ? '' : Number(project.scaffoldArea),
+        project.contactName,
+        project.contactPhone,
+        project.contactEmail,
+        project.createdAt,
+      ];
+    });
+
+    return {
+      filename: buildExportFilename('projects'),
+      csv: buildCsvDocument(headers, rows),
+    };
+  };
+
+/**
+ * Exports non-deleted customers as CSV for Settings → Export customers.
+ *
+ * @returns {Promise<TAdminCsvExport>} CSV filename + body.
+ */
+export const exportAdminCustomersCsvService =
+  async (): Promise<TAdminCsvExport> => {
+    const customers = await prisma.customer.findMany({
+      where: { deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        contacts: {
+          where: { isPrimary: true },
+          take: 1,
+          select: { name: true, phone: true, email: true, role: true },
+        },
+        _count: { select: { projects: true, inspections: true } },
+      },
+    });
+
+    const headers = [
+      'id',
+      'name',
+      'category',
+      'address',
+      'city',
+      'primaryContactName',
+      'primaryContactRole',
+      'primaryContactPhone',
+      'primaryContactEmail',
+      'projectCount',
+      'inspectionCount',
+      'createdAt',
+    ];
+
+    const rows = customers.map((customer) => {
+      const contact = customer.contacts[0];
+      return [
+        customer.id,
+        customer.name,
+        customer.category,
+        customer.address,
+        customer.city,
+        contact?.name ?? '',
+        contact?.role ?? '',
+        contact?.phone ?? '',
+        contact?.email ?? '',
+        customer._count.projects,
+        customer._count.inspections,
+        customer.createdAt,
+      ];
+    });
+
+    return {
+      filename: buildExportFilename('customers'),
+      csv: buildCsvDocument(headers, rows),
+    };
+  };
+
+/**
+ * Exports time logs as CSV for Settings → Export time logs.
+ *
+ * @returns {Promise<TAdminCsvExport>} CSV filename + body.
+ */
+export const exportAdminTimeLogsCsvService =
+  async (): Promise<TAdminCsvExport> => {
+    const timeLogs = await prisma.timeLog.findMany({
+      orderBy: { startTime: 'desc' },
+      include: {
+        user: {
+          select: { firstName: true, lastName: true, email: true, role: true },
+        },
+        phase: {
+          select: {
+            type: true,
+            project: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+
+    const headers = [
+      'id',
+      'userName',
+      'userEmail',
+      'userRole',
+      'projectId',
+      'projectName',
+      'phaseType',
+      'activityType',
+      'startTime',
+      'endTime',
+      'status',
+      'isManual',
+      'editReason',
+      'createdAt',
+    ];
+
+    const rows = timeLogs.map((log) => [
+      log.id,
+      `${log.user.firstName} ${log.user.lastName}`,
+      log.user.email,
+      log.user.role,
+      log.phase.project.id,
+      log.phase.project.name,
+      log.phase.type,
+      log.activityType,
+      log.startTime,
+      log.endTime,
+      log.status,
+      log.isManual,
+      log.editReason,
+      log.createdAt,
+    ]);
+
+    return {
+      filename: buildExportFilename('time-logs'),
+      csv: buildCsvDocument(headers, rows),
+    };
+  };

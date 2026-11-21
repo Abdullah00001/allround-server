@@ -70,6 +70,7 @@ async function seedSystemSettings(tx: TxClient): Promise<void> {
       defaultLanguage: 'DE',
       enabledLanguages: ['DE', 'EN'],
       siteManagerAccessRule: 'RESTRICT_TO_ASSIGNED',
+      allowSiteManagerCreateProject: false,
     },
   });
 

@@ -3,6 +3,7 @@ import { User } from '@prisma/client';
 import {
   adminLoginSchema,
   changeAdminPasswordSchema,
+  updateAdminCompanySettingsSchema,
   updateAdminLanguagesSchema,
   updateAdminProfileSchema,
 } from '@/app/modules/admin/admin.schema';
@@ -21,6 +22,13 @@ export type TUpdateAdminProfilePayload = z.infer<
  */
 export type TChangeAdminPasswordPayload = z.infer<
   typeof changeAdminPasswordSchema
+>;
+
+/**
+ * Validated admin company settings patch body.
+ */
+export type TUpdateAdminCompanySettingsPayload = z.infer<
+  typeof updateAdminCompanySettingsSchema
 >;
 
 /**

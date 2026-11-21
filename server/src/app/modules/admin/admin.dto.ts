@@ -113,6 +113,79 @@ export class AdminLanguageOptionDTO {
 }
 
 /**
+ * Admin Settings → General branding + Access policies (`CompanyProfile`).
+ */
+export class AdminCompanySettingsDTO {
+  /**
+   * @param {string} displayName - App display name.
+   * @param {string} officialName - Official company name.
+   * @param {string | null} taxId - Registration / tax ID.
+   * @param {string | null} headOffice - Head office address.
+   * @param {string | null} logoUrl - Company logo URL (after `POST /media`).
+   * @param {string} siteManagerAccessRule - `RESTRICT_TO_ASSIGNED` | `GLOBAL_ACCESS`.
+   * @param {boolean} allowEmployeeManualTime - Employees may submit manual time.
+   * @param {boolean} allowSiteManagerCreateProject - SMs may create projects from the field.
+   * @param {boolean} requireReasonForTimeEdit - Admin time-log edits require reason.
+   * @param {string} updatedAt - ISO last-updated timestamp.
+   */
+  constructor(
+    public displayName: string,
+    public officialName: string,
+    public taxId: string | null,
+    public headOffice: string | null,
+    public logoUrl: string | null,
+    public siteManagerAccessRule: string,
+    public allowEmployeeManualTime: boolean,
+    public allowSiteManagerCreateProject: boolean,
+    public requireReasonForTimeEdit: boolean,
+    public updatedAt: string
+  ) {}
+
+  /**
+   * Builds the company settings DTO from a CompanyProfile row.
+   *
+   * @param {{
+   *   displayName: string;
+   *   officialName: string;
+   *   taxId: string | null;
+   *   headOffice: string | null;
+   *   logoUrl: string | null;
+   *   siteManagerAccessRule: string;
+   *   allowEmployeeManualTime: boolean;
+   *   allowSiteManagerCreateProject: boolean;
+   *   requireReasonForTimeEdit: boolean;
+   *   updatedAt: Date;
+   * }} profile - CompanyProfile fields.
+   * @returns {AdminCompanySettingsDTO} Settings payload for the admin UI.
+   */
+  static build(profile: {
+    displayName: string;
+    officialName: string;
+    taxId: string | null;
+    headOffice: string | null;
+    logoUrl: string | null;
+    siteManagerAccessRule: string;
+    allowEmployeeManualTime: boolean;
+    allowSiteManagerCreateProject: boolean;
+    requireReasonForTimeEdit: boolean;
+    updatedAt: Date;
+  }): AdminCompanySettingsDTO {
+    return new AdminCompanySettingsDTO(
+      profile.displayName,
+      profile.officialName,
+      profile.taxId,
+      profile.headOffice,
+      profile.logoUrl,
+      profile.siteManagerAccessRule,
+      profile.allowEmployeeManualTime,
+      profile.allowSiteManagerCreateProject,
+      profile.requireReasonForTimeEdit,
+      profile.updatedAt.toISOString()
+    );
+  }
+}
+
+/**
  * Admin Settings → Available languages payload (all 18 languages).
  */
 export class AdminLanguagesDTO {

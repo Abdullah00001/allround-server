@@ -3,6 +3,7 @@ import { validateReqBody } from '@/app/utils/system.utils';
 import {
   adminLoginSchema,
   changeAdminPasswordSchema,
+  updateAdminCompanySettingsSchema,
   updateAdminLanguagesSchema,
   updateAdminProfileSchema,
 } from '@/app/modules/admin/admin.schema';
@@ -19,11 +20,16 @@ import {
 import {
   changeAdminPasswordController,
   checkAdminController,
+  exportAdminCustomersController,
+  exportAdminProjectsController,
+  exportAdminTimeLogsController,
+  getAdminCompanySettingsController,
   getAdminLanguagesController,
   getAdminProfileController,
   loginAdminController,
   logoutAdminController,
   refreshAdminController,
+  updateAdminCompanySettingsController,
   updateAdminLanguagesController,
   updateAdminProfileController,
 } from '@/app/modules/admin/admin.controllers';
@@ -98,6 +104,18 @@ router
   );
 
 /**
+ * Company branding + access policies (Settings → General / Access policies).
+ */
+router
+  .route('/admin/settings/company')
+  .get(...adminAuth, getAdminCompanySettingsController)
+  .patch(
+    ...adminAuth,
+    validateReqBody(updateAdminCompanySettingsSchema),
+    updateAdminCompanySettingsController
+  );
+
+/**
  * Available languages settings (all 18 + company default/enabled).
  */
 router
@@ -108,5 +126,20 @@ router
     validateReqBody(updateAdminLanguagesSchema),
     updateAdminLanguagesController
   );
+
+/**
+ * Settings → Data & local reset → Export company data (CSV downloads).
+ */
+router
+  .route('/admin/settings/export/projects')
+  .get(...adminAuth, exportAdminProjectsController);
+
+router
+  .route('/admin/settings/export/customers')
+  .get(...adminAuth, exportAdminCustomersController);
+
+router
+  .route('/admin/settings/export/time-logs')
+  .get(...adminAuth, exportAdminTimeLogsController);
 
 export default router;

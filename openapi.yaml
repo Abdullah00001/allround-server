@@ -1371,6 +1371,241 @@ paths:
               schema:
                 $ref: '#/components/schemas/SystemErrorResponse'
 
+  /api/v1/admin/settings/company:
+    get:
+      tags: [Admin]
+      summary: Get company settings
+      description: >
+        Settings → System & company settings (General branding + Access policies).
+        Returns `CompanyProfile` branding fields and policy flags. Upload logo via
+        `POST /media`, then PATCH `logoUrl`. Languages use `/admin/settings/languages`;
+        Legal uses `/admin/legal/{type}`. Local cache reset is client-only.
+      operationId: getAdminCompanySettings
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+          description: Double Submit CSRF token matching the admin_csrf_token cookie.
+      responses:
+        '200':
+          description: Company settings fetched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetAdminCompanySettingsResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Forbidden or CSRF validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+    patch:
+      tags: [Admin]
+      summary: Update company settings
+      description: >
+        Partial update of branding and/or access policies on `CompanyProfile`
+        (at least one field). Powers Save Settings on the admin Settings page.
+      operationId: updateAdminCompanySettings
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+          description: Double Submit CSRF token matching the admin_csrf_token cookie.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAdminCompanySettingsPayload'
+            example:
+              displayName: Allround Cockpit
+              officialName: Allround Gerüstbau GmbH
+              taxId: HRB 88412 - Köln
+              headOffice: Gottfriedstraße 12, 50968 Köln
+              logoUrl: https://cdn.example.com/logo.png
+              siteManagerAccessRule: RESTRICT_TO_ASSIGNED
+              allowEmployeeManualTime: true
+              allowSiteManagerCreateProject: false
+              requireReasonForTimeEdit: false
+      responses:
+        '200':
+          description: Company settings updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetAdminCompanySettingsResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Forbidden or CSRF validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
+  /api/v1/admin/settings/export/projects:
+    get:
+      tags: [Admin]
+      summary: Export all projects (CSV)
+      description: >
+        Settings → Data & local reset → Export all projects.
+        Returns a UTF-8 CSV download (Excel-compatible) of non-deleted projects.
+      operationId: exportAdminProjects
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: CSV file download
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Forbidden or CSRF validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/settings/export/customers:
+    get:
+      tags: [Admin]
+      summary: Export customers (CSV)
+      description: >
+        Settings → Data & local reset → Export customers.
+        Returns a UTF-8 CSV download of non-deleted customers.
+      operationId: exportAdminCustomers
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: CSV file download
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Forbidden or CSRF validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+  /api/v1/admin/settings/export/time-logs:
+    get:
+      tags: [Admin]
+      summary: Export time logs (CSV)
+      description: >
+        Settings → Data & local reset → Export time logs.
+        Returns a UTF-8 CSV download of all time logs.
+      operationId: exportAdminTimeLogs
+      security:
+        - adminAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: CSV file download
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '403':
+          description: Forbidden or CSRF validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
   /api/v1/admin/settings/languages:
     get:
       tags: [Admin]
@@ -8682,6 +8917,9 @@ paths:
       description: |
         Creates a project from the Create New Project form.
 
+        **Policy:** Requires `CompanyProfile.allowSiteManagerCreateProject === true`
+        (admin Settings → Access policies). Otherwise **403** `FORBIDDEN`.
+
         **Location:** required map `coordinates` (`lat`/`lng`). Optional `placeLabel`
         is stored as DB address; otherwise `"lat, lng"` is used.
 
@@ -14912,6 +15150,91 @@ components:
           type: boolean
         isDefault:
           type: boolean
+    AdminCompanySettingsDTO:
+      type: object
+      required:
+        - displayName
+        - officialName
+        - taxId
+        - headOffice
+        - logoUrl
+        - siteManagerAccessRule
+        - allowEmployeeManualTime
+        - allowSiteManagerCreateProject
+        - requireReasonForTimeEdit
+        - updatedAt
+      properties:
+        displayName:
+          type: string
+          example: Allround Cockpit
+        officialName:
+          type: string
+          example: Allround Gerüstbau GmbH
+        taxId:
+          type: string
+          nullable: true
+          example: HRB 88412 - Köln
+        headOffice:
+          type: string
+          nullable: true
+          example: Gottfriedstraße 12, 50968 Köln
+        logoUrl:
+          type: string
+          format: uri
+          nullable: true
+        siteManagerAccessRule:
+          type: string
+          enum: [RESTRICT_TO_ASSIGNED, GLOBAL_ACCESS]
+        allowEmployeeManualTime:
+          type: boolean
+        allowSiteManagerCreateProject:
+          type: boolean
+          description: Site managers can create new projects from the field
+        requireReasonForTimeEdit:
+          type: boolean
+        updatedAt:
+          type: string
+          format: date-time
+    UpdateAdminCompanySettingsPayload:
+      type: object
+      description: At least one field required (Save Settings).
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+        officialName:
+          type: string
+          minLength: 1
+        taxId:
+          type: string
+          nullable: true
+        headOffice:
+          type: string
+          nullable: true
+        logoUrl:
+          type: string
+          format: uri
+          nullable: true
+        siteManagerAccessRule:
+          type: string
+          enum: [RESTRICT_TO_ASSIGNED, GLOBAL_ACCESS]
+        allowEmployeeManualTime:
+          type: boolean
+        allowSiteManagerCreateProject:
+          type: boolean
+        requireReasonForTimeEdit:
+          type: boolean
+    GetAdminCompanySettingsResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: Company settings fetched successfully.
+            data:
+              $ref: '#/components/schemas/AdminCompanySettingsDTO'
     AdminLanguagesDTO:
       type: object
       required: [defaultLanguage, enabledLanguages, languages]
@@ -16552,7 +16875,13 @@ components:
             enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU]
     MobileConfigDTO:
       type: object
-      required: [defaultLanguage, enabledLanguages, allowEmployeeManualTime, legalContents, enums]
+      required:
+        - defaultLanguage
+        - enabledLanguages
+        - allowEmployeeManualTime
+        - allowSiteManagerCreateProject
+        - legalContents
+        - enums
       properties:
         defaultLanguage:
           type: string
@@ -16564,6 +16893,10 @@ components:
             enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU]
         allowEmployeeManualTime:
           type: boolean
+        allowSiteManagerCreateProject:
+          type: boolean
+          description: >
+            When false, hide SM create-project UI; `POST /mobile/projects` returns 403.
         legalContents:
           type: array
           items:

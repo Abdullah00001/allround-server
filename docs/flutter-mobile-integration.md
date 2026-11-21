@@ -249,7 +249,9 @@ Login (role=EMPLOYEE)
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| `GET` | `/mobile/config` | `defaultLanguage`, `enabledLanguages`, `allowEmployeeManualTime`, `legalContents[]`, **`enums`** (all API enum catalogs) |
+| `GET` | `/mobile/config` | `defaultLanguage`, `enabledLanguages`, `allowEmployeeManualTime`, `allowSiteManagerCreateProject`, `legalContents[]`, **`enums`** (all API enum catalogs) |
+
+If `allowSiteManagerCreateProject === false`, hide Site Manager “create project” UI (`POST /mobile/projects` → **403**).
 
 If `allowEmployeeManualTime === false`, hide the “Add manual time” UI.
 
