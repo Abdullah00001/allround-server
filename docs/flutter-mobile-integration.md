@@ -915,13 +915,22 @@ Content-Type: application/json
 }
 ```
 
+`phaseId` must be a real `ProjectPhase` UUID (from schedule / assigned-projects / timer APIs). **Do not send `projectId` as `phaseId`.**
+
+### Server pipeline
+
+1. Auth + device session  
+2. Zod body validation (`422` on bad shape)  
+3. **`checkSyncTimeLogPhasesMiddleware`** — every distinct `logs[].phaseId` must exist; otherwise **`404 PHASE_NOT_FOUND`** (no inserts)  
+4. Service — create new logs / skip known `clientSyncId`
+
 ### Idempotency rule
 
 - Generate a **stable UUID `clientSyncId` per offline log** when the log is first created on device.  
 - Persist it until the server acknowledges creation **or** skip.  
 - Resubmitting the same `clientSyncId` is **safe** — duplicates are skipped (`clientSyncId` is unique).
 
-### Response `data`
+### Response `data` (`200`)
 
 ```json
 {
@@ -932,6 +941,15 @@ Content-Type: application/json
 ```
 
 Synced rows are stored as `isManual: false`, `status: APPROVED`.
+
+### Errors
+
+| Status | `errorType` | When |
+| --- | --- | --- |
+| `404` | `PHASE_NOT_FOUND` | Any `logs[].phaseId` missing / deleted — whole batch rejected before inserts |
+| `422` | validation | Invalid UUID, empty `logs`, `endTime` ≤ `startTime`, etc. |
+
+On `404`, fix or drop the bad offline queue row; retries with the same invalid `phaseId` will keep failing.
 
 **Critical:** Never regenerate `clientSyncId` on retry — that creates duplicate payroll hours.
 

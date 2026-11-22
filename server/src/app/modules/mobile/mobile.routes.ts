@@ -35,6 +35,7 @@ import {
   checkSiteManagerPhaseAccessMiddleware,
   checkSiteManagerProjectAccessMiddleware,
   checkSiteManagerRoleMiddleware,
+  checkSyncTimeLogPhasesMiddleware,
   checkTaskAssigneeExistenceMiddleware,
   mapPhaseIdFromParamsMiddleware,
 } from '@/app/modules/mobile/mobile.middlewares';
@@ -556,6 +557,7 @@ router
   .post(
     ...mobileAuth,
     validateReqBody(syncTimeLogsSchema),
+    checkSyncTimeLogPhasesMiddleware,
     syncTimeLogsController
   );
 

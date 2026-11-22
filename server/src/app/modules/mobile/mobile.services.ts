@@ -2515,6 +2515,7 @@ export const getMapDataService = async ({
  * Bulk-syncs offline time logs using `clientSyncId` for idempotency.
  * Existing sync ids are skipped; new closed logs are stored as trusted
  * non-manual APPROVED entries (with optional breaks).
+ * Assumes `checkSyncTimeLogPhasesMiddleware` already verified phase ids.
  *
  * @param {TSyncTimeLogsServiceParams} params - User and sync payload.
  * @returns {Promise<MobileSyncResultDTO>} Created/skipped counts and created logs.

@@ -11223,7 +11223,15 @@ paths:
     post:
       tags: [MobileTimeTracking]
       summary: Sync offline time logs
-      description: Bulk upserts offline logs using clientSyncId for idempotency. New logs are saved as APPROVED non-manual entries.
+      description: >
+        Bulk upserts offline logs using `clientSyncId` for idempotency.
+        New logs are saved as APPROVED non-manual entries.
+
+        Middleware (`checkSyncTimeLogPhasesMiddleware`) verifies every
+        distinct `logs[].phaseId` exists as a `ProjectPhase` before the
+        controller runs. Any missing id fails the whole request with
+        `404 PHASE_NOT_FOUND` (no partial inserts). Do not send `projectId`
+        as `phaseId`.
       operationId: syncMobileTimeLogs
       security: [{bearerAuth: []}]
       requestBody:
@@ -11262,7 +11270,19 @@ paths:
                 message: 'Only site managers can access crew time logs'
                 errorType: 'FORBIDDEN'
                 traceId: '123e4567-e89b-12d3-a456-426614174000'
-
+        '404':
+          description: >
+            One or more `logs[].phaseId` values do not exist
+            (`checkSyncTimeLogPhasesMiddleware`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+              example:
+                success: false
+                message: 'Phase not found'
+                errorType: 'PHASE_NOT_FOUND'
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
         '422':
           description: Request validation failed
           content:
@@ -16178,9 +16198,13 @@ components:
       properties:
         clientSyncId:
           type: string
+          description: Stable client-generated id for idempotent retries
         phaseId:
           type: string
           format: uuid
+          description: >
+            Existing ProjectPhase id (not projectId). Validated by
+            checkSyncTimeLogPhasesMiddleware before insert.
         activityType:
           type: string
           enum: [ERECTION, DISMANTLING, TRANSPORT, MAINTENANCE, OTHER]

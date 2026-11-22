@@ -21,6 +21,7 @@ import {
   TCreateProjectTaskPayload,
   TGetCrewTimeQuery,
   TStopTimerPayload,
+  TSyncTimeLogsPayload,
 } from '@/app/modules/mobile/mobile.types';
 import { selectPrimaryPhase } from '@/app/modules/project/project.helpers';
 
@@ -903,6 +904,42 @@ export const checkMobileCreateProjectRefsMiddleware = asyncHandler(
       return;
     }
     req.managedUser = siteManager as User;
+    next();
+  }
+);
+
+/**
+ * Ensures every `phaseId` in `POST /mobile/sync` body exists before create.
+ * Returns `404 PHASE_NOT_FOUND` when any id is missing (avoids Prisma FK 500).
+ *
+ * @param {Request} req - Express request with validated sync body.
+ * @param {Response} res - Express response used for the 404 envelope.
+ * @param {NextFunction} next - Continues when all phase ids exist.
+ * @returns {Promise<void>}
+ */
+export const checkSyncTimeLogPhasesMiddleware = asyncHandler(
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const traceId = getTraceId();
+    const payload = req.body as TSyncTimeLogsPayload;
+    const phaseIds = [...new Set(payload.logs.map((log) => log.phaseId))];
+
+    const phases = await prisma.projectPhase.findMany({
+      where: { id: { in: phaseIds } },
+      select: { id: true },
+    });
+    const existingPhaseIds = new Set(phases.map((phase) => phase.id));
+    const missing = phaseIds.some((phaseId) => !existingPhaseIds.has(phaseId));
+
+    if (missing) {
+      res.status(404).json({
+        success: false,
+        message: 'Phase not found',
+        errorType: AuthErrorType.PHASE_NOT_FOUND,
+        traceId,
+      });
+      return;
+    }
+
     next();
   }
 );
