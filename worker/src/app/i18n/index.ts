@@ -57,7 +57,7 @@ const deDictionary: { [K in keyof typeof enDictionary]: string } = {
 };
 
 /**
- * Static i18n for worker email subjects and push copy (all 18 locales registered).
+ * Static i18n for worker email subjects and push copy (catalog locales).
  * Authored: `en`, `de`. Other locales use English until authored.
  */
 export const i18nDictionaries: Record<
@@ -82,6 +82,8 @@ export const i18nDictionaries: Record<
   nl: { ...enDictionary },
   el: { ...enDictionary },
   hu: { ...enDictionary },
+  hi: { ...enDictionary },
+  ar: { ...enDictionary },
 };
 
 export type TranslationKey = keyof typeof enDictionary;

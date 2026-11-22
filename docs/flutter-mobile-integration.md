@@ -1025,7 +1025,7 @@ Worker data keys typically include `title`, `body`/`message`, `type`, `click_act
 ## 8. Localization — Both Roles
 
 1. After auth, call **`GET /mobile/config`**.  
-2. Build language picker from `enabledLanguages` / `defaultLanguage` (up to **18** codes). Use `preferredLanguage` (from `UserPreference`) as the selected UI language.  
+2. Build language picker from `enabledLanguages` / `defaultLanguage` (catalog has **20** codes incl. optional `HU`; company typically enables the client **19**: DE, EN, TR, PL, RO, FR, ES, IT, NL, PT, RU, UK, BG, HR, SR, SQ, EL, HI, AR). Use `preferredLanguage` (from `UserPreference`) as the selected UI language. Locales: `hi` (Hindi), `ar` (Arabic).  
 3. Change language with **`POST /settings/language`** `{ "language": "RO" }` (alua path; Flutter picker) — or **`PATCH /mobile/profile`** `{ "language": "RO" }`. Both upsert `UserPreference`; do **not** rely on `x-locale` alone or profile will keep showing the old `language`.
 4. Cache **`data.enums`** and validate dropdowns against those lists (never invent statuses like `PLANNED`).  
 5. Render Privacy / Terms from `legalContents` — bodies follow the user’s preferred language after auth (Translation pipeline). Public `GET /legal/:type` still needs `x-locale` (no user session).  

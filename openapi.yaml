@@ -12083,7 +12083,7 @@ components:
           description: Whether the user completed profile setup
         language:
           type: string
-          enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU]
+          enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU, HI, AR]
           example: 'EN'
           description: Preferred user interface language
 
@@ -15253,7 +15253,7 @@ components:
           nullable: true
         language:
           type: string
-          enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU]
+          enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU, HI, AR]
           description: From UserPreference (default EN when missing)
         weeklyHoursTarget:
           type: number
@@ -15274,7 +15274,7 @@ components:
         avatarUrl: { type: string, format: uri, nullable: true }
         language:
           type: string
-          enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU]
+          enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU, HI, AR]
     AdminProfileDTO:
       type: object
       required: [id, firstName, lastName, email, phone, avatarUrl, role, language, createdAt]
@@ -15288,7 +15288,7 @@ components:
         role: { type: string, enum: [ADMIN] }
         language:
           type: string
-          enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU]
+          enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU, HI, AR]
         createdAt: { type: string, format: date-time }
     UpdateAdminProfileRequest:
       type: object
@@ -15300,7 +15300,7 @@ components:
         avatarUrl: { type: string, format: uri, nullable: true }
         language:
           type: string
-          enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU]
+          enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU, HI, AR]
     GetAdminProfileResponse:
       allOf:
         - $ref: '#/components/schemas/SuccessResponse'
@@ -15340,7 +15340,7 @@ components:
       properties:
         language:
           type: string
-          enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU]
+          enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU, HI, AR]
           example: RO
           description: Preferred UI language (UserPreference.language)
     UpdateSettingsLanguageResponse:
@@ -15358,7 +15358,7 @@ components:
               properties:
                 language:
                   type: string
-                  enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU]
+                  enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU, HI, AR]
                 notifications:
                   type: object
                   required: [push, email]
@@ -15390,8 +15390,8 @@ components:
               example: 'Admin password changed successfully'
     AdminLanguageCode:
       type: string
-      enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU]
-      description: Prisma Language enum (all 18 company languages)
+      enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU, HI, AR]
+      description: Prisma Language enum (20 catalog codes; company enables a subset)
     AdminLanguageOptionDTO:
       type: object
       required: [code, displayCode, name, locale, enabled, isDefault]
@@ -17274,7 +17274,7 @@ components:
           type: array
           items:
             type: string
-            enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU]
+            enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU, HI, AR]
     MobileConfigDTO:
       type: object
       required:
@@ -17288,15 +17288,15 @@ components:
       properties:
         defaultLanguage:
           type: string
-          enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU]
+          enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU, HI, AR]
         enabledLanguages:
           type: array
           items:
             type: string
-            enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU]
+            enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU, HI, AR]
         preferredLanguage:
           type: string
-          enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU]
+          enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU, HI, AR]
           description: Authenticated user's UserPreference.language (drives legal localization after auth)
         allowEmployeeManualTime:
           type: boolean

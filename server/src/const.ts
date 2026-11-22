@@ -418,6 +418,8 @@ export const TRANSLATION_CONFIG = {
     'nl',
     'el',
     'hu',
+    'hi',
+    'ar',
   ] as const,
   DEFAULT_LOCALE: 'de',
   TRANSLATABLE_FIELDS: {
@@ -447,6 +449,8 @@ export type TranslationContentType =
 
 /**
  * Admin UI catalog for Available languages (display codes match Flutter flags).
+ * Catalog size is 20 (client 19 + optional HU). Company `enabledLanguages`
+ * selects which appear in the mobile picker.
  */
 export const LANGUAGE_CATALOG = [
   { code: 'DE', locale: 'de', displayCode: 'DE', name: 'German' },
@@ -467,4 +471,6 @@ export const LANGUAGE_CATALOG = [
   { code: 'NL', locale: 'nl', displayCode: 'NL', name: 'Dutch' },
   { code: 'EL', locale: 'el', displayCode: 'GR', name: 'Greek' },
   { code: 'HU', locale: 'hu', displayCode: 'HU', name: 'Hungarian' },
+  { code: 'HI', locale: 'hi', displayCode: 'IN', name: 'Hindi' },
+  { code: 'AR', locale: 'ar', displayCode: 'SA', name: 'Arabic' },
 ] as const;

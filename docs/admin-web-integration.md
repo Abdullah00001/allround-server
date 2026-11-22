@@ -87,7 +87,7 @@ Mismatch → **403** with `errorType: "FORBIDDEN"`.
 | `POST /admin/settings/password` | Yes | Change password; clears Redis sessions + cookies — re-login required |
 | `GET /admin/settings/company` | Yes | Branding + access policies (`CompanyProfile`) |
 | `PATCH /admin/settings/company` | Yes | Save Settings (displayName, logoUrl, siteManagerAccessRule, …) |
-| `GET /admin/settings/languages` | Yes | Available languages grid (all 18 + enabled/default) |
+| `GET /admin/settings/languages` | Yes | Available languages grid (catalog 20 incl. HI/AR/HU + enabled/default) |
 | `PATCH /admin/settings/languages` | Yes | Update `defaultLanguage` / `enabledLanguages` |
 
 **Critical:** Refresh before the access cookie expires (~15m). Store the latest `csrfToken` from login **and** refresh responses.
@@ -544,7 +544,7 @@ Content-Type: application/json
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| `GET` | `/admin/settings/languages` | Full catalog (18) + `defaultLanguage` + `enabledLanguages` |
+| `GET` | `/admin/settings/languages` | Full catalog (20: +HI/AR, HU optional) + `defaultLanguage` + `enabledLanguages` |
 | `PATCH` | `/admin/settings/languages` | Body may include `defaultLanguage` and/or `enabledLanguages` (≥1 field). Default is always kept in the enabled list. |
 
 ```http
@@ -625,7 +625,7 @@ System & company settings UI maps to:
 | Tab / action | API |
 | --- | --- |
 | General branding + Access policies (Save Settings) | `GET` / `PATCH /admin/settings/company` |
-| Languages (18) | `GET` / `PATCH /admin/settings/languages` |
+| Languages (20 catalog) | `GET` / `PATCH /admin/settings/languages` |
 | Legal | `GET` / `PATCH /admin/legal/:type` |
 | Sync overview / Clear local cache & re-sync | Client-only (no server route) |
 | Export all projects | `GET /admin/settings/export/projects` → CSV download |

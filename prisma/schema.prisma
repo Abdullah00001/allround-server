@@ -129,6 +129,8 @@ enum Language {
   NL // Dutch
   EL // Greek (GR)
   HU // Hungarian
+  HI // Hindi (IN)
+  AR // Arabic (SA)
 }
 
 enum TranslationStatus {

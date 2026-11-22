@@ -63,7 +63,7 @@ const deDictionary: { [K in keyof typeof enDictionary]: string } = {
 };
 
 /**
- * Static i18n for system emails / push templates across all 18 company locales.
+ * Static i18n for system emails / push templates across catalog locales.
  * Authored: `en`, `de`. Remaining locales fall back to English at lookup time.
  * Dynamic CMS content (legal, notes, …) uses the Translation pipeline instead.
  */
@@ -89,6 +89,8 @@ export const i18nDictionaries: Record<
   nl: { ...enDictionary },
   el: { ...enDictionary },
   hu: { ...enDictionary },
+  hi: { ...enDictionary },
+  ar: { ...enDictionary },
 };
 
 /**
