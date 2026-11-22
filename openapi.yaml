@@ -1777,6 +1777,62 @@ paths:
               schema:
                 $ref: '#/components/schemas/SystemErrorResponse'
 
+  /api/v1/settings/language:
+    post:
+      tags: [Settings]
+      summary: Update preferred language (EMPLOYEE + SITE_MANAGER)
+      description: >
+        Alua-compatible Flutter language-picker endpoint. Upserts
+        `UserPreference.language` and applies it to the request locale ALS.
+        Subsequent authenticated requests (including `GET /mobile/profile`)
+        return this language and localize dynamic fields accordingly.
+        Equivalent preference write: `PATCH /mobile/profile` `{ "language": "RO" }`.
+      operationId: updateSettingsLanguage
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSettingsLanguagePayload'
+            example:
+              language: RO
+      responses:
+        '200':
+          description: Language updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateSettingsLanguageResponse'
+              example:
+                success: true
+                message: 'Language updated successfully.'
+                data:
+                  language: RO
+                  notifications:
+                    push: true
+                    email: true
+                traceId: '123e4567-e89b-12d3-a456-426614174000'
+        '401':
+          description: Authentication or device session error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemErrorResponse'
+
   /api/v1/legal/{type}:
     get:
       tags: [Legal]
@@ -15277,6 +15333,38 @@ components:
             message:
               type: string
               example: 'Change password successful.'
+    UpdateSettingsLanguagePayload:
+      type: object
+      required: [language]
+      additionalProperties: false
+      properties:
+        language:
+          type: string
+          enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU]
+          example: RO
+          description: Preferred UI language (UserPreference.language)
+    UpdateSettingsLanguageResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          required: [data]
+          properties:
+            message:
+              type: string
+              example: 'Language updated successfully.'
+            data:
+              type: object
+              required: [language, notifications]
+              properties:
+                language:
+                  type: string
+                  enum: [DE, EN, PL, RO, TR, BG, HR, SR, UK, RU, SQ, IT, FR, ES, PT, NL, EL, HU]
+                notifications:
+                  type: object
+                  required: [push, email]
+                  properties:
+                    push: { type: boolean }
+                    email: { type: boolean }
     ChangeAdminPasswordPayload:
       type: object
       required: [currentPassword, newPassword]

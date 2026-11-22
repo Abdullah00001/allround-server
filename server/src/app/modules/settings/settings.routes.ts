@@ -7,9 +7,15 @@ import {
   checkUserExistenceMiddleware,
 } from '@/app/modules/auth/auth.middlewares';
 import { syncLocaleFromAuthenticatedUserMiddleware } from '@/app/middlewares/locale.middlewares';
-import { changePasswordController } from '@/app/modules/settings/settings.controllers';
+import {
+  changePasswordController,
+  updateLanguageController,
+} from '@/app/modules/settings/settings.controllers';
 import { checkCurrentPasswordMiddleware } from '@/app/modules/settings/settings.middlewares';
-import { changePasswordSchema } from '@/app/modules/settings/settings.schema';
+import {
+  changePasswordSchema,
+  updateLanguageSchema,
+} from '@/app/modules/settings/settings.schema';
 
 const router = Router();
 
@@ -36,6 +42,18 @@ router
     validateReqBody(changePasswordSchema),
     checkCurrentPasswordMiddleware,
     changePasswordController
+  );
+
+/**
+ * Update preferred language (alua-compatible; used by Flutter picker).
+ * Upserts `UserPreference.language` and applies it to the request ALS.
+ */
+router
+  .route('/settings/language')
+  .post(
+    ...mobileAuth,
+    validateReqBody(updateLanguageSchema),
+    updateLanguageController
   );
 
 export default router;

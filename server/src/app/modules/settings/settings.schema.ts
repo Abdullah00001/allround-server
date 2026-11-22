@@ -1,3 +1,4 @@
+import { Language } from '@prisma/client';
 import { z } from 'zod';
 
 /**
@@ -28,5 +29,15 @@ export const changePasswordSchema = z
       .string()
       .min(1, { error: 'Current password is required' }),
     newPassword: newPasswordSchema,
+  })
+  .strict();
+
+/**
+ * Request body for `POST /settings/language` (EMPLOYEE + SITE_MANAGER).
+ * Alua-compatible path used by the Flutter language picker.
+ */
+export const updateLanguageSchema = z
+  .object({
+    language: z.enum(Language, { message: 'Invalid language' }),
   })
   .strict();

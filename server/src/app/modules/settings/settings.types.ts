@@ -1,8 +1,12 @@
 import { z } from 'zod';
 import { User } from '@prisma/client';
-import { changePasswordSchema } from '@/app/modules/settings/settings.schema';
+import {
+  changePasswordSchema,
+  updateLanguageSchema,
+} from '@/app/modules/settings/settings.schema';
 
 export type TChangePasswordPayload = z.infer<typeof changePasswordSchema>;
+export type TUpdateLanguagePayload = z.infer<typeof updateLanguageSchema>;
 
 /**
  * Service params for mobile self password change.
@@ -14,4 +18,14 @@ export type TChangePasswordServiceParams = {
   deviceId: string;
   /** Validated body. */
   payload: TChangePasswordPayload;
+};
+
+/**
+ * Service params for mobile language preference update.
+ */
+export type TUpdateLanguageServiceParams = {
+  /** Authenticated user. */
+  user: User;
+  /** Validated body (`language`). */
+  payload: TUpdateLanguagePayload;
 };

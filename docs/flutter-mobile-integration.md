@@ -288,6 +288,7 @@ UI label **“Not Started” / “Planned”** → send `status: "ENQUIRY"` (or 
 | `PATCH` | `/mobile/profile` | Self-update: optional `firstName`, `lastName`, `phone`, `avatarUrl` (null clears), `language` (≥1 field). Same response as GET |
 | `GET` | `/mobile/employee/schedule` | **My Plan** — `startDate`/`endDate` day buckets from **your** crew assignments |
 | `POST` | `/settings/password` | Change password (EMPLOYEE + SITE_MANAGER). Revokes other devices; keeps current session |
+| `POST` | `/settings/language` | **Preferred** language picker path (alua). Body `{ "language": "RO" }` → upserts `UserPreference`; profile `language` + localization follow |
 
 **PATCH body notes:** no phone format validation; upload avatar via `POST /media` then pass URL. Not patchable: `email`, `role`, `status`, `password`, `weeklyHoursTarget`.
 
@@ -1025,7 +1026,7 @@ Worker data keys typically include `title`, `body`/`message`, `type`, `click_act
 
 1. After auth, call **`GET /mobile/config`**.  
 2. Build language picker from `enabledLanguages` / `defaultLanguage` (up to **18** codes). Use `preferredLanguage` (from `UserPreference`) as the selected UI language.  
-3. Change language with **`PATCH /mobile/profile`** `{ "language": "PL" }` — server upserts preference and applies it to subsequent authenticated requests (alua parity).  
+3. Change language with **`POST /settings/language`** `{ "language": "RO" }` (alua path; Flutter picker) — or **`PATCH /mobile/profile`** `{ "language": "RO" }`. Both upsert `UserPreference`; do **not** rely on `x-locale` alone or profile will keep showing the old `language`.
 4. Cache **`data.enums`** and validate dropdowns against those lists (never invent statuses like `PLANNED`).  
 5. Render Privacy / Terms from `legalContents` — bodies follow the user’s preferred language after auth (Translation pipeline). Public `GET /legal/:type` still needs `x-locale` (no user session).  
 6. Optional override: send `x-locale` / `?locale=` to force a locale for one request (wins over preference).  
@@ -1058,6 +1059,7 @@ Worker data keys typically include `title`, `body`/`message`, `type`, `click_act
 | Project attachments (`PHOTO` / `PDF_PLAN`) | ❌ 403 | ✅ |
 | `/mobile/profile` GET/PATCH | ✅ | ✅ |
 | `/settings/password` | ✅ | ✅ |
+| `/settings/language` | ✅ | ✅ |
 | Timer start/stop/manual/logs/sync | ✅ | ✅ |
 | `/mobile/employee/schedule` | ✅ | ❌ 403 |
 | `/mobile/employee/time-tracking/*` + `/mobile/employee/timer/*` | ✅ | ❌ 403 |
