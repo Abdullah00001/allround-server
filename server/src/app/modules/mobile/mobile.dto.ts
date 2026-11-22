@@ -888,10 +888,15 @@ export class MobileInspectionDTO {
       id: string;
       firstName: string;
       lastName: string;
+      localization?: ILocalizationMeta;
     } | null,
     public createdAt: string,
     public updatedAt: string,
-    public convertedProject?: { id: string; name: string }
+    public convertedProject?: {
+      id: string;
+      name: string;
+      localization?: ILocalizationMeta;
+    }
   ) {}
 
   /**
@@ -1068,6 +1073,8 @@ export class MobileConfigDTO {
  * Compact employee projection for task assignee rows.
  */
 export class MobileTaskEmployeeDTO {
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - User UUID.
    * @param {string} firstName - First name.
@@ -1306,7 +1313,12 @@ export class MobileProjectNoteDTO {
     public projectId: string,
     public category: ProjectNoteCategory,
     public content: string,
-    public author: { id: string; firstName: string; lastName: string },
+    public author: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      localization?: ILocalizationMeta;
+    },
     public createdAt: string
   ) {}
 
@@ -1524,6 +1536,7 @@ export class MobileProjectDetailDTO {
       area: number | null;
       height: number | null;
       type: string | null;
+      typeLocalization?: ILocalizationMeta;
     },
     public scheduleData: Array<{
       id: string;
@@ -1538,6 +1551,7 @@ export class MobileProjectDetailDTO {
       siteTitle: string;
       address: string;
       city: string | null;
+      localization?: ILocalizationMeta;
     } | null,
     public budgetedHours: number,
     public totalLoggedHours: number,
@@ -1660,6 +1674,8 @@ export class MobileCustomerListItemDTO {
  * Site manager contact card on employee Assignment / Project Detail.
  */
 export class EmployeeProjectSiteManagerDTO {
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - User UUID.
    * @param {string} firstName - First name.

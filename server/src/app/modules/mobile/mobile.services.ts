@@ -253,6 +253,21 @@ const localizeMobileInspectionDto = async (
       ...dto.siteManager,
       firstName: localizedUser.firstName,
       lastName: localizedUser.lastName,
+      localization: localizedUser.localization,
+    };
+  }
+
+  let convertedProject = dto.convertedProject;
+  if (convertedProject) {
+    const projectLocalized = await localizeProject({
+      id: convertedProject.id,
+      name: convertedProject.name,
+      siteAccessNotes: null,
+    });
+    convertedProject = {
+      ...convertedProject,
+      name: projectLocalized.name,
+      localization: projectLocalized.localization,
     };
   }
 
@@ -267,6 +282,7 @@ const localizeMobileInspectionDto = async (
       name: customerLocalized.name,
     },
     siteManager,
+    convertedProject,
   });
 };
 
@@ -507,6 +523,54 @@ const localizeTimeLogUserDto = async (log: MobileTimeLogDTO) => {
   log.user.lastName = localized.lastName;
   log.user.localization = localized.localization;
   return log;
+};
+
+const localizeTaskEmployee = async (
+  employee: MobileProjectTaskDTO['employee']
+): Promise<MobileProjectTaskDTO['employee']> => {
+  if (!employee) return null;
+  const localized = await localizeUser({
+    id: employee.id,
+    firstName: employee.firstName,
+    lastName: employee.lastName,
+  });
+  employee.firstName = localized.firstName;
+  employee.lastName = localized.lastName;
+  employee.localization = localized.localization;
+  return employee;
+};
+
+const localizeProjectTaskDto = async (
+  task: MobileProjectTaskDTO
+): Promise<MobileProjectTaskDTO> => {
+  const localized = await localizeProjectTask(task);
+  await localizeTaskEmployee(task.employee);
+  return Object.assign(task, {
+    title: localized.title,
+    description: localized.description ?? null,
+    localization: localized.localization,
+  });
+};
+
+const localizeProjectNoteDto = async (
+  note: MobileProjectNoteDTO
+): Promise<MobileProjectNoteDTO> => {
+  const localized = await localizeProjectNote(note);
+  const authorLocalized = await localizeUser({
+    id: note.author.id,
+    firstName: note.author.firstName,
+    lastName: note.author.lastName,
+  });
+  note.author = {
+    ...note.author,
+    firstName: authorLocalized.firstName,
+    lastName: authorLocalized.lastName,
+    localization: authorLocalized.localization,
+  };
+  return Object.assign(note, {
+    content: localized.content,
+    localization: localized.localization,
+  });
 };
 
 const localizeMobileProfileDto = async (dto: MobileProfileDTO) => {
@@ -1275,7 +1339,7 @@ export const getMyProjectsService = async ({
       inspections: Array<{ appointmentDate: Date }>;
     };
     projectManagers: Array<{
-      user: { firstName: string; lastName: string };
+      user: { id: string; firstName: string; lastName: string };
     }>;
     phases: Array<{
       id: string;
@@ -1308,7 +1372,9 @@ export const getMyProjectsService = async ({
       take: 1,
       orderBy: { assignedAt: 'asc' as const },
       select: {
-        user: { select: { firstName: true, lastName: true } },
+        user: {
+          select: { id: true, firstName: true, lastName: true },
+        },
       },
     },
     phases: {
@@ -1386,9 +1452,16 @@ export const getMyProjectsService = async ({
   );
 
   let cards: MobileProjectPhaseCardDTO[] = [];
+  const assigneeByProjectId = new Map<
+    string,
+    { id: string; firstName: string; lastName: string }
+  >();
 
   for (const project of scopedProjects) {
     const pm = project.projectManagers[0]?.user;
+    if (pm) {
+      assigneeByProjectId.set(project.id, pm);
+    }
     const assigneeName = pm ? `${pm.firstName} ${pm.lastName}` : null;
     const logged = loggedByProject.get(project.id) ?? 0;
     const budgeted = Number(project.budgetedHours);
@@ -1457,7 +1530,20 @@ export const getMyProjectsService = async ({
     );
   }
 
-  const localizedCards = await localizeMany(cards, localizeMobileProjectPhaseCard);
+  const localizedCards = await localizeMany(cards, async (card) => {
+    await localizeMobileProjectPhaseCard(card);
+    const assignee = assigneeByProjectId.get(card.projectId);
+    if (assignee) {
+      const localized = await localizeUser({
+        id: assignee.id,
+        firstName: assignee.firstName,
+        lastName: assignee.lastName,
+      });
+      card.assigneeName =
+        `${localized.firstName} ${localized.lastName}`.trim() || null;
+    }
+    return card;
+  });
   return paginateArray(localizedCards, page, limit);
 };
 
@@ -1908,6 +1994,22 @@ export const getTimeTrackingSummaryService = async ({
       logs.reduce((sum, log) => sum + calculateNetHours(log), 0).toFixed(2)
     );
 
+  let activeTimerDto = activeTimer
+    ? EmployeeTimeLogDTO.build(activeTimer)
+    : null;
+  if (activeTimerDto) {
+    const projectLocalized = await localizeProject({
+      id: activeTimerDto.project.id,
+      name: activeTimerDto.project.name,
+      siteAccessNotes: null,
+    });
+    activeTimerDto.project = {
+      ...activeTimerDto.project,
+      name: projectLocalized.name,
+      localization: projectLocalized.localization,
+    };
+  }
+
   return new MobileTimeTrackingSummaryDTO(
     sumHours(todayLogs),
     sumHours(weekLogs),
@@ -1915,7 +2017,7 @@ export const getTimeTrackingSummaryService = async ({
     getUtcIsoWeekNumber(now),
     toUtcDateKey(weekStart),
     toUtcDateKey(weekEndDate),
-    activeTimer ? EmployeeTimeLogDTO.build(activeTimer) : null
+    activeTimerDto
   );
 };
 
@@ -2979,15 +3081,8 @@ export const listProjectTasksService = async ({
 
   const localizeTaskDto = async (
     task: (typeof tasks)[number]
-  ): Promise<MobileProjectTaskDTO> => {
-    const dto = MobileProjectTaskDTO.build(task);
-    const localized = await localizeProjectTask(dto);
-    return Object.assign(dto, {
-      title: localized.title,
-      description: localized.description ?? null,
-      localization: localized.localization,
-    });
-  };
+  ): Promise<MobileProjectTaskDTO> =>
+    localizeProjectTaskDto(MobileProjectTaskDTO.build(task));
 
   if (status === 'OPEN' || status === 'COMPLETED') {
     const localizedTasks = await localizeMany(tasks, localizeTaskDto);
@@ -3052,13 +3147,7 @@ export const createProjectTaskService = async ({
     fields: { title: task.title, description: task.description },
   });
 
-  const dto = MobileProjectTaskDTO.build(task);
-  const localized = await localizeProjectTask(dto);
-  return Object.assign(dto, {
-    title: localized.title,
-    description: localized.description ?? null,
-    localization: localized.localization,
-  });
+  return localizeProjectTaskDto(MobileProjectTaskDTO.build(task));
 };
 
 /**
@@ -3080,13 +3169,7 @@ export const toggleProjectTaskService = async ({
     },
   });
 
-  const dto = MobileProjectTaskDTO.build(updated);
-  const localized = await localizeProjectTask(dto);
-  return Object.assign(dto, {
-    title: localized.title,
-    description: localized.description ?? null,
-    localization: localized.localization,
-  });
+  return localizeProjectTaskDto(MobileProjectTaskDTO.build(updated));
 };
 
 /**
@@ -3278,14 +3361,9 @@ export const listProjectNotesService = async ({
     }),
   ]);
 
-  const items = await localizeMany(notes, async (note) => {
-    const dto = MobileProjectNoteDTO.build(note);
-    const localized = await localizeProjectNote(dto);
-    return Object.assign(dto, {
-      content: localized.content,
-      localization: localized.localization,
-    });
-  });
+  const items = await localizeMany(notes, async (note) =>
+    localizeProjectNoteDto(MobileProjectNoteDTO.build(note))
+  );
 
   return {
     items,
@@ -3324,12 +3402,7 @@ export const createProjectNoteService = async ({
     fields: { content: note.content },
   });
 
-  const dto = MobileProjectNoteDTO.build(note);
-  const localized = await localizeProjectNote(dto);
-  return Object.assign(dto, {
-    content: localized.content,
-    localization: localized.localization,
-  });
+  return localizeProjectNoteDto(MobileProjectNoteDTO.build(note));
 };
 
 /**
@@ -3969,6 +4042,9 @@ export const getMobileProjectByIdService = async ({
           siteTitle: true,
           address: true,
           city: true,
+          siteAccessInstructions: true,
+          specialRequirements: true,
+          scaffoldType: true,
         },
       }),
     ]);
@@ -4007,39 +4083,56 @@ export const getMobileProjectByIdService = async ({
   }
 
   const primary = record.customer.contacts[0] ?? null;
-  const scaffoldType =
-    measurements.find((row) => row.scaffoldType)?.scaffoldType ?? null;
+  const scaffoldMeasurement =
+    measurements.find((row) => row.scaffoldType) ?? null;
+  const scaffoldType = scaffoldMeasurement?.scaffoldType ?? null;
   const scaffoldHeight = measurements.reduce<number | null>((max, row) => {
     const height = Number(row.height);
     if (max === null || height > max) return height;
     return max;
   }, null);
 
-  const [localizedProject, localizedCustomer, localizedContact, localizedInspection] =
-    await Promise.all([
-      localizeProject({
-        id: record.id,
-        name: record.name,
-        siteAccessNotes: record.siteAccessNotes,
-      }),
-      localizeCustomer({
-        id: record.customer.id,
-        name: record.customer.name,
-      }),
-      primary
-        ? localizeCustomerContact({
-            id: primary.id,
-            name: primary.name,
-            role: primary.role,
-          })
-        : Promise.resolve(null),
-      nextInspection
-        ? localizeInspection({
-            id: nextInspection.id,
-            siteTitle: nextInspection.siteTitle,
-          })
-        : Promise.resolve(null),
-    ]);
+  const [
+    localizedProject,
+    localizedCustomer,
+    localizedContact,
+    localizedInspection,
+    localizedScaffoldMeasurement,
+  ] = await Promise.all([
+    localizeProject({
+      id: record.id,
+      name: record.name,
+      siteAccessNotes: record.siteAccessNotes,
+    }),
+    localizeCustomer({
+      id: record.customer.id,
+      name: record.customer.name,
+    }),
+    primary
+      ? localizeCustomerContact({
+          id: primary.id,
+          name: primary.name,
+          role: primary.role,
+        })
+      : Promise.resolve(null),
+    nextInspection
+      ? localizeInspection({
+          id: nextInspection.id,
+          siteTitle: nextInspection.siteTitle,
+          siteAccessInstructions: nextInspection.siteAccessInstructions,
+          specialRequirements: nextInspection.specialRequirements,
+          scaffoldType: nextInspection.scaffoldType,
+        })
+      : Promise.resolve(null),
+    scaffoldMeasurement
+      ? localizeProjectMeasurement({
+          id: scaffoldMeasurement.id,
+          position: scaffoldMeasurement.position,
+          remark: scaffoldMeasurement.remark,
+          scaffoldType: scaffoldMeasurement.scaffoldType,
+        })
+      : Promise.resolve(null),
+  ]);
 
   const dto = new MobileProjectDetailDTO(
     record.id,
@@ -4053,7 +4146,10 @@ export const getMobileProjectByIdService = async ({
     {
       area: decimalToNumber(record.scaffoldArea),
       height: scaffoldHeight,
-      type: scaffoldType,
+      type:
+        (localizedScaffoldMeasurement?.scaffoldType as string | null) ??
+        scaffoldType,
+      typeLocalization: localizedScaffoldMeasurement?.localization,
     },
     record.phases.map((phase) => ({
       id: phase.id,
@@ -4069,6 +4165,7 @@ export const getMobileProjectByIdService = async ({
           siteTitle: localizedInspection?.siteTitle ?? nextInspection.siteTitle,
           address: nextInspection.address,
           city: nextInspection.city,
+          localization: localizedInspection?.localization,
         }
       : null,
     budgetedHours,
@@ -4109,6 +4206,10 @@ export const getMobileProjectByIdService = async ({
       localization: localizedContact.localization,
     });
   }
+  dto.crewBreakdown = await localizeMany(
+    dto.crewBreakdown,
+    localizeCrewBreakdownDto
+  );
   return dto;
 };
 
@@ -4251,12 +4352,7 @@ export const updateProjectNoteService = async ({
     fields: { content: updated.content },
   });
 
-  const dto = MobileProjectNoteDTO.build(updated);
-  const localized = await localizeProjectNote(dto);
-  return Object.assign(dto, {
-    content: localized.content,
-    localization: localized.localization,
-  });
+  return localizeProjectNoteDto(MobileProjectNoteDTO.build(updated));
 };
 
 /**
@@ -4508,15 +4604,9 @@ export const getEmployeeProjectDetailService = async ({
         name: record.name,
         siteAccessNotes: record.siteAccessNotes,
       }),
-      localizeMany(tasks, async (task) => {
-        const dto = MobileProjectTaskDTO.build(task);
-        const localized = await localizeProjectTask(dto);
-        return Object.assign(dto, {
-          title: localized.title,
-          description: localized.description ?? null,
-          localization: localized.localization,
-        });
-      }),
+      localizeMany(tasks, async (task) =>
+        localizeProjectTaskDto(MobileProjectTaskDTO.build(task))
+      ),
       measurement
         ? localizeProjectMeasurement({
             id: measurement.id,
@@ -4535,12 +4625,15 @@ export const getEmployeeProjectDetailService = async ({
     ]);
 
   const siteManager = pm
-    ? new EmployeeProjectSiteManagerDTO(
-        pm.id,
-        localizedPm?.firstName ?? pm.firstName,
-        localizedPm?.lastName ?? pm.lastName,
-        pm.phone,
-        pm.avatarUrl
+    ? Object.assign(
+        new EmployeeProjectSiteManagerDTO(
+          pm.id,
+          localizedPm?.firstName ?? pm.firstName,
+          localizedPm?.lastName ?? pm.lastName,
+          pm.phone,
+          pm.avatarUrl
+        ),
+        { localization: localizedPm?.localization }
       )
     : null;
 
@@ -4667,15 +4760,9 @@ export const listEmployeeProjectTasksService = async ({
     }),
   ]);
 
-  const items = await localizeMany(tasks, async (task) => {
-    const dto = MobileProjectTaskDTO.build(task);
-    const localized = await localizeProjectTask(dto);
-    return Object.assign(dto, {
-      title: localized.title,
-      description: localized.description ?? null,
-      localization: localized.localization,
-    });
-  });
+  const items = await localizeMany(tasks, async (task) =>
+    localizeProjectTaskDto(MobileProjectTaskDTO.build(task))
+  );
 
   return { items, total, page, limit };
 };

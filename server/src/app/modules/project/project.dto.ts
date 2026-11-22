@@ -106,6 +106,8 @@ export class ProjectPhaseDTO {
  * Assigned crew / project-manager member DTO.
  */
 export class ProjectCrewMemberDTO {
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - User UUID.
    * @param {string} firstName - First name.
@@ -342,6 +344,8 @@ export class ProjectSummaryDTO {
  * Compact assignee chip for admin project cards.
  */
 export class AdminProjectAssigneeDTO {
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - User UUID.
    * @param {string} firstName - First name.

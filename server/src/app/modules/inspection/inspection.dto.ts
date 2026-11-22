@@ -55,6 +55,8 @@ export class InspectionCustomerDTO {
  * Nested site-manager reference DTO for inspection responses.
  */
 export class InspectionSiteManagerDTO {
+  localization?: ILocalizationMeta;
+
   /**
    * @param {string} id - User UUID.
    * @param {string} firstName - Site manager first name.

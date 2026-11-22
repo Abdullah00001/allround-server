@@ -36,6 +36,7 @@ import {
   localizeCustomer,
   localizeMany,
   localizeProject,
+  localizeUser,
 } from '@/app/services/translation/entityLocalizers';
 import {
   aggregateLoggedHours,
@@ -103,6 +104,37 @@ const localizeAdminProjectCard = async (card: AdminProjectPhaseCardDTO) => {
     name: custLocalized.name,
     localization: custLocalized.localization,
   };
+
+  let assigneeId: string | null = null;
+  if (card.assigneeName) {
+    const match = card.assignedCrew.find(
+      (member) =>
+        `${member.firstName} ${member.lastName}`.trim() ===
+        card.assigneeName!.trim()
+    );
+    assigneeId = match?.id ?? null;
+  }
+
+  card.assignedCrew = await localizeMany(card.assignedCrew, async (member) => {
+    const localized = await localizeUser({
+      id: member.id,
+      firstName: member.firstName,
+      lastName: member.lastName,
+    });
+    member.firstName = localized.firstName;
+    member.lastName = localized.lastName;
+    member.localization = localized.localization;
+    return member;
+  });
+
+  if (assigneeId) {
+    const assignee = card.assignedCrew.find((member) => member.id === assigneeId);
+    if (assignee) {
+      card.assigneeName =
+        `${assignee.firstName} ${assignee.lastName}`.trim() || null;
+    }
+  }
+
   return card;
 };
 
@@ -947,7 +979,22 @@ export const getProjectByIdService = async ({
     [...crewById.values()]
   );
 
-  return applyProjectLocalization(dto);
+  const localized = await applyProjectLocalization(dto);
+  localized.assignedCrew = await localizeMany(
+    localized.assignedCrew,
+    async (member) => {
+      const userLocalized = await localizeUser({
+        id: member.id,
+        firstName: member.firstName,
+        lastName: member.lastName,
+      });
+      member.firstName = userLocalized.firstName;
+      member.lastName = userLocalized.lastName;
+      member.localization = userLocalized.localization;
+      return member;
+    }
+  );
+  return localized;
 };
 
 /**

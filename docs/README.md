@@ -40,6 +40,7 @@ Before reading, understand the strict repository boundaries:
 ### FRONTEND INTEGRATION
 - **[Admin Web Integration](admin-web-integration.md)**: Cookie + CSRF auth, CRM→Inspection→Project flow, planning, time approval, Socket.IO notification bell (React/Next.js).
 - **[Flutter Mobile Integration](flutter-mobile-integration.md)**: Bearer JWT + device session, RBAC, offline `clientSyncId` sync, timer/crew/inspections, Socket.IO + FCM, `/mobile/config` localization.
+- **[Mobile Push Notifications (Employee & SM)](mobile-push-notifications.md)**: Which activities fire FCM/Socket pushes per role, types, copy keys, and cron schedules.
 
 ### SECURITY
 - **[Security Architecture](security.md)**: JWT Authentication, Role-Based Access Control (RBAC), firewall isolation, and secret management.

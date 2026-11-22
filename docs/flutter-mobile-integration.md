@@ -339,6 +339,8 @@ OpenAPI tag: **`EmployeeTimeTracking`**. All under `/mobile/employee/*` — do *
 | `PATCH` | `/mobile/notifications/read-all` |
 | `PATCH` | `/mobile/notifications/:id/read` |
 
+**Which activities send push:** see **[Mobile Push Notifications](mobile-push-notifications.md)** (Employee vs Site Manager event matrix).
+
 ### 3.5 Employee checklist
 
 1. Login with `"role": "EMPLOYEE"`.  
@@ -936,6 +938,8 @@ Synced rows are stored as `isManual: false`, `status: APPROVED`.
 ---
 
 ## 7. Notifications, Socket.IO & FCM — Both Roles
+
+Event matrix (which activity pushes to Employee vs SM): **[mobile-push-notifications.md](mobile-push-notifications.md)**.
 
 ### REST
 

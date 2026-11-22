@@ -35,6 +35,7 @@ import {
   localizeMany,
   localizeProject,
   localizeProjectMeasurement,
+  localizeUser,
 } from '@/app/services/translation/entityLocalizers';
 
 const enqueueInspectionPreTranslate = (
@@ -94,6 +95,21 @@ const localizeInspectionDto = async (dto: InspectionDTO) => {
   });
   dto.customer.name = customerLocalized.name;
   dto.customer.localization = customerLocalized.localization;
+
+  if (dto.siteManager) {
+    const userLocalized = await localizeUser({
+      id: dto.siteManager.id,
+      firstName: dto.siteManager.firstName,
+      lastName: dto.siteManager.lastName,
+    });
+    dto.siteManager = {
+      ...dto.siteManager,
+      firstName: userLocalized.firstName,
+      lastName: userLocalized.lastName,
+      localization: userLocalized.localization,
+    };
+  }
+
   return dto;
 };
 
