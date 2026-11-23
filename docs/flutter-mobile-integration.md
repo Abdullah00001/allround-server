@@ -282,7 +282,7 @@ UI label **“Not Started” / “Planned”** → send `status: "ENQUIRY"` (or 
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| `GET` | `/mobile/dashboard` | `?page&limit` → `stats` + paginated `upcomingTasks[]` / `mapPins[]` |
+| `GET` | `/mobile/dashboard` | `?page&limit` → `stats` + paginated `upcomingTasks[]` / `mapPins[]`. `upcomingTasks` = assigned phases in `ENQUIRY` \| `QUOTATION` \| `ORDER_CONFIRMED` \| `IN_PROGRESS` (not only confirmed/running) |
 | `GET` | `/mobile/projects` | `?page&limit` (+ tabs/filters) — phase cards |
 | `GET` | `/mobile/profile` | Identity + `language` + `weeklyHoursTarget`, `hoursThisWeek`, project counts. Also enqueues a test `SYSTEM_ALERT` (localized on `GET /mobile/notifications` to preferred language) |
 | `PATCH` | `/mobile/profile` | Self-update: optional `firstName`, `lastName`, `phone`, `avatarUrl` (null clears), `language` (≥1 field). Same response as GET |
@@ -601,7 +601,7 @@ Each list row includes `phaseId`, `type`, `status`, `priority`, dates, `projectI
 | Value | Server filter |
 | --- | --- |
 | `ALL` (default) | Non-deleted projects in the user’s visibility scope |
-| `ACTIVE` | Has a phase in `IN_PROGRESS` or `ORDER_CONFIRMED` |
+| `ACTIVE` | Has a phase in `IN_PROGRESS` or `ORDER_CONFIRMED` (projects list tab — narrower than dashboard `upcomingTasks`) |
 | `MY_PROJECTS` | User is a project manager **or** has a crew assignment on a phase |
 | `THIS_WEEK` | Has a phase whose `startDate` or `endDate` falls in the current UTC ISO week |
 | `INSPECTION` | Linked customer has at least one `PENDING` inspection |

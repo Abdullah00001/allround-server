@@ -157,9 +157,17 @@ const timeLogWithUserInclude = {
   user: { select: { id: true, firstName: true, lastName: true } },
 } as const;
 
+/**
+ * Phases that belong on mobile dashboard / map / "active" counters.
+ * Includes preconstruction (`ENQUIRY` / `QUOTATION`) so newly created or
+ * newly assigned work appears before status is moved to confirmed/running.
+ * Excludes `COMPLETED` and `POSTPONED`.
+ */
 const ACTIVE_PHASE_STATUSES: PhaseStatus[] = [
-  PhaseStatus.IN_PROGRESS,
+  PhaseStatus.ENQUIRY,
+  PhaseStatus.QUOTATION,
   PhaseStatus.ORDER_CONFIRMED,
+  PhaseStatus.IN_PROGRESS,
 ];
 
 type TMobileInspectionSiteManagerRef = {
@@ -670,8 +678,8 @@ const getAssignedProjectIds = async (userId: string): Promise<string[]> => {
 
 /**
  * Counts distinct non-deleted projects that have at least one active phase
- * (`IN_PROGRESS` or `ORDER_CONFIRMED`). Used as the dashboard/profile
- * "active projects" stat for globally scoped site managers.
+ * (`ENQUIRY` | `QUOTATION` | `ORDER_CONFIRMED` | `IN_PROGRESS`). Used as the
+ * dashboard/profile "active projects" stat for globally scoped site managers.
  *
  * @returns {Promise<number>} Distinct active project count.
  */
