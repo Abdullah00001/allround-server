@@ -53,14 +53,19 @@ export const translateTextsWithGoogle = async (
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
 
+  const target = targetLocale.toLowerCase().slice(0, 2);
+  const rawSource = sourceLocale.toLowerCase().slice(0, 2);
+  /** `auto` / empty → omit source so Google detects (EN or DE notification copy). */
+  const useAutoDetect = !rawSource || rawSource === 'auto';
+
   try {
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         q: texts,
-        source: sourceLocale.toLowerCase().slice(0, 2),
-        target: targetLocale.toLowerCase().slice(0, 2),
+        ...(useAutoDetect ? {} : { source: rawSource }),
+        target,
         format: 'text',
       }),
       signal: controller.signal,

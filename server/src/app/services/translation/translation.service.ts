@@ -213,9 +213,12 @@ export const getOrTranslateContent = async <T extends Record<string, unknown>>({
   if (synchronous) {
     try {
       const provider = getTranslationProvider();
+      /** Notifications: auto-detect so EN test copy and DE i18n both map to all locales. */
+      const providerSource =
+        contentType === 'NOTIFICATION' ? 'auto' : normalizedSource;
       const translatedMap = await provider.translateBatch(
         translatableFields,
-        normalizedSource,
+        providerSource,
         normalizedTarget
       );
 

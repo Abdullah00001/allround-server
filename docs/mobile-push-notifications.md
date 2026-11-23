@@ -2,9 +2,9 @@
 
 Source of truth: server/scheduler `triggerPushNotification` / `triggerRawPushNotification` call sites + Prisma `NotificationType`.
 
-Delivery path: API/scheduler → BullMQ `send-push-notification` → worker creates `Notification` row + FCM + Socket.IO `notification:new`.
+Delivery path: API/scheduler → BullMQ `send-push-notification` → worker creates `Notification` row (source locale) → pre-translates **all enabled company languages** → FCM + Socket.IO use each recipient’s `UserPreference.language`.
 
-Clients read inbox via `GET /mobile/notifications` (localized at read time). Mark read via existing notification routes.
+Clients read inbox via `GET /mobile/notifications` (localized to preferred language; sync translate if not READY yet). Mark read via existing notification routes.
 
 **Excluded:** Admin web has no FCM push from these mobile events (admin uses cookie session; these payloads target mobile `userId`s).
 
@@ -31,7 +31,7 @@ Clients read inbox via `GET /mobile/notifications` (localized at read time). Mar
 | 3 | Admin rejects their time log | `TIME_LOG_REJECTED` | `notification.time_log_rejected.*` | `timeLog.userId` | Immediate on reject |
 | 4 | Open timer still running at end of Berlin day | `SYSTEM_ALERT` | `notification.timer_auto_closed.*` | Timer owner | Cron `59 23 * * *` |
 | 5 | Registered absence overlaps tomorrow | `SYSTEM_ALERT` | `notification.absence_reminder.*` | Absence `userId` | Cron `0 18 * * *` |
-| 6 | `GET /mobile/profile` (dev/QA test hook) | `SYSTEM_ALERT` | literal EN title/body | Caller | Immediate (test only) |
+| 6 | `GET /mobile/profile` (test hook) | `SYSTEM_ALERT` | literal EN title/body (localized on inbox read) | Caller | Immediate |
 
 **Employee does not receive:** inspection convert / inspection reminder (those go to `siteManagerId`).
 
@@ -48,7 +48,7 @@ Clients read inbox via `GET /mobile/notifications` (localized at read time). Mar
 | 5 | Pending inspection appointment is tomorrow | `INSPECTION_SCHEDULED` | `notification.inspection_reminder.*` | `inspection.siteManagerId` | Cron `0 8 * * *` |
 | 6 | Their open timer auto-closed EOD | `SYSTEM_ALERT` | `notification.timer_auto_closed.*` | Timer owner | Cron `59 23 * * *` |
 | 7 | Their absence overlaps tomorrow | `SYSTEM_ALERT` | `notification.absence_reminder.*` | Absence `userId` | Cron `0 18 * * *` |
-| 8 | `GET /mobile/profile` test hook | `SYSTEM_ALERT` | literal EN title/body | Caller | Immediate (test only) |
+| 8 | `GET /mobile/profile` test hook | `SYSTEM_ALERT` | literal EN title/body (localized on inbox read) | Caller | Immediate |
 
 **Site Manager does not get a push when:** an employee on their project submits/stops a timer (no “new time log pending” push today).
 
@@ -107,4 +107,5 @@ German authored copy lives in `server/src/app/i18n/index.ts` (`deDictionary`). P
 | Timer auto-close | `scheduler/.../auto-close-dangling-timers/` |
 | Absence reminder | `scheduler/.../absence-reminders/` |
 | Profile test push | `server/.../mobile/mobile.services.ts` → profile GET |
-| Worker delivery | `worker/.../notification/jobs/sendPushNotification.job.ts` |
+| Worker delivery + pre-translate | `worker/.../notification/jobs/sendPushNotification.job.ts` |
+| Inbox localize (sync if needed) | `server/.../notification/notification.services.ts` → `localizeNotification` |

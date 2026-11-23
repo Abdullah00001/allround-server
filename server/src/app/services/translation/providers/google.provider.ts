@@ -42,14 +42,18 @@ export class GoogleTranslateProvider implements ITranslationProvider {
     if (keys.length === 0) return {};
 
     const supported = TRANSLATION_CONFIG.SUPPORTED_LOCALES as readonly string[];
-    const source = supported.includes(sourceLocale.slice(0, 2).toLowerCase())
-      ? sourceLocale.slice(0, 2).toLowerCase()
-      : TRANSLATION_CONFIG.DEFAULT_LOCALE;
+    const rawSource = sourceLocale.slice(0, 2).toLowerCase();
+    const useAutoDetect = !rawSource || rawSource === 'auto';
+    const source = useAutoDetect
+      ? 'auto'
+      : supported.includes(rawSource)
+        ? rawSource
+        : TRANSLATION_CONFIG.DEFAULT_LOCALE;
     const target = supported.includes(targetLocale.slice(0, 2).toLowerCase())
       ? targetLocale.slice(0, 2).toLowerCase()
       : TRANSLATION_CONFIG.DEFAULT_LOCALE;
 
-    if (source === target) {
+    if (!useAutoDetect && source === target) {
       return { ...fields };
     }
 
@@ -66,7 +70,7 @@ export class GoogleTranslateProvider implements ITranslationProvider {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           q: keys.map((key) => fields[key]),
-          source,
+          ...(useAutoDetect ? {} : { source }),
           target,
           format: 'text',
         }),

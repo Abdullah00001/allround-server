@@ -284,7 +284,7 @@ UI label **“Not Started” / “Planned”** → send `status: "ENQUIRY"` (or 
 | --- | --- | --- |
 | `GET` | `/mobile/dashboard` | `?page&limit` → `stats` + paginated `upcomingTasks[]` / `mapPins[]` |
 | `GET` | `/mobile/projects` | `?page&limit` (+ tabs/filters) — phase cards |
-| `GET` | `/mobile/profile` | Identity + `language` + `weeklyHoursTarget`, `hoursThisWeek`, project counts. Also enqueues a dummy `SYSTEM_ALERT` test notification (alua-style) when the worker is running |
+| `GET` | `/mobile/profile` | Identity + `language` + `weeklyHoursTarget`, `hoursThisWeek`, project counts. Also enqueues a test `SYSTEM_ALERT` (localized on `GET /mobile/notifications` to preferred language) |
 | `PATCH` | `/mobile/profile` | Self-update: optional `firstName`, `lastName`, `phone`, `avatarUrl` (null clears), `language` (≥1 field). Same response as GET |
 | `GET` | `/mobile/employee/schedule` | **My Plan** — `startDate`/`endDate` day buckets from **your** crew assignments |
 | `POST` | `/settings/password` | Change password (EMPLOYEE + SITE_MANAGER). Revokes other devices; keeps current session |

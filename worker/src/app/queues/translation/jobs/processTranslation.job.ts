@@ -224,9 +224,11 @@ const handler: IJobHandler<IProcessTranslation> = {
       let providerName = (env.TRANSLATION_PROVIDER || 'mock').toLowerCase();
 
       if (entries.length > 0) {
+        const providerSource =
+          contentType === 'NOTIFICATION' ? 'auto' : sourceLocale;
         const translatedValues = await translateTextsWithGoogle(
           entries.map(([, value]) => value),
-          sourceLocale,
+          providerSource,
           targetLocale
         );
         entries.forEach(([key], index) => {

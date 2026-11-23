@@ -1,9 +1,14 @@
 import { TRANSLATION_CONFIG } from '@/const';
+import { getLocale } from '@/app/configs/requestContext.configs';
 import {
   applyLocalization,
   localizeMany,
 } from '@/app/services/translation/localize.helper';
-import { preTranslateContent } from '@/app/services/translation/translation.service';
+import {
+  getOrTranslateContent,
+  preTranslateContent,
+} from '@/app/services/translation/translation.service';
+import type { ILocalizationMeta } from '@/app/services/translation/translation.types';
 import type { TranslationContentType } from '@/const';
 import logger from '@/app/configs/logger.configs';
 
@@ -52,17 +57,44 @@ export const localizeLegalContent = <
     fieldKeys: F.LEGAL_CONTENT,
   });
 
-export const localizeNotification = <
+/**
+ * Localizes a notification for the active request locale.
+ * Uses **synchronous** translate when not yet READY so inbox/`preferredLanguage`
+ * is not stuck on `PENDING` with source copy on first fetch.
+ *
+ * @param {T} entity - Notification id + source title/message.
+ * @returns {Promise<T & { localization?: ILocalizationMeta }>} Localized row.
+ */
+export const localizeNotification = async <
   T extends { id: string; title: string; message: string },
 >(
   entity: T
-) =>
-  applyLocalization({
-    entity,
+): Promise<T & { localization?: ILocalizationMeta }> => {
+  const sourceLocale = TRANSLATION_CONFIG.DEFAULT_LOCALE;
+  const result = await getOrTranslateContent<{
+    title: string;
+    message: string;
+  }>({
     contentType: 'NOTIFICATION',
     contentId: entity.id,
-    fieldKeys: F.NOTIFICATION,
+    sourceLocale,
+    targetLocale: getLocale(),
+    fields: { title: entity.title, message: entity.message },
+    synchronous: true,
   });
+
+  return {
+    ...entity,
+    title: result.fields.title ?? entity.title,
+    message: result.fields.message ?? entity.message,
+    localization: {
+      sourceLocale: sourceLocale.toLowerCase().slice(0, 2),
+      displayedLocale: result.displayedLocale,
+      isTranslated: result.isTranslated,
+      translationStatus: result.translationStatus,
+    },
+  };
+};
 
 export const localizeProjectNote = <
   T extends { id: string; content: string },
