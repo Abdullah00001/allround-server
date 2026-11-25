@@ -12,8 +12,17 @@ const corsConfiguration: CorsOptions = {
       callback(new Error('CORS not allowed'), false);
     }
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'ngrok-skip-browser-warning', 'X-CSRF-Token'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'ngrok-skip-browser-warning',
+    'X-CSRF-Token',
+    'x-csrf-token',
+    'X-Locale',
+    'x-locale',
+  ],
   credentials: true,
   preflightContinue: false,
   optionsSuccessStatus: 200,
