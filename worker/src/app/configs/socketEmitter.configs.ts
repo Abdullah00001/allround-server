@@ -17,7 +17,7 @@ const createEmitterRedisClient = (): Redis => {
     host: env.REDIS_HOST,
     password: env.REDIS_PASSWORD,
     port: env.REDIS_PORT || 6379,
-    tls: env.NODE_ENV === 'production' ? {} : undefined,
+    tls: env.REDIS_TLS ? {} : undefined,
     maxRetriesPerRequest: null,
     lazyConnect: true,
   });

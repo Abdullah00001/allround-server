@@ -41,7 +41,8 @@ docker compose up -d --build
 
 ### Notes
 
-- App env uses `REDIS_HOST` / `REDIS_PASSWORD` / `REDIS_PORT` (not `REDIS_URL`).
+- App env uses `REDIS_HOST` / `REDIS_PASSWORD` / `REDIS_PORT` / `REDIS_TLS` (not `REDIS_URL`).
+- Set `REDIS_TLS=false` for compose Redis (plain TCP). Use `true` only for managed Redis that requires TLS.
 - Postgres and Redis are **not** published on the public host; only `127.0.0.1:5000` is exposed for Nginx.
 - Registry-based CD still uses [`docker/docker-compose.registry.yaml`](../docker/docker-compose.registry.yaml) via GitHub Actions (optional alternate path).
 

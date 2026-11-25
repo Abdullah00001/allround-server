@@ -14,7 +14,10 @@ These variables are consumed by the Node.js containers (`server`, `worker`, `sch
 | `NODE_ENV` | Yes | Defines the runtime environment mode | All | `production` or `development` |
 | `PORT` | Yes | The port Express.js listens on | server | `5000` |
 | `DATABASE_URL` | Yes | Connection string for PostgreSQL | All | `postgresql://<user>:<pass>@<host>:25060/db?sslmode=require` |
-| `REDIS_URL` | Yes | Connection string for Valkey | All | `redis://default:<pass>@<host>:25061` |
+| `REDIS_HOST` | Yes | Redis hostname | All | `redis` or managed host |
+| `REDIS_PORT` | Yes | Redis port | All | `6379` |
+| `REDIS_PASSWORD` | Yes | Redis password | All | `<STRONG>` |
+| `REDIS_TLS` | Yes | Enable ioredis TLS (`true`/`false`) | All | `false` (compose) / `true` (managed) |
 | `JWT_ACCESS_TOKEN_SECRET_KEY` | Yes | Symmetric key used to sign JWT access tokens | server | `<HIGH_ENTROPY_STRING>` |
 | `SMTP_HOST` | Yes | Email provider hostname | worker | `smtp.resend.com` |
 | `SMTP_PORT` | Yes | Email provider port | worker | `465` |
@@ -45,6 +48,7 @@ Copy [`docker/.env.example`](../docker/.env.example) → `docker/.env`. Critical
 | `REDIS_HOST` | Compose redis service name | `redis` |
 | `REDIS_PORT` | Redis port inside network | `6379` |
 | `REDIS_PASSWORD` | Redis requirepass | `<STRONG>` |
+| `REDIS_TLS` | ioredis TLS (`true`/`false`). Use `false` for compose Redis; `true` for managed Redis | `false` |
 
 ### Registry CD (`docker/docker-compose.registry.yaml`)
 

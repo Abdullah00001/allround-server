@@ -8,6 +8,7 @@ export const env: TEnv = {
   REDIS_HOST: getEnv('REDIS_HOST'),
   REDIS_PASSWORD: getEnv('REDIS_PASSWORD'),
   REDIS_PORT: Number(getEnv('REDIS_PORT')),
+  REDIS_TLS: getEnv('REDIS_TLS') === 'true',
   PORT: Number(getEnv('PORT')),
   JWT_ACCESS_TOKEN_SECRET_KEY: getEnv('JWT_ACCESS_TOKEN_SECRET_KEY'),
   JWT_REFRESH_TOKEN_SECRET_KEY: getEnv('JWT_REFRESH_TOKEN_SECRET_KEY'),

@@ -4,6 +4,8 @@ export type TEnv = {
   REDIS_HOST: string;
   REDIS_PASSWORD: string;
   REDIS_PORT: number;
+  /** When true, ioredis uses TLS (managed Redis). Self-host compose uses false. */
+  REDIS_TLS: boolean;
   FIREBASE_ACCOUNT_TYPE: string;
   FIREBASE_PROJECT_ID: string;
   FIREBASE_PRIVATE_KEY_ID: string;

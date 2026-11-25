@@ -7,6 +7,8 @@ export type TEnv = {
   REDIS_HOST: string;
   REDIS_PASSWORD: string;
   REDIS_PORT: number;
+  /** When true, ioredis uses TLS (managed Redis). Self-host compose uses false. */
+  REDIS_TLS: boolean;
   PORT: number;
   S3_ACCESS_KEY: string;
   S3_SECRET_KEY: string;
