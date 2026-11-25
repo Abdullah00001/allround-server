@@ -3,6 +3,11 @@ import { REDIS_PREFIXES } from "@/const";
 export type TEnv = {
   NODE_ENV: string;
   SERVER_URL: string;
+  /**
+   * Optional cookie Domain (e.g. `.allround-geruestbau.de`) so admin + api
+   * subdomains share auth cookies. Empty = host-only cookie.
+   */
+  COOKIE_DOMAIN: string;
   DATABASE_URL: string;
   REDIS_HOST: string;
   REDIS_PASSWORD: string;

@@ -4,6 +4,7 @@ import { getEnv } from '@/app/utils/env.utils';
 export const env: TEnv = {
   NODE_ENV: getEnv('NODE_ENV'),
   SERVER_URL: getEnv('SERVER_URL'),
+  COOKIE_DOMAIN: process.env.COOKIE_DOMAIN?.trim() || '',
   DATABASE_URL: getEnv('DATABASE_URL'),
   REDIS_HOST: getEnv('REDIS_HOST'),
   REDIS_PASSWORD: getEnv('REDIS_PASSWORD'),

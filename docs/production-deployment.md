@@ -17,7 +17,9 @@ git pull
 cp docker/.env.example docker/.env
 # Edit docker/.env: strong POSTGRES_PASSWORD / REDIS_PASSWORD / JWT secrets,
 # DATABASE_URL host = postgres, REDIS_HOST = redis,
-# SERVER_URL=https://api.allround-geruestbau.de, SMTP/S3/Firebase/translation keys.
+# SERVER_URL=https://api.allround-geruestbau.de,
+# COOKIE_DOMAIN=.allround-geruestbau.de (admin SPA on admin.*),
+# SMTP/S3/Firebase/translation keys.
 
 cd docker
 docker compose up -d --build

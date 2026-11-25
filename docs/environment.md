@@ -13,6 +13,8 @@ These variables are consumed by the Node.js containers (`server`, `worker`, `sch
 |---------------|----------|---------|---------|------------------------|
 | `NODE_ENV` | Yes | Defines the runtime environment mode | All | `production` or `development` |
 | `PORT` | Yes | The port Express.js listens on | server | `5000` |
+| `SERVER_URL` | Yes | Public API origin | server | `https://api.allround-geruestbau.de` |
+| `COOKIE_DOMAIN` | Prod (admin SPA) | Cookie `Domain` for shared subdomains; empty = host-only | server | `.allround-geruestbau.de` |
 | `DATABASE_URL` | Yes | Connection string for PostgreSQL | All | `postgresql://<user>:<pass>@<host>:25060/db?sslmode=require` |
 | `REDIS_HOST` | Yes | Redis hostname | All | `redis` or managed host |
 | `REDIS_PORT` | Yes | Redis port | All | `6379` |

@@ -9,8 +9,11 @@ export function cookieOption(expiresIn: string): TCookieOptions {
     secure: isProd,
     sameSite: isProd ? 'lax' : 'lax',
     path: '/',
-    // domain: isProd ? '.workly.ink' : '10.10.10.27',
   };
+
+  if (env.COOKIE_DOMAIN) {
+    option.domain = env.COOKIE_DOMAIN;
+  }
 
   option.maxAge = parseExpiresIn(expiresIn);
 
@@ -18,13 +21,19 @@ export function cookieOption(expiresIn: string): TCookieOptions {
 }
 
 export function sharedCookieOption(): TCookieOptions {
-  return {
+  const option: TCookieOptions = {
     httpOnly: false,
     secure: isProd,
     sameSite: isProd ? 'none' : 'lax',
     path: '/',
     maxAge: 1 * 24 * 60 * 60 * 1000,
   };
+
+  if (env.COOKIE_DOMAIN) {
+    option.domain = env.COOKIE_DOMAIN;
+  }
+
+  return option;
 }
 
 /**

@@ -30,6 +30,8 @@ export const corsWhiteList = [
   'http://localhost:5173',
   'https://allround-admin.localbox.online',
   'https://allround.localbox.online',
+  'https://admin.allround-geruestbau.de',
+  'https://api.allround-geruestbau.de',
 ];
 export const saltRound = 10;
 export const emailRegex = /^[\w.-]+@[a-zA-Z\d.-]+\.[a-zA-Z]{2,}$/;
