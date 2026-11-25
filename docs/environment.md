@@ -33,11 +33,26 @@ These variables are consumed by the Node.js containers (`server`, `worker`, `sch
 
 ## 2. Docker Compose Variables
 
-These variables are utilized strictly inside `docker-compose.yaml` interpolation.
+### VPS self-host (`docker/docker-compose.yaml`)
+
+Copy [`docker/.env.example`](../docker/.env.example) → `docker/.env`. Critical hostnames inside the compose network:
+
+| Variable | Purpose | Example |
+|----------|---------|---------|
+| `SERVER_URL` | Public API origin | `https://api.allround-geruestbau.de` |
+| `DATABASE_URL` | Prisma URL (host = service name `postgres`) | `postgresql://postgres:<pass>@postgres:5432/allround-server?schema=public` |
+| `POSTGRES_PASSWORD` | Compose postgres service password (must match URL) | `<STRONG>` |
+| `REDIS_HOST` | Compose redis service name | `redis` |
+| `REDIS_PORT` | Redis port inside network | `6379` |
+| `REDIS_PASSWORD` | Redis requirepass | `<STRONG>` |
+
+### Registry CD (`docker/docker-compose.registry.yaml`)
+
+These variables are utilized for DOCR image pulls:
 
 | Variable Name | Required | Purpose | Example / Placeholder |
 |---------------|----------|---------|-----------------------|
-| `DOCKER_USERNAME` | Yes (Prod) | The DOCR registry URL | `registry.digitalocean.com/allround-registry` |
+| `DOCKER_USERNAME` | Yes (registry CD) | The DOCR registry URL | `registry.digitalocean.com/allround-registry` |
 | `IMAGE_TAG` | Optional | Specifies the immutable tag to pull. Defaults to `latest`. | `v1.0.14` |
 
 ---

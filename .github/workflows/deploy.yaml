@@ -88,13 +88,13 @@ jobs:
         run: |
           doctl compute firewall add-rules 2232b7d2-0b27-4bf7-afde-89d4fd0fd60f --inbound-rules protocol:tcp,ports:22,address:${{ steps.runner-ip.outputs.ip }}/32
 
-      - name: Copy docker-compose.yaml to Droplet
+      - name: Copy docker-compose.registry.yaml to Droplet
         uses: appleboy/scp-action@master
         with:
           host: ${{ vars.DO_DROPLET_HOST }}
           username: ${{ vars.DO_DROPLET_USER }}
           key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
-          source: "docker/docker-compose.yaml"
+          source: "docker/docker-compose.registry.yaml"
           target: "/opt/allround-server"
           strip_components: 1
 
@@ -111,6 +111,8 @@ jobs:
             echo "${{ secrets.DO_REGISTRY_TOKEN }}" | docker login registry.digitalocean.com -u "${{ vars.DO_ACCOUNT_EMAIL }}" --password-stdin
             
             cd /opt/allround-server
+            # Registry CD uses the preserved compose filename on the droplet
+            cp -f docker-compose.registry.yaml docker-compose.yaml
             # Make sure we pull the latest images
             docker compose pull
             # Start the stack

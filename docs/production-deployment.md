@@ -1,5 +1,52 @@
 # Infrastructure & CI/CD Pipeline
 
+## 0. VPS self-host (clone-build) — current production path
+
+Domain: `https://api.allround-geruestbau.de`  
+Compose: [`docker/docker-compose.yaml`](../docker/docker-compose.yaml)  
+Stack: PostGIS + Redis + `db-migrator` + `server` / `worker` / `scheduler` built from production Dockerfiles (no container registry).
+
+Nginx on the host already terminates TLS and must proxy to `http://127.0.0.1:5000` (include WebSocket headers for `/socket.io/`).
+
+### Bring-up
+
+```bash
+cd /path/to/allround-server
+git pull
+
+cp docker/.env.example docker/.env
+# Edit docker/.env: strong POSTGRES_PASSWORD / REDIS_PASSWORD / JWT secrets,
+# DATABASE_URL host = postgres, REDIS_HOST = redis,
+# SERVER_URL=https://api.allround-geruestbau.de, SMTP/S3/Firebase/translation keys.
+
+cd docker
+docker compose up -d --build
+
+docker compose ps
+docker compose logs db-migrator --no-color | tail -40
+curl -sS http://127.0.0.1:5000/health
+
+# First boot only — seed admin/manager/employee
+docker compose run --rm --entrypoint sh server -c "npm install tsx && npx tsx prisma/seed.ts"
+```
+
+### Updates
+
+```bash
+cd /path/to/allround-server
+git pull
+cd docker
+docker compose up -d --build
+```
+
+### Notes
+
+- App env uses `REDIS_HOST` / `REDIS_PASSWORD` / `REDIS_PORT` (not `REDIS_URL`).
+- Postgres and Redis are **not** published on the public host; only `127.0.0.1:5000` is exposed for Nginx.
+- Registry-based CD still uses [`docker/docker-compose.registry.yaml`](../docker/docker-compose.registry.yaml) via GitHub Actions (optional alternate path).
+
+---
+
 ## 1. DigitalOcean Infrastructure Overview
 
 The Allround Server production environment operates entirely within DigitalOcean.

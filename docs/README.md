@@ -8,7 +8,8 @@ Before reading, understand the strict repository boundaries:
 - **Application behavior** → TypeScript source code (`server`, `worker`, `scheduler`)
 - **Database schema** → `prisma/schema.prisma`
 - **Database history** → `prisma/migrations/`
-- **Local orchestration** → `docker/docker-compose.yaml`
+- **VPS self-host orchestration** → `docker/docker-compose.yaml` (Postgres + Redis + clone-build)
+- **Registry CD compose** → `docker/docker-compose.registry.yaml`
 - **Permanent cloud infrastructure** → `infrastructure/terraform/`
 - **Server configuration** → `infrastructure/ansible/`
 - **CI/CD** → `.github/workflows/`
@@ -49,7 +50,7 @@ Before reading, understand the strict repository boundaries:
 - **[Observability & Reliability](observability.md)**: The `/health` endpoint, Docker native healthchecks vs restart policies, and logging strategy.
 
 ### DEPLOYMENT
-- **[Production Deployment & IaC](production-deployment.md)**: DigitalOcean Terraform infrastructure, Ansible provisioning, and the automated GitHub Actions pipeline.
+- **[Production Deployment & IaC](production-deployment.md)**: VPS clone-build compose (Postgres + Redis), plus DigitalOcean Terraform / Ansible / registry CD.
 
 ### RELEASE
 - **[Release Management](release-management.md)**: Semantic Versioning, manual `package.json` bumping, immutable Git tags, and rollback procedures.
